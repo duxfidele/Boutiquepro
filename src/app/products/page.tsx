@@ -391,7 +391,7 @@ export default function ProductsPage() {
                   />
                 </div>
                 <div>
-                  <label className="text-xs font-medium text-muted-foreground mb-1.5 block">Coût d'achat (FCFA)</label>
+                  <label className="text-xs font-medium text-muted-foreground mb-1.5 block">Coût d&apos;achat (FCFA)</label>
                   <input
                     type="number" value={form.cost || ""} onChange={(e) => setForm({ ...form, cost: Number(e.target.value) })}
                     className="w-full rounded-xl border border-border/60 bg-secondary/30 px-3 py-2.5 text-base sm:text-sm focus:border-primary/40 focus:outline-none focus:ring-2 focus:ring-primary/20"
@@ -481,7 +481,7 @@ export default function ProductsPage() {
               </div>
               
               <div>
-                <label className="text-xs font-medium text-muted-foreground mb-1.5 block">Couleur d'accentuation</label>
+                <label className="text-xs font-medium text-muted-foreground mb-1.5 block">Couleur d&apos;accentuation</label>
                 <input
                   type="color" value={categoryForm.color} onChange={(e) => setCategoryForm({ ...categoryForm, color: e.target.value })}
                   className="h-10 w-full rounded-xl border border-border/60 bg-secondary/30 p-1 cursor-pointer"
