@@ -276,16 +276,27 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     async function loadData() {
       try {
-        const { data: settings } = await supabase.from('settings').select('*').single();
+        const { data: settings, error: settingsError } = await supabase.from('settings').select('*').single();
         const { data: categories } = await supabase.from('categories').select('*');
         const { data: products } = await supabase.from('products').select('*');
 
-        const payload: any = {};
+        // Toujours initialiser avec un payload par défaut complet
+        const payload: any = {
+          sales: [],
+          inventorySessions: [],
+          orders: [],
+          customers: [],
+          cart: [],
+          categories: demoCategories,
+          products: [],
+          settings: { name: "BoutiquePro", currency: "FCFA", taxRate: 0, city: "Dakar", country: "Sénégal", email: "contact@boutiquepro.com", phone: "+228 98 37 61 01" }
+        };
+
         if (settings) {
           payload.settings = {
-            name: settings.name,
-            currency: settings.currency,
-            taxRate: Number(settings.tax_rate),
+            name: settings.name || "BoutiquePro",
+            currency: settings.currency || "FCFA",
+            taxRate: Number(settings.tax_rate) || 0,
             logo: settings.logo,
             city: settings.city,
             country: settings.country,
@@ -293,27 +304,30 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             phone: settings.phone
           };
         }
-        if (categories) payload.categories = categories;
+        if (categories && categories.length > 0) payload.categories = categories;
         if (products) {
           payload.products = products.map((p: any) => ({
             ...p,
-            minStock: p.min_stock
+            minStock: p.min_stock || 0
           }));
         }
 
-        // Try to load local sales and inventory temporarily since we didn't migrate those tables yet
+        // Récupérer le reste depuis localStorage
         const saved = localStorage.getItem("boutiquepro-state");
         if (saved) {
           const localData = JSON.parse(saved);
-          payload.sales = localData.sales || [];
-          payload.inventorySessions = localData.inventorySessions || [];
-          payload.orders = localData.orders || [];
-          payload.customers = localData.customers || [];
+          if (localData.sales) payload.sales = localData.sales;
+          if (localData.inventorySessions) payload.inventorySessions = localData.inventorySessions;
+          if (localData.orders) payload.orders = localData.orders;
+          if (localData.customers) payload.customers = localData.customers;
+          if (localData.cart) payload.cart = localData.cart;
         }
 
         dispatchBase({ type: "LOAD_STATE", payload });
       } catch (err) {
         console.error("Error loading data from Supabase:", err);
+        // Fallback to initial state to prevent crash
+        dispatchBase({ type: "LOAD_STATE", payload: initialState });
       } finally {
         setIsInitialized(true);
       }
