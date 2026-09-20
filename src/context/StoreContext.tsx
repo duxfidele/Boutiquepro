@@ -1,6 +1,7 @@
 "use client";
 
 import React, { createContext, useContext, useReducer, useEffect, useState, ReactNode } from "react";
+import { supabase } from "@/lib/supabase";
 
 // ─── Types ───────────────────────────────────────────────────
 export interface Product {
@@ -253,7 +254,7 @@ function storeReducer(state: StoreState, action: Action): StoreState {
 // ─── Context ─────────────────────────────────────────────────
 interface StoreContextType {
   state: StoreState;
-  dispatch: React.Dispatch<Action>;
+  dispatch: (action: Action) => void;
   formatPrice: (amount: number) => string;
   lowStockProducts: Product[];
   totalRevenue: number;
@@ -268,27 +269,116 @@ interface StoreContextType {
 const StoreContext = createContext<StoreContextType | undefined>(undefined);
 
 export function StoreProvider({ children }: { children: ReactNode }) {
-  const [state, dispatch] = useReducer(storeReducer, initialState);
+  const [state, dispatchBase] = useReducer(storeReducer, initialState);
   const [isInitialized, setIsInitialized] = useState(false);
 
-  // Persist to localStorage
+  // Load from Supabase
   useEffect(() => {
-    const saved = localStorage.getItem("boutiquepro-state");
-    if (saved) {
+    async function loadData() {
       try {
-        dispatch({ type: "LOAD_STATE", payload: JSON.parse(saved) });
-      } catch {
-        // ignore corrupt data
+        const { data: settings } = await supabase.from('settings').select('*').single();
+        const { data: categories } = await supabase.from('categories').select('*');
+        const { data: products } = await supabase.from('products').select('*');
+
+        const payload: any = {};
+        if (settings) {
+          payload.settings = {
+            name: settings.name,
+            currency: settings.currency,
+            taxRate: Number(settings.tax_rate),
+            logo: settings.logo,
+            city: settings.city,
+            country: settings.country,
+            email: settings.email,
+            phone: settings.phone
+          };
+        }
+        if (categories) payload.categories = categories;
+        if (products) {
+          payload.products = products.map((p: any) => ({
+            ...p,
+            minStock: p.min_stock
+          }));
+        }
+
+        // Try to load local sales and inventory temporarily since we didn't migrate those tables yet
+        const saved = localStorage.getItem("boutiquepro-state");
+        if (saved) {
+          const localData = JSON.parse(saved);
+          payload.sales = localData.sales || [];
+          payload.inventorySessions = localData.inventorySessions || [];
+          payload.orders = localData.orders || [];
+          payload.customers = localData.customers || [];
+        }
+
+        dispatchBase({ type: "LOAD_STATE", payload });
+      } catch (err) {
+        console.error("Error loading data from Supabase:", err);
+      } finally {
+        setIsInitialized(true);
       }
     }
-    setIsInitialized(true);
+    loadData();
   }, []);
 
+  // Sync to local storage for unmigrated data (sales, inventory) just so it doesn't break
   useEffect(() => {
     if (isInitialized) {
       localStorage.setItem("boutiquepro-state", JSON.stringify(state));
     }
   }, [state, isInitialized]);
+
+  // Async Dispatch Wrapper
+  const dispatch = async (action: Action) => {
+    try {
+      if (action.type === "ADD_PRODUCT") {
+        const p = action.payload;
+        const { error } = await supabase.from('products').insert([{
+          id: p.id, name: p.name, sku: p.sku, category: p.category, 
+          price: p.price, cost: p.cost, stock: p.stock, 
+          min_stock: p.minStock, image: p.image
+        }]);
+        if (error) console.error("Supabase Add Product Error:", error);
+      } 
+      else if (action.type === "DELETE_PRODUCT") {
+        const { error } = await supabase.from('products').delete().eq('id', action.payload);
+        if (error) console.error("Supabase Delete Product Error:", error);
+      }
+      else if (action.type === "UPDATE_PRODUCT") {
+        const p = action.payload;
+        const { error } = await supabase.from('products').update({
+          name: p.name, sku: p.sku, category: p.category, 
+          price: p.price, cost: p.cost, stock: p.stock, 
+          min_stock: p.minStock, image: p.image
+        }).eq('id', p.id);
+        if (error) console.error("Supabase Update Product Error:", error);
+      }
+      else if (action.type === "UPDATE_SETTINGS") {
+        const s = action.payload as any;
+        const updates: any = {};
+        if (s.name !== undefined) updates.name = s.name;
+        if (s.currency !== undefined) updates.currency = s.currency;
+        if (s.taxRate !== undefined) updates.tax_rate = s.taxRate;
+        if (s.logo !== undefined) updates.logo = s.logo;
+        if (s.city !== undefined) updates.city = s.city;
+        if (s.country !== undefined) updates.country = s.country;
+        if (s.email !== undefined) updates.email = s.email;
+        if (s.phone !== undefined) updates.phone = s.phone;
+        
+        if (Object.keys(updates).length > 0) {
+          const { error } = await supabase.from('settings').update(updates).eq('id', 1);
+          if (error) console.error("Supabase Update Settings Error:", error);
+        }
+      }
+      
+      // Update local state immediately for fast UI
+      dispatchBase(action);
+
+    } catch (err) {
+      console.error("Action error:", err);
+      dispatchBase(action); // fallback update
+    }
+  };
 
   // Computed values
   const formatPrice = (amount: number) => {
