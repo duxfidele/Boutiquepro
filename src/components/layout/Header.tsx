@@ -4,6 +4,7 @@ import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useStore } from "@/context/StoreContext";
+import { useAuth } from "@/context/AuthContext";
 import {
   Search,
   Bell,
@@ -12,6 +13,8 @@ import {
   Sun,
   Moon,
   User,
+  LogOut,
+  Settings as SettingsIcon,
   X,
   Download,
 } from "lucide-react";
@@ -32,6 +35,8 @@ export default function Header() {
     }
   };
 
+  const { user, signOut } = useAuth();
+  const [showProfile, setShowProfile] = useState(false);
   const { lowStockProducts, state, formatPrice, todayRevenue, todayOrders, dispatch } = useStore();
   const pathname = usePathname();
   const [showNotif, setShowNotif] = useState(false);
@@ -185,8 +190,55 @@ export default function Header() {
         </button>
 
         {/* Profile */}
-        <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-primary/80 to-accent/80 text-white text-xs font-bold cursor-pointer">
-          FA
+        <div className="relative">
+          <button
+            onClick={() => setShowProfile(!showProfile)}
+            className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-primary/80 to-accent/80 text-white text-xs font-bold cursor-pointer hover:shadow-md transition-all active:scale-95"
+          >
+            {user?.email?.charAt(0).toUpperCase() || "U"}
+          </button>
+
+          {showProfile && (
+            <div className="absolute right-0 top-full mt-2 w-56 rounded-xl border border-border/50 bg-popover shadow-soft-lg animate-scale-in overflow-hidden">
+              <div className="p-3 border-b border-border/50 bg-secondary/30">
+                <p className="text-sm font-medium text-foreground truncate">{user?.email}</p>
+                <p className="text-[10px] text-muted-foreground mt-0.5">Administrateur</p>
+              </div>
+              
+              <div className="p-1">
+                <Link
+                  href="/profile"
+                  onClick={() => setShowProfile(false)}
+                  className="flex items-center gap-2 px-3 py-2 text-sm text-muted-foreground hover:text-foreground hover:bg-secondary rounded-lg transition-colors"
+                >
+                  <User className="h-4 w-4" />
+                  Mon Profil
+                </Link>
+                
+                <Link
+                  href="/settings"
+                  onClick={() => setShowProfile(false)}
+                  className="flex items-center gap-2 px-3 py-2 text-sm text-muted-foreground hover:text-foreground hover:bg-secondary rounded-lg transition-colors"
+                >
+                  <SettingsIcon className="h-4 w-4" />
+                  Paramètres Boutique
+                </Link>
+
+                <div className="h-px bg-border/50 my-1 mx-2" />
+
+                <button
+                  onClick={() => {
+                    setShowProfile(false);
+                    signOut();
+                  }}
+                  className="w-full flex items-center gap-2 px-3 py-2 text-sm text-destructive hover:bg-destructive/10 rounded-lg transition-colors"
+                >
+                  <LogOut className="h-4 w-4" />
+                  Se déconnecter
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </header>
