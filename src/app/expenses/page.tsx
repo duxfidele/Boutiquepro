@@ -13,43 +13,41 @@ export default function ExpensesPage() {
   const [form, setForm] = useState({
     date: new Date().toISOString().split("T")[0],
     category: "Loyer",
-    description: "",
+    
     amount: 0,
   });
 
   const categories = ["Loyer", "Électricité", "Eau", "Internet", "Salaires", "Fournitures", "Transport", "Marketing", "Divers"];
 
   const filteredExpenses = state.expenses?.filter(
-    (e) =>
-      e.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      e.category.toLowerCase().includes(searchTerm.toLowerCase())
+    (e) => e.category.toLowerCase().includes(searchTerm.toLowerCase())
   ) || [];
 
   const totalExpenses = filteredExpenses.reduce((sum, e) => sum + Number(e.amount), 0);
 
   const handleSave = () => {
-    if (!form.description || form.amount <= 0) return;
+    if (form.amount <= 0) return;
 
     if (editExpense) {
-      dispatch({ type: "UPDATE_EXPENSE", payload: { ...editExpense, ...form } });
+      dispatch({ type: "UPDATE_EXPENSE", payload: { ...editExpense, ...form, description: "" } });
     } else {
       dispatch({
         type: "ADD_EXPENSE",
         payload: {
           id: "exp" + Date.now(),
-          ...form,
+          ...form, description: "",
           createdAt: new Date().toISOString(),
         },
       });
     }
     setShowModal(false);
     setEditExpense(null);
-    setForm({ date: new Date().toISOString().split("T")[0], category: "Loyer", description: "", amount: 0 });
+    setForm({ date: new Date().toISOString().split("T")[0], category: "Loyer",  amount: 0 });
   };
 
   const openEdit = (e: any) => {
     setEditExpense(e);
-    setForm({ date: e.date, category: e.category, description: e.description, amount: e.amount });
+    setForm({ date: e.date, category: e.category, amount: e.amount });
     setShowModal(true);
   };
 
@@ -108,7 +106,7 @@ export default function ExpensesPage() {
               <tr className="bg-secondary/50 text-muted-foreground text-xs uppercase tracking-wider">
                 <th className="p-4 font-medium">Date</th>
                 <th className="p-4 font-medium">Catégorie</th>
-                <th className="p-4 font-medium">Description</th>
+                
                 <th className="p-4 font-medium text-right">Montant</th>
                 <th className="p-4 font-medium text-right">Actions</th>
               </tr>
@@ -122,7 +120,7 @@ export default function ExpensesPage() {
                       {exp.category}
                     </span>
                   </td>
-                  <td className="p-4 text-sm text-muted-foreground">{exp.description}</td>
+                  
                   <td className="p-4 text-sm font-bold text-right text-destructive">{formatPrice(exp.amount)}</td>
                   <td className="p-4 flex items-center justify-end gap-2">
                     <button
@@ -166,7 +164,7 @@ export default function ExpensesPage() {
                 <input
                   type="date"
                   value={form.date}
-                  onChange={(e) => setForm({ ...form, date: e.target.value })}
+                  onChange={(e) => setForm({ ...form, description: "", date: e.target.value })}
                   className="w-full p-2.5 bg-background border border-border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
                 />
               </div>
@@ -174,7 +172,7 @@ export default function ExpensesPage() {
                 <label className="text-xs font-medium text-muted-foreground">Catégorie</label>
                 <select
                   value={form.category}
-                  onChange={(e) => setForm({ ...form, category: e.target.value })}
+                  onChange={(e) => setForm({ ...form, description: "", category: e.target.value })}
                   className="w-full p-2.5 bg-background border border-border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
                 >
                   {categories.map((c) => (
@@ -184,23 +182,14 @@ export default function ExpensesPage() {
                   ))}
                 </select>
               </div>
-              <div className="space-y-2">
-                <label className="text-xs font-medium text-muted-foreground">Description</label>
-                <input
-                  type="text"
-                  placeholder="Achat de papier, facture d'eau..."
-                  value={form.description}
-                  onChange={(e) => setForm({ ...form, description: e.target.value })}
-                  className="w-full p-2.5 bg-background border border-border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
-                />
-              </div>
+              
               <div className="space-y-2">
                 <label className="text-xs font-medium text-muted-foreground">Montant</label>
                 <input
                   type="number"
                   min="0"
                   value={form.amount}
-                  onChange={(e) => setForm({ ...form, amount: Number(e.target.value) })}
+                  onChange={(e) => setForm({ ...form, description: "", amount: Number(e.target.value) })}
                   className="w-full p-2.5 bg-background border border-border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
                 />
               </div>
@@ -217,7 +206,7 @@ export default function ExpensesPage() {
               </button>
               <button
                 onClick={handleSave}
-                disabled={!form.description || form.amount <= 0}
+                disabled={form.amount <= 0}
                 className="px-4 py-2 text-sm font-medium bg-primary text-white rounded-xl hover:bg-primary/90 transition-colors disabled:opacity-50"
               >
                 Enregistrer
