@@ -8,8 +8,6 @@ export default function Login({ initialIsSignUp = false, onBack }: { initialIsSi
       const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
-  const [fullName, setFullName] = useState('');
-  const [phone, setPhone] = useState('');
   const [isSignUp, setIsSignUp] = useState(initialIsSignUp);
   const [message, setMessage] = useState<{type: 'error' | 'success', text: string} | null>(null);
   const [loading, setLoading] = useState(false);
@@ -29,12 +27,6 @@ export default function Login({ initialIsSignUp = false, onBack }: { initialIsSi
             const { error, data } = await supabase.auth.signUp({
         email,
         password,
-        options: {
-          data: {
-            full_name: fullName,
-            phone: phone,
-          }
-        }
       });
 
       if (error) {
@@ -86,34 +78,7 @@ export default function Login({ initialIsSignUp = false, onBack }: { initialIsSi
         <form onSubmit={handleAuth} className="space-y-5">
           {isSignUp && (
             <div className="space-y-4 animate-fade-in">
-              <div className="space-y-2">
-                <label className="text-sm font-medium text-foreground ml-1">Nom et Prénom</label>
-                <div className="relative">
-                  <User className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
-                  <input
-                    type="text"
-                    required
-                    value={fullName}
-                    onChange={(e) => setFullName(e.target.value)}
-                    className="w-full pl-10 pr-4 py-3 bg-background border border-border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 transition-all placeholder:text-muted-foreground/50"
-                    placeholder="Jean Dupont"
-                  />
-                </div>
-              </div>
-              <div className="space-y-2">
-                <label className="text-sm font-medium text-foreground ml-1">Numéro de téléphone</label>
-                <div className="relative">
-                  <Phone className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
-                  <input
-                    type="tel"
-                    required
-                    value={phone}
-                    onChange={(e) => setPhone(e.target.value)}
-                    className="w-full pl-10 pr-4 py-3 bg-background border border-border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 transition-all placeholder:text-muted-foreground/50"
-                    placeholder="+33 6 12 34 56 78"
-                  />
-                </div>
-              </div>
+
             </div>
           )}
 
@@ -166,7 +131,7 @@ export default function Login({ initialIsSignUp = false, onBack }: { initialIsSi
 
           <button
             type="submit"
-            disabled={loading || !email || !password || (isSignUp && (!confirmPassword || !fullName || !phone))}
+            disabled={loading || !email || !password || (isSignUp && !confirmPassword)}
             className="w-full py-3 px-4 bg-primary text-primary-foreground rounded-xl font-semibold text-sm hover:opacity-90 transition-all active:scale-[0.98] disabled:opacity-70 disabled:pointer-events-none flex items-center justify-center shadow-lg shadow-primary/20 mt-4"
           >
             {loading ? <Loader2 className="h-5 w-5 animate-spin" /> : (isSignUp ? "Créer mon compte" : "Se connecter")}
