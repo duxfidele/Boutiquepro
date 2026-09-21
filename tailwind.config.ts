@@ -18,7 +18,31 @@ const config: Config = {
   ],
   theme: {
     extend: {
+      spacing: {
+        'space-xs': '0.25rem', 'margin': '2rem', 'space-sm': '0.5rem', 'space-xl': '2.5rem', 'space-lg': '1.5rem',
+        'margin-mobile': '1rem', 'space-md': '1rem', 'gutter': '1.5rem', 'gutter-mobile': '0.75rem'
+      },
+      fontFamily: {
+        'title-md': ['Plus Jakarta Sans'], 'headline-lg-mobile': ['Plus Jakarta Sans'], 'label-sm': ['Plus Jakarta Sans'],
+        'label-md': ['Plus Jakarta Sans'], 'body-lg': ['Plus Jakarta Sans'], 'body-md': ['Plus Jakarta Sans'],
+        'headline-sm': ['Plus Jakarta Sans'], 'metric-stat': ['Plus Jakarta Sans'], 'headline-md': ['Plus Jakarta Sans'],
+        'display-hero': ['Plus Jakarta Sans'], 'headline-lg': ['Plus Jakarta Sans'], 'body-sm': ['Plus Jakarta Sans']
+      },
       colors: {
+        "on-surface-variant":"#3d4947", "on-secondary-fixed-variant":"#3323cc", "on-primary-fixed":"#00201d",
+        "surface-container-lowest":"#ffffff", "inverse-primary":"#6bd8cb", "on-secondary-fixed":"#0f0069",
+        "primary":"#00685f", "tertiary":"#006947", "tertiary-fixed-dim":"#4edea3", "on-secondary":"#ffffff",
+        "secondary":"#4b41e1", "secondary-fixed-dim":"#c3c0ff", "secondary-container":"#645efb",
+        "surface-container-high":"#dce9ff", "error":"#ba1a1a", "outline-variant":"#bcc9c6", "background":"#f8f9ff",
+        "outline":"#6d7a77", "surface-bright":"#f8f9ff", "primary-fixed-dim":"#6bd8cb", "surface-container":"#e5eeff",
+        "surface-container-low":"#eff4ff", "surface-dim":"#cbdbf5", "error-container":"#ffdad6", "on-tertiary":"#ffffff",
+        "tertiary-fixed":"#6ffbbe", "on-primary":"#ffffff", "on-primary-container":"#f4fffc", "inverse-on-surface":"#eaf1ff",
+        "primary-container":"#008378", "on-tertiary-container":"#f5fff6", "tertiary-container":"#00855b",
+        "on-secondary-container":"#fffbff", "on-error":"#ffffff", "inverse-surface":"#213145", "on-tertiary-fixed-variant":"#005236",
+        "surface-variant":"#d3e4fe", "on-error-container":"#93000a", "surface-container-highest":"#d3e4fe",
+        "on-primary-fixed-variant":"#005049", "on-background":"#0b1c30", "on-tertiary-fixed":"#002113",
+        "surface":"#f8f9ff", "secondary-fixed":"#e2dfff", "primary-fixed":"#89f5e7", "on-surface":"#0b1c30",
+        "surface-tint":"#006a61",
         border: "rgb(var(--border) / <alpha-value>)",
         input: "rgb(var(--input) / <alpha-value>)",
         ring: "rgb(var(--ring) / <alpha-value>)",

@@ -4,13 +4,13 @@ import React, { useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { Store, Lock, Mail, Loader2, AlertCircle, User, Phone } from 'lucide-react';
 
-export default function Login() {
+export default function Login({ initialIsSignUp = false, onBack }: { initialIsSignUp?: boolean, onBack?: () => void }) {
       const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [fullName, setFullName] = useState('');
   const [phone, setPhone] = useState('');
-  const [isSignUp, setIsSignUp] = useState(false);
+  const [isSignUp, setIsSignUp] = useState(initialIsSignUp);
   const [message, setMessage] = useState<{type: 'error' | 'success', text: string} | null>(null);
   const [loading, setLoading] = useState(false);
 
