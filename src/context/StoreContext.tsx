@@ -276,11 +276,24 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     async function loadData() {
       try {
-        const { data: settings, error: settingsError } = await supabase.from('settings').select('*').single();
-        const { data: categories } = await supabase.from('categories').select('*');
-        const { data: products } = await supabase.from('products').select('*');
+        const [
+          { data: settings },
+          { data: categories },
+          { data: products },
+          { data: sales },
+          { data: customers },
+          { data: orders },
+          { data: inventory }
+        ] = await Promise.all([
+          supabase.from('settings').select('*').single(),
+          supabase.from('categories').select('*'),
+          supabase.from('products').select('*'),
+          supabase.from('sales').select('*, items:sale_items(*)'),
+          supabase.from('customers').select('*'),
+          supabase.from('orders').select('*, items:order_items(*)'),
+          supabase.from('inventory_sessions').select('*, items:inventory_items(*)')
+        ]);
 
-        // Toujours initialiser avec un payload par défaut complet
         const payload: any = {
           sales: [],
           inventorySessions: [],
@@ -311,22 +324,67 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             minStock: p.min_stock || 0
           }));
         }
+        if (sales) {
+          payload.sales = sales.map((s: any) => ({
+            ...s,
+            paymentMethod: s.payment_method,
+            customerName: s.customer_name,
+            createdAt: s.created_at,
+            items: s.items ? s.items.map((i: any) => ({
+              ...i,
+              productId: i.product_id,
+              productName: i.product_name,
+              unitPrice: i.unit_price
+            })) : []
+          }));
+        }
+        if (customers) {
+          payload.customers = customers.map((c: any) => ({
+            ...c,
+            totalPurchases: c.total_purchases,
+            lastVisit: c.last_visit
+          }));
+        }
+        if (orders) {
+          payload.orders = orders.map((o: any) => ({
+            ...o,
+            supplierName: o.supplier_name,
+            totalCost: o.total_cost,
+            createdAt: o.created_at,
+            expectedAt: o.expected_at,
+            items: o.items ? o.items.map((i: any) => ({
+              ...i,
+              productId: i.product_id,
+              productName: i.product_name,
+              costPrice: i.cost_price
+            })) : []
+          }));
+        }
+        if (inventory) {
+          payload.inventorySessions = inventory.map((inv: any) => ({
+            ...inv,
+            totalVarianceValue: inv.total_variance_value,
+            items: inv.items ? inv.items.map((i: any) => ({
+              ...i,
+              productId: i.product_id,
+              productName: i.product_name,
+              expectedStock: i.expected_stock,
+              actualStock: i.actual_stock,
+              costPrice: i.cost_price
+            })) : []
+          }));
+        }
 
-        // Récupérer le reste depuis localStorage
+        // Restore Cart from localStorage (cart shouldn't be in DB)
         const saved = localStorage.getItem("boutiquepro-state");
         if (saved) {
           const localData = JSON.parse(saved);
-          if (localData.sales) payload.sales = localData.sales;
-          if (localData.inventorySessions) payload.inventorySessions = localData.inventorySessions;
-          if (localData.orders) payload.orders = localData.orders;
-          if (localData.customers) payload.customers = localData.customers;
           if (localData.cart) payload.cart = localData.cart;
         }
 
         dispatchBase({ type: "LOAD_STATE", payload });
       } catch (err) {
         console.error("Error loading data from Supabase:", err);
-        // Fallback to initial state to prevent crash
         dispatchBase({ type: "LOAD_STATE", payload: initialState });
       } finally {
         setIsInitialized(true);
@@ -382,6 +440,90 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         if (Object.keys(updates).length > 0) {
           const { error } = await supabase.from('settings').update(updates).eq('id', 1);
           if (error) console.error("Supabase Update Settings Error:", error);
+        }
+      }
+      else if (action.type === "COMPLETE_SALE") {
+        const s = action.payload;
+        // Insert sale header
+        const { error: saleError } = await supabase.from('sales').insert([{
+          id: s.id, subtotal: s.subtotal, tax: s.tax, discount: s.discount,
+          total: s.total, payment_method: s.paymentMethod, customer_name: s.customerName,
+          created_at: s.createdAt
+        }]);
+        if (saleError) console.error("Supabase Sale Error:", saleError);
+        else if (s.items && s.items.length > 0) {
+          // Insert sale items
+          const itemsToInsert = s.items.map((i: any) => ({
+            id: 'si' + Math.random().toString(36).substring(7),
+            sale_id: s.id, product_id: i.productId, product_name: i.productName,
+            quantity: i.quantity, unit_price: i.unitPrice, total: i.total
+          }));
+          await supabase.from('sale_items').insert(itemsToInsert);
+          
+          // Update product stock in DB
+          for (const item of s.items) {
+             const prod = state.products.find((p: any) => p.id === item.productId);
+             if (prod) {
+                await supabase.from('products').update({ stock: Math.max(0, prod.stock - item.quantity) }).eq('id', prod.id);
+             }
+          }
+        }
+      }
+      else if (action.type === "ADD_CUSTOMER") {
+        const c = action.payload;
+        const { error } = await supabase.from('customers').insert([{
+          id: c.id, name: c.name, phone: c.phone, email: c.email,
+          total_purchases: c.totalPurchases, last_visit: c.lastVisit
+        }]);
+        if (error) console.error("Supabase Add Customer Error:", error);
+      }
+      else if (action.type === "ADD_ORDER") {
+        const o = action.payload;
+        const { error } = await supabase.from('orders').insert([{
+          id: o.id, supplier_name: o.supplierName, total_cost: o.totalCost,
+          status: o.status, created_at: o.createdAt, expected_at: o.expectedAt
+        }]);
+        if (!error && o.items && o.items.length > 0) {
+          const items = o.items.map((i: any) => ({
+            id: 'oi' + Math.random().toString(36).substring(7),
+            order_id: o.id, product_id: i.productId, product_name: i.productName,
+            quantity: i.quantity, cost_price: i.costPrice, total: i.total
+          }));
+          await supabase.from('order_items').insert(items);
+        }
+      }
+      else if (action.type === "UPDATE_ORDER_STATUS") {
+        const { error } = await supabase.from('orders').update({ status: 'received' }).eq('id', action.payload.orderId);
+        if (!error) {
+           // update stock for each item
+           const order = state.orders.find((o: any) => o.id === action.payload.orderId);
+           if (order) {
+              for (const item of order.items) {
+                const prod = state.products.find((p: any) => p.id === item.productId);
+                if (prod) {
+                   await supabase.from('products').update({ stock: prod.stock + item.quantity }).eq('id', prod.id);
+                }
+              }
+           }
+        }
+      }
+      else if (action.type === "ADD_INVENTORY_SESSION") {
+        const s = action.payload;
+        const { error } = await supabase.from('inventory_sessions').insert([{
+           id: s.id, date: s.date, total_variance_value: s.totalVarianceValue, notes: s.notes
+        }]);
+        if (!error && s.items && s.items.length > 0) {
+           const items = s.items.map((i: any) => ({
+              id: 'iv' + Math.random().toString(36).substring(7),
+              session_id: s.id, product_id: i.productId, product_name: i.productName,
+              expected_stock: i.expectedStock, actual_stock: i.actualStock, 
+              variance: i.variance, cost_price: i.costPrice
+           }));
+           await supabase.from('inventory_items').insert(items);
+           // Update stock
+           for (const item of s.items) {
+               await supabase.from('products').update({ stock: item.actualStock }).eq('id', item.productId);
+           }
         }
       }
       
