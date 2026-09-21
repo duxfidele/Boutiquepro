@@ -2,9 +2,14 @@
 
 import React, { useState } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
-import { useStore } from "@/context/StoreContext";
 import {
+  usePathname } from "next/navigation";
+import {
+  useStore } from "@/context/StoreContext";
+import {
+  useAuth } from "@/context/AuthContext";
+import {
+  LogOut,
   LayoutDashboard, ClipboardList, Receipt,
   Package,
   ShoppingCart,
@@ -34,6 +39,7 @@ export default function Sidebar() {
   const [collapsed, setCollapsed] = useState(false);
   const pathname = usePathname();
   const { lowStockProducts, state } = useStore();
+  const { signOut } = useAuth();
 
   return (
     <aside
@@ -103,8 +109,16 @@ export default function Sidebar() {
         </div>
       )}
 
-      {/* Collapse toggle */}
-      <div className="hidden lg:block border-t border-border/50 p-3">
+      {/* Bottom actions */}
+      <div className="hidden lg:flex flex-col border-t border-border/50 p-3 gap-2">
+        <button
+          onClick={signOut}
+          className="flex w-full items-center justify-center rounded-xl py-2 text-destructive hover:bg-destructive/10 transition-colors"
+          title="Se déconnecter"
+        >
+          <LogOut className="h-4 w-4" />
+          {!collapsed && <span className="ml-2 text-sm font-medium animate-fade-in">Déconnexion</span>}
+        </button>
         <button
           onClick={() => setCollapsed(!collapsed)}
           className="flex w-full items-center justify-center rounded-xl py-2 text-muted-foreground hover:bg-secondary hover:text-foreground transition-colors"
