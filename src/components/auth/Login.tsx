@@ -5,23 +5,46 @@ import { supabase } from '@/lib/supabase';
 import { Store, Lock, Mail, Loader2, AlertCircle } from 'lucide-react';
 
 export default function Login() {
-  const [email, setEmail] = useState('');
+    const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [isSignUp, setIsSignUp] = useState(false);
+  const [message, setMessage] = useState<{type: 'error' | 'success', text: string} | null>(null);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
 
-  const handleLogin = async (e: React.FormEvent) => {
+    const handleAuth = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
-    setError(null);
+    setMessage(null);
 
-    const { error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
+    if (isSignUp) {
+      if (password !== confirmPassword) {
+        setMessage({ type: 'error', text: "Les mots de passe ne correspondent pas." });
+        setLoading(false);
+        return;
+      }
+      
+      const { error, data } = await supabase.auth.signUp({
+        email,
+        password,
+      });
 
-    if (error) {
-      setError("Email ou mot de passe incorrect.");
+      if (error) {
+        setMessage({ type: 'error', text: error.message });
+      } else if (data.user && data.user.identities && data.user.identities.length === 0) {
+        setMessage({ type: 'error', text: "Cet email est déjà utilisé." });
+      } else {
+        setMessage({ type: 'success', text: "Compte créé ! Veuillez vérifier votre boîte mail pour confirmer votre inscription." });
+      }
+    } else {
+      const { error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
+
+      if (error) {
+        setMessage({ type: 'error', text: "Email ou mot de passe incorrect." });
+      }
     }
     setLoading(false);
   };
@@ -41,14 +64,18 @@ export default function Login() {
           <p className="text-sm text-muted-foreground mt-1">Connexion sécurisée à votre espace</p>
         </div>
 
-        {error && (
-          <div className="mb-6 p-3 bg-destructive/10 border border-destructive/20 rounded-xl flex items-center gap-3 text-destructive animate-fade-in">
+        {message && (
+          <div className={`mb-6 p-3 rounded-xl flex items-center gap-3 animate-fade-in border ${
+            message.type === 'error' 
+              ? 'bg-destructive/10 border-destructive/20 text-destructive' 
+              : 'bg-accent/10 border-accent/20 text-accent'
+          }`}>
             <AlertCircle className="h-5 w-5 shrink-0" />
-            <p className="text-sm font-medium">{error}</p>
+            <p className="text-sm font-medium">{message.text}</p>
           </div>
         )}
 
-        <form onSubmit={handleLogin} className="space-y-5">
+        <form onSubmit={handleAuth} className="space-y-5">
           <div className="space-y-2">
             <label className="text-sm font-medium text-foreground ml-1">Adresse Email</label>
             <div className="relative">
@@ -79,13 +106,43 @@ export default function Login() {
             </div>
           </div>
 
+          {isSignUp && (
+            <div className="space-y-2 animate-fade-in">
+              <label className="text-sm font-medium text-foreground ml-1">Confirmer le mot de passe</label>
+              <div className="relative">
+                <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
+                <input
+                  type="password"
+                  required
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  className="w-full pl-10 pr-4 py-3 bg-background border border-border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 transition-all placeholder:text-muted-foreground/50"
+                  placeholder="••••••••"
+                />
+              </div>
+            </div>
+          )}
+
           <button
             type="submit"
-            disabled={loading || !email || !password}
-            className="w-full py-3 px-4 bg-primary text-primary-foreground rounded-xl font-semibold text-sm hover:opacity-90 transition-all active:scale-[0.98] disabled:opacity-70 disabled:pointer-events-none flex items-center justify-center shadow-lg shadow-primary/20 mt-2"
+            disabled={loading || !email || !password || (isSignUp && !confirmPassword)}
+            className="w-full py-3 px-4 bg-primary text-primary-foreground rounded-xl font-semibold text-sm hover:opacity-90 transition-all active:scale-[0.98] disabled:opacity-70 disabled:pointer-events-none flex items-center justify-center shadow-lg shadow-primary/20 mt-4"
           >
-            {loading ? <Loader2 className="h-5 w-5 animate-spin" /> : "Se connecter"}
+            {loading ? <Loader2 className="h-5 w-5 animate-spin" /> : (isSignUp ? "Créer mon compte" : "Se connecter")}
           </button>
+
+          <div className="mt-4 text-center">
+            <button
+              type="button"
+              onClick={() => {
+                setIsSignUp(!isSignUp);
+                setMessage(null);
+              }}
+              className="text-sm text-muted-foreground hover:text-primary transition-colors"
+            >
+              {isSignUp ? "Déjà un compte ? Connectez-vous" : "Pas encore de compte ? S'inscrire"}
+            </button>
+          </div>
         </form>
       </div>
     </div>
