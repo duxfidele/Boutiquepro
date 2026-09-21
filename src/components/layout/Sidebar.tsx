@@ -5,7 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useStore } from "@/context/StoreContext";
 import {
-  LayoutDashboard, ClipboardList,
+  LayoutDashboard, ClipboardList, Receipt,
   Package,
   ShoppingCart,
   BarChart3,
@@ -23,6 +23,7 @@ const navItems = [
   { href: "/products", label: "Produits & Stock", icon: Package },
   { href: "/inventory", label: "Inventaire", icon: ClipboardList },
   { href: "/pos", label: "Point de Vente", icon: ShoppingCart },
+  { href: "/expenses", label: "Dépenses", icon: Receipt },
   { href: "/analytics", label: "Analytique", icon: BarChart3 },
   { href: "/orders", label: "Commandes", icon: Truck },
   { href: "/settings", label: "Paramètres", icon: Settings },

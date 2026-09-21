@@ -23,6 +23,15 @@ export interface CartItem {
 }
 
 
+export interface Expense {
+  id: string;
+  date: string;
+  category: string;
+  description: string;
+  amount: number;
+  createdAt?: string;
+}
+
 export interface Order {
   id: string;
   supplierName: string;
@@ -93,6 +102,7 @@ export interface StoreState {
   products: Product[];
   sales: Sale[];
   orders: Order[];
+  expenses: Expense[];
   customers: Customer[];
   cart: CartItem[];
   categories: Category[];
@@ -115,6 +125,9 @@ type Action =
   | { type: "DELETE_CATEGORY"; payload: string }
   | { type: "UPDATE_SETTINGS"; payload: Partial<StoreSettings> }
     | { type: "ADD_ORDER"; payload: Order }
+  | { type: "ADD_EXPENSE"; payload: Expense }
+  | { type: "UPDATE_EXPENSE"; payload: Expense }
+  | { type: "DELETE_EXPENSE"; payload: string }
   | { type: "UPDATE_ORDER_STATUS"; payload: { orderId: string; status: "received" } }
   | { type: "DELETE_ORDER"; payload: string }
   | { type: "ADD_INVENTORY_SESSION"; payload: InventorySession }
@@ -160,6 +173,7 @@ const initialState: StoreState = {
   products: demoProducts,
   sales: demoSales,
   orders: [],
+  expenses: [],
   customers: demoCustomers,
   cart: [],
   categories: demoCategories,
@@ -199,7 +213,13 @@ function storeReducer(state: StoreState, action: Action): StoreState {
       });
       return { ...state, sales: [action.payload, ...state.sales], products: updatedProducts, cart: [] };
     }
-        case "ADD_ORDER":
+        case "ADD_EXPENSE":
+      return { ...state, expenses: [action.payload, ...state.expenses].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()) };
+    case "UPDATE_EXPENSE":
+      return { ...state, expenses: state.expenses.map((e) => (e.id === action.payload.id ? action.payload : e)).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()) };
+    case "DELETE_EXPENSE":
+      return { ...state, expenses: state.expenses.filter((e) => e.id !== action.payload) };
+    case "ADD_ORDER":
       return { ...state, orders: [action.payload, ...state.orders] };
     case "DELETE_ORDER":
       return { ...state, orders: state.orders.filter((o) => o.id !== action.payload) };
@@ -244,7 +264,8 @@ function storeReducer(state: StoreState, action: Action): StoreState {
         categories: action.payload.categories || demoCategories,
         orders: action.payload.orders || [],
         cart: action.payload.cart || [],
-        inventorySessions: action.payload.inventorySessions || []
+        inventorySessions: action.payload.inventorySessions || [],
+        expenses: action.payload.expenses || []
       };
     default:
       return state;
@@ -264,6 +285,8 @@ interface StoreContextType {
   averageBasket: number;
   categorySales: Record<string, number>;
   categoryNames: string[];
+  totalExpenses: number;
+  netProfit: number;
 }
 
 const StoreContext = createContext<StoreContextType | undefined>(undefined);
@@ -283,7 +306,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           { data: sales },
           { data: customers },
           { data: orders },
-          { data: inventory }
+          { data: inventory },
+          { data: expenses }
         ] = await Promise.all([
           supabase.from('settings').select('*').single(),
           supabase.from('categories').select('*'),
@@ -291,13 +315,15 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           supabase.from('sales').select('*, items:sale_items(*)'),
           supabase.from('customers').select('*'),
           supabase.from('orders').select('*, items:order_items(*)'),
-          supabase.from('inventory_sessions').select('*, items:inventory_items(*)')
+          supabase.from('inventory_sessions').select('*, items:inventory_items(*)'),
+          supabase.from('expenses').select('*')
         ]);
 
         const payload: any = {
           sales: [],
           inventorySessions: [],
           orders: [],
+  expenses: [],
           customers: [],
           cart: [],
           categories: demoCategories,
@@ -372,6 +398,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
               actualStock: i.actual_stock,
               costPrice: i.cost_price
             })) : []
+          }));
+        }
+        if (expenses) {
+          payload.expenses = expenses.map((e: any) => ({
+             ...e,
+             createdAt: e.created_at
           }));
         }
 
@@ -507,6 +539,24 @@ export function StoreProvider({ children }: { children: ReactNode }) {
            }
         }
       }
+      else if (action.type === "ADD_EXPENSE") {
+        const e = action.payload;
+        const { error } = await supabase.from('expenses').insert([{
+           id: e.id, date: e.date, category: e.category, description: e.description, amount: e.amount
+        }]);
+        if (error) console.error("Supabase Add Expense Error:", error);
+      }
+      else if (action.type === "UPDATE_EXPENSE") {
+        const e = action.payload;
+        const { error } = await supabase.from('expenses').update({
+           date: e.date, category: e.category, description: e.description, amount: e.amount
+        }).eq('id', e.id);
+        if (error) console.error("Supabase Update Expense Error:", error);
+      }
+      else if (action.type === "DELETE_EXPENSE") {
+        const { error } = await supabase.from('expenses').delete().eq('id', action.payload);
+        if (error) console.error("Supabase Delete Expense Error:", error);
+      }
       else if (action.type === "ADD_INVENTORY_SESSION") {
         const s = action.payload;
         const { error } = await supabase.from('inventory_sessions').insert([{
@@ -552,6 +602,20 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const todayOrders = todaySales.length;
   const averageBasket = totalOrders > 0 ? totalRevenue / totalOrders : 0;
 
+  const totalExpenses = state.expenses ? state.expenses.reduce((sum, e) => sum + Number(e.amount), 0) : 0;
+  
+  let totalCOGS = 0;
+  state.sales.forEach(sale => {
+    sale.items.forEach(item => {
+      const product = state.products.find(p => p.id === item.productId);
+      if (product) {
+        totalCOGS += (product.cost * item.quantity);
+      }
+    });
+  });
+
+  const netProfit = totalRevenue - totalCOGS - totalExpenses;
+
   const categorySales: Record<string, number> = {};
   state.sales.forEach((sale) => {
     sale.items.forEach((item) => {
@@ -565,7 +629,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const categoryNames = state.categories.map((c) => c.name);
 
   return (
-    <StoreContext.Provider value={{ state, dispatch, formatPrice, lowStockProducts, totalRevenue, todayRevenue, totalOrders, todayOrders, averageBasket, categorySales, categoryNames }}>
+    <StoreContext.Provider value={{ state, dispatch, formatPrice, lowStockProducts, totalRevenue, todayRevenue, totalOrders, todayOrders, averageBasket, categorySales, categoryNames, totalExpenses, netProfit }}>
       {children}
     </StoreContext.Provider>
   );
