@@ -16,10 +16,10 @@ import {
   LogOut,
   Settings as SettingsIcon,
   X,
-  Download,
+  Download, Menu,
 } from "lucide-react";
 
-export default function Header() {
+export default function Header({ onMenuClick }: { onMenuClick?: () => void }) {
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
   useEffect(() => {
     window.addEventListener('beforeinstallprompt', (e) => {
@@ -59,7 +59,11 @@ export default function Header() {
   return (
     <header className="print:hidden sticky top-0 z-30 flex h-16 items-center justify-between border-b border-border/50 bg-background/80 backdrop-blur-xl px-6">
       {/* Left - Page context */}
-      <div className="flex items-center gap-4">{deferredPrompt && (
+      <div className="flex items-center gap-4">
+        <button onClick={onMenuClick} className="lg:hidden p-2 -ml-2 rounded-xl hover:bg-secondary">
+          <Menu className="h-5 w-5" />
+        </button>
+        {deferredPrompt && (
           <button onClick={handleInstall} className="flex items-center gap-2 rounded-xl bg-primary px-4 py-2 text-sm font-bold text-white hover:opacity-90 transition-opacity shadow-lg glow-primary animate-fade-in">
             <Download className="h-4 w-4" />
             <span className="hidden sm:inline">Installer l&apos;App</span>

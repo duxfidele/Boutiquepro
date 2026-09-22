@@ -12,6 +12,7 @@ import { Loader2 } from 'lucide-react';
 export default function AppWrapper({ children }: { children: React.ReactNode }) {
   const [showAuth, setShowAuth] = useState(false);
   const [isSignUpMode, setIsSignUpMode] = useState(false);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const { user, loading } = useAuth();
 
   if (loading) {
@@ -40,9 +41,9 @@ export default function AppWrapper({ children }: { children: React.ReactNode }) 
   return (
     <StoreProvider>
       <div className="flex min-h-screen">
-        <Sidebar />
-        <div className="flex-1 flex flex-col min-w-0 lg:ml-[260px] ml-0 pb-20 lg:pb-0 transition-all duration-300">
-          <Header />
+        <Sidebar isOpen={isMobileMenuOpen} onClose={() => setIsMobileMenuOpen(false)} />
+        <div className="flex-1 flex flex-col min-w-0 lg:ml-[260px] ml-0 transition-all duration-300">
+          <Header onMenuClick={() => setIsMobileMenuOpen(true)} />
           <main className="flex-1 p-6">
             {children}
           </main>

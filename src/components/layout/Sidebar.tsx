@@ -35,24 +35,29 @@ const navItems = [
   { href: "/support", label: "Aide & Support", icon: HelpCircle },
 ];
 
-export default function Sidebar() {
+export default function Sidebar({ isOpen, onClose }: { isOpen?: boolean, onClose?: () => void }) {
   const [collapsed, setCollapsed] = useState(false);
   const pathname = usePathname();
   const { lowStockProducts, state } = useStore();
   const { signOut } = useAuth();
 
   return (
-    <aside
-      className={`print:hidden fixed z-40 lg:left-0 lg:top-0 bottom-0 w-full lg:h-screen flex flex-row lg:flex-col border-t lg:border-r lg:border-t-0 border-border/50 bg-sidebar transition-all duration-300 ease-out ${
-        collapsed ? "lg:w-[72px]" : "lg:w-[260px]"
-      }`}
-    >
+    <>
+      {/* Overlay mobile */}
+      {isOpen && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-40 lg:hidden animate-fade-in" onClick={onClose} />
+      )}
+      <aside
+        className={`print:hidden fixed z-50 top-0 bottom-0 left-0 h-screen flex flex-col border-r border-border/50 bg-sidebar transition-transform duration-300 ease-in-out ${
+          isOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"
+        } ${collapsed ? "lg:w-[72px]" : "w-[260px]"}`}
+      >
       {/* Logo / Brand */}
-      <div className="hidden lg:flex h-16 items-center gap-3 border-b border-border/50 px-4">
+      <div className="flex h-16 items-center gap-3 border-b border-border/50 px-4">
         <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-primary to-accent text-white font-bold text-sm overflow-hidden">
           {state.settings.logo ? <img src={state.settings.logo} alt="Logo" className="w-full h-full object-cover" /> : state.settings.name.charAt(0).toUpperCase()}
         </div>
-        {!collapsed && (
+        {(!collapsed || isOpen) && (
           <div className="animate-fade-in overflow-hidden">
             <h1 className="text-base font-bold text-gradient truncate">{state.settings.name}</h1>
             <p className="text-[10px] text-muted-foreground">Gestion Commerciale</p>
@@ -61,8 +66,8 @@ export default function Sidebar() {
       </div>
 
       {/* Navigation */}
-      <nav className="flex-1 overflow-x-auto lg:overflow-y-auto lg:py-4 lg:px-3 p-1.5 no-scrollbar flex items-center lg:block">
-        <div className="flex flex-row lg:flex-col w-full justify-around lg:space-y-1">
+      <nav className="flex-1 overflow-y-auto py-4 px-3 no-scrollbar">
+        <div className="flex flex-col w-full space-y-1">
           {navItems.map((item) => {
             const isActive = pathname === item.href;
             const Icon = item.icon;
@@ -72,7 +77,8 @@ export default function Sidebar() {
               <Link
                 key={item.href}
                 href={item.href}
-                className={`group relative flex lg:flex-row flex-col items-center justify-center lg:justify-start gap-1 lg:gap-3 rounded-xl px-2 lg:px-3 py-1.5 lg:py-2.5 text-[10px] lg:text-sm font-medium transition-all duration-200 flex-1 lg:flex-none ${
+                onClick={onClose}
+                className={`group relative flex flex-row items-center justify-start gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-all duration-200 ${
                   isActive
                     ? "bg-primary/10 text-primary shadow-sm"
                     : "text-muted-foreground hover:bg-secondary hover:text-foreground"
@@ -83,7 +89,7 @@ export default function Sidebar() {
                 )}
                 <Icon className={`h-5 w-5 shrink-0 transition-colors ${isActive ? "text-primary" : ""}`} />
                 {!collapsed && (
-                  <span className="truncate animate-fade-in hidden lg:block">{item.label}</span>
+                  <span className="truncate animate-fade-in">{item.label}</span>
                 )}
                 {showBadge && (
                   <span className={`badge-pulse flex h-5 items-center justify-center rounded-full bg-destructive text-[10px] font-bold text-white ${collapsed ? "absolute -right-1 -top-1 w-5" : "ml-auto min-w-[20px] px-1.5"}`}>
@@ -98,7 +104,7 @@ export default function Sidebar() {
 
       {/* Store selector */}
       {!collapsed && (
-        <div className="hidden lg:block border-t border-border/50 p-3 animate-fade-in">
+        <div className="block border-t border-border/50 p-3 animate-fade-in">
           <div className="flex items-center gap-3 rounded-xl bg-secondary/50 px-3 py-2.5">
             <Store className="h-4 w-4 text-muted-foreground" />
             <div className="flex-1 min-w-0">
@@ -110,7 +116,7 @@ export default function Sidebar() {
       )}
 
       {/* Bottom actions */}
-      <div className="hidden lg:flex flex-col border-t border-border/50 p-3 gap-2">
+      <div className="flex flex-col border-t border-border/50 p-3 gap-2">
         <button
           onClick={signOut}
           className="flex w-full items-center justify-center rounded-xl py-2 text-destructive hover:bg-destructive/10 transition-colors"
@@ -127,5 +133,6 @@ export default function Sidebar() {
         </button>
       </div>
     </aside>
+    </>
   );
 }

@@ -89,9 +89,23 @@ export default function Dashboard() {
     },
   ];
 
-  // Weekly sales chart data (simulated bar heights)
+  // Weekly sales chart data (Real data)
   const weekDays = ["Lun", "Mar", "Mer", "Jeu", "Ven", "Sam", "Dim"];
-  const weeklyData = [65, 45, 80, 55, 90, 100, 70];
+  const weeklyData = [0, 0, 0, 0, 0, 0, 0];
+  const now = new Date();
+  const oneWeekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+  
+  state.sales.forEach(sale => {
+    const saleDate = new Date(sale.createdAt);
+    if (saleDate >= oneWeekAgo) {
+      let dayIndex = saleDate.getDay() - 1;
+      if (dayIndex === -1) dayIndex = 6; // Dimanche
+      weeklyData[dayIndex] += sale.total;
+    }
+  });
+
+  const maxWeekly = Math.max(...weeklyData, 1);
+  const weeklyPercentages = weeklyData.map(val => (val / maxWeekly) * 100);
 
   // Category breakdown
   const categoryEntries = Object.entries(categorySales).sort((a, b) => b[1] - a[1]);
@@ -169,8 +183,9 @@ export default function Dashboard() {
                 <div className="w-full relative flex items-end justify-center" style={{ height: "180px" }}>
                   <div
                     className="w-full max-w-[40px] rounded-t-lg bg-gradient-to-t from-primary to-primary/60 transition-all duration-500 hover:from-accent hover:to-accent/60 cursor-pointer"
+                    title={`${formatPrice(weeklyData[i])}`}
                     style={{
-                      height: `${weeklyData[i]}%`,
+                      height: `${weeklyPercentages[i]}%`,
                       animationDelay: `${i * 80}ms`,
                     }}
                   />
