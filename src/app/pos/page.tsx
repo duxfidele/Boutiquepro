@@ -539,7 +539,7 @@ export default function POSPage() {
 
               {/* Footer */}
               <div className="text-center mt-6 pt-4 border-t-2 border-dashed border-gray-300">
-                <p className="text-xs text-gray-400">Prompt rétablissement ! 🙏</p>
+                <p className="text-xs text-gray-400">Merci de votre visite ! 🙏</p>
                 <p className="text-[10px] text-gray-300 mt-1">{state.settings.name} — Propulsé par BoutiquePro</p>
               </div>
             </div>
@@ -663,7 +663,7 @@ export default function POSPage() {
               {/* Footer */}
               <div className="mt-16 pt-6 border-t border-gray-200 text-center text-sm text-gray-500">
                 <p className="font-medium">Moyen de paiement : {paymentMethods.find(p => p.id === lastSale.paymentMethod)?.label}</p>
-                <p className="mt-2 text-xs">Merci de votre confiance et prompt rétablissement ! En cas de question, merci de nous contacter.</p>
+                <p className="mt-2 text-xs">Merci de votre confiance et à très bientôt ! En cas de question, n'hésitez pas à nous contacter.</p>
               </div>
             </div>
 
