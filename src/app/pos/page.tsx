@@ -102,7 +102,24 @@ export default function POSPage() {
   const handleDownloadReceipt = async () => {
     if (!receiptRef.current || !lastSale) return;
     try {
-      const canvas = await html2canvas(receiptRef.current, { scale: 2 });
+      const clone = receiptRef.current.cloneNode(true) as HTMLElement;
+      clone.style.position = 'fixed';
+      clone.style.top = '-9999px';
+      clone.style.left = '-9999px';
+      clone.style.width = '300px';
+      clone.style.height = 'auto';
+      clone.style.maxWidth = 'none';
+      clone.style.overflow = 'visible';
+      document.body.appendChild(clone);
+
+      const canvas = await html2canvas(clone, { 
+        scale: 2, 
+        windowWidth: 300,
+        backgroundColor: "#ffffff",
+      });
+      
+      document.body.removeChild(clone);
+
       const imgData = canvas.toDataURL("image/png");
       const pdf = new jsPDF({
         orientation: "portrait",
@@ -123,7 +140,24 @@ export default function POSPage() {
   const handleDownloadInvoice = async () => {
     if (!invoiceRef.current || !lastSale) return;
     try {
-      const canvas = await html2canvas(invoiceRef.current, { scale: 2 });
+      const clone = invoiceRef.current.cloneNode(true) as HTMLElement;
+      clone.style.position = 'fixed';
+      clone.style.top = '-9999px';
+      clone.style.left = '-9999px';
+      clone.style.width = '794px';
+      clone.style.height = 'auto';
+      clone.style.maxWidth = 'none';
+      clone.style.overflow = 'visible';
+      document.body.appendChild(clone);
+
+      const canvas = await html2canvas(clone, { 
+        scale: 2,
+        windowWidth: 794,
+        backgroundColor: "#ffffff",
+      });
+      
+      document.body.removeChild(clone);
+
       const imgData = canvas.toDataURL("image/png");
       const pdf = new jsPDF({
         orientation: "portrait",
