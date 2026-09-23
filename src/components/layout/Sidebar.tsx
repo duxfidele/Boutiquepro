@@ -69,6 +69,12 @@ export default function Sidebar({ isOpen, onClose }: { isOpen?: boolean, onClose
       <nav className="flex-1 overflow-y-auto py-4 px-3 no-scrollbar">
         <div className="flex flex-col w-full space-y-1">
           {navItems.map((item) => {
+            // Role based filtering
+            const { role } = useAuth();
+            if (role === 'cashier' && !['/pos', '/products', '/customers', '/orders'].includes(item.href)) {
+              return null;
+            }
+
             const isActive = pathname === item.href;
             const Icon = item.icon;
             const showBadge = item.href === "/products" && lowStockProducts.length > 0;

@@ -8,12 +8,24 @@ import { StoreProvider } from '@/context/StoreContext';
 import Sidebar from '@/components/layout/Sidebar';
 import Header from '@/components/layout/Header';
 import { Loader2 } from 'lucide-react';
+import { usePathname, useRouter } from 'next/navigation';
 
 export default function AppWrapper({ children }: { children: React.ReactNode }) {
   const [showAuth, setShowAuth] = useState(false);
   const [isSignUpMode, setIsSignUpMode] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-  const { user, loading } = useAuth();
+  const { user, role, loading } = useAuth();
+  const pathname = usePathname();
+  const router = useRouter();
+
+  React.useEffect(() => {
+    if (role === 'cashier') {
+      const allowedPaths = ['/pos', '/products', '/customers', '/orders'];
+      if (!allowedPaths.includes(pathname)) {
+        router.push('/pos');
+      }
+    }
+  }, [role, pathname, router]);
 
   if (loading) {
     return (

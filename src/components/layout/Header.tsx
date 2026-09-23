@@ -35,7 +35,7 @@ export default function Header({ onMenuClick }: { onMenuClick?: () => void }) {
     }
   };
 
-  const { user, signOut } = useAuth();
+  const { user, role, signOut } = useAuth();
   const [showProfile, setShowProfile] = useState(false);
   const { lowStockProducts, state, formatPrice, todayRevenue, todayOrders, dispatch } = useStore();
   const pathname = usePathname();
@@ -206,7 +206,7 @@ export default function Header({ onMenuClick }: { onMenuClick?: () => void }) {
             <div className="absolute right-0 top-full mt-2 w-56 rounded-xl border border-border/50 bg-popover shadow-soft-lg animate-scale-in overflow-hidden">
               <div className="p-3 border-b border-border/50 bg-secondary/30">
                 <p className="text-sm font-medium text-foreground truncate">{user?.email}</p>
-                <p className="text-[10px] text-muted-foreground mt-0.5">Administrateur</p>
+                <p className="text-[10px] text-muted-foreground mt-0.5">{role === 'admin' ? 'Administrateur' : 'Caissier'}</p>
               </div>
               
               <div className="p-1">
@@ -219,14 +219,16 @@ export default function Header({ onMenuClick }: { onMenuClick?: () => void }) {
                   Mon Profil
                 </Link>
                 
-                <Link
-                  href="/settings"
-                  onClick={() => setShowProfile(false)}
-                  className="flex items-center gap-2 px-3 py-2 text-sm text-muted-foreground hover:text-foreground hover:bg-secondary rounded-lg transition-colors"
-                >
-                  <SettingsIcon className="h-4 w-4" />
-                  Paramètres Boutique
-                </Link>
+                {role !== 'cashier' && (
+                  <Link
+                    href="/settings"
+                    onClick={() => setShowProfile(false)}
+                    className="flex items-center gap-2 px-3 py-2 text-sm text-muted-foreground hover:text-foreground hover:bg-secondary rounded-lg transition-colors"
+                  >
+                    <SettingsIcon className="h-4 w-4" />
+                    Paramètres Boutique
+                  </Link>
+                )}
 
                 <div className="h-px bg-border/50 my-1 mx-2" />
 
