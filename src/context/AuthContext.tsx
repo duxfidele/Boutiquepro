@@ -24,10 +24,10 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       if (data && data.role) {
         setRole(data.role);
       } else {
-        setRole('cashier'); // Fallback
+        setRole('admin'); // Fallback (Option B)
       }
     } catch (e) {
-      setRole('cashier');
+      setRole('admin'); // Fallback (Option B)
     }
   };
 
