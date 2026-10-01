@@ -72,7 +72,7 @@ export default function Sidebar({ isOpen, onClose }: { isOpen?: boolean, onClose
         <div className="flex flex-col w-full space-y-1">
           {navItems.map((item) => {
             // Role based filtering
-            if (role === 'cashier' && !['/pos', '/products', '/customers'].includes(item.href)) {
+            if (role === 'cashier' && !['/', '/pos', '/products', '/customers'].includes(item.href)) {
               return null;
             }
 

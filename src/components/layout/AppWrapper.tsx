@@ -20,7 +20,7 @@ export default function AppWrapper({ children }: { children: React.ReactNode }) 
 
   React.useEffect(() => {
     if (role === 'cashier') {
-      const allowedPaths = ['/pos', '/products', '/customers'];
+      const allowedPaths = ['/', '/pos', '/products', '/customers'];
       if (!allowedPaths.includes(pathname)) {
         router.push('/pos');
       }
