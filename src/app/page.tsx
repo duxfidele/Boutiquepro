@@ -88,30 +88,8 @@ export default function Dashboard() {
       trendUp: lowStockProducts.length === 0,
       gradient: lowStockProducts.length > 0 ? "from-destructive/10 to-destructive/5" : "from-accent/10 to-accent/5",
       iconBg: lowStockProducts.length > 0 ? "bg-destructive/10 text-destructive" : "bg-accent/10 text-accent",
-    },
-    {
-      label: "Ventes du jour",
-      value: todayOrders.toString(),
-      subValue: `Total: ${totalOrders}`,
-      icon: ShoppingBag,
-      trend: "Commandes",
-      trendUp: true,
-      gradient: "from-primary/10 to-accent/10",
-      iconBg: "bg-primary/10 text-primary",
-    },
-    {
-      label: "Panier Moyen",
-      value: formatPrice(averageBasket),
-      subValue: "Par commande",
-      icon: ShoppingCart,
-      trend: "Moyenne",
-      trendUp: true,
-      gradient: "from-accent/10 to-primary/5",
-      iconBg: "bg-accent/10 text-accent",
     }
   ];
-
-  const kpis = role === 'cashier' ? cashierKpis : adminKpis;
 
   const cashierKpis = [
     {
@@ -125,36 +103,6 @@ export default function Dashboard() {
       iconBg: "bg-primary/10 text-primary",
     },
     {
-      label: "Bénéfice Net (Est.)",
-      value: formatPrice(netProfit),
-      subValue: "CA - Achats - Dépenses",
-      icon: Banknote,
-      trend: netProfit >= 0 ? "Positif" : "Négatif",
-      trendUp: netProfit >= 0,
-      gradient: netProfit >= 0 ? "from-accent/10 to-primary/5" : "from-destructive/10 to-destructive/5",
-      iconBg: netProfit >= 0 ? "bg-accent/10 text-accent" : "bg-destructive/10 text-destructive",
-    },
-    {
-      label: "Total Dépenses",
-      value: formatPrice(totalExpenses),
-      subValue: "Loyer, salaires, etc.",
-      icon: Receipt,
-      trend: "Charges",
-      trendUp: false,
-      gradient: "from-chart-3/10 to-chart-5/5",
-      iconBg: "bg-chart-3/20 text-chart-3",
-    },
-    {
-      label: "Stock critique",
-      value: lowStockProducts.length.toString(),
-      subValue: `Sur ${state.products.length} produits`,
-      icon: AlertTriangle,
-      trend: lowStockProducts.length > 0 ? "Attention" : "OK",
-      trendUp: lowStockProducts.length === 0,
-      gradient: lowStockProducts.length > 0 ? "from-destructive/10 to-destructive/5" : "from-accent/10 to-accent/5",
-      iconBg: lowStockProducts.length > 0 ? "bg-destructive/10 text-destructive" : "bg-accent/10 text-accent",
-    },
-    {
       label: "Ventes du jour",
       value: todayOrders.toString(),
       subValue: `Total: ${totalOrders}`,
@@ -173,6 +121,16 @@ export default function Dashboard() {
       trendUp: true,
       gradient: "from-accent/10 to-primary/5",
       iconBg: "bg-accent/10 text-accent",
+    },
+    {
+      label: "Stock critique",
+      value: lowStockProducts.length.toString(),
+      subValue: `Sur ${state.products.length} produits`,
+      icon: AlertTriangle,
+      trend: lowStockProducts.length > 0 ? "Attention" : "OK",
+      trendUp: lowStockProducts.length === 0,
+      gradient: lowStockProducts.length > 0 ? "from-destructive/10 to-destructive/5" : "from-accent/10 to-accent/5",
+      iconBg: lowStockProducts.length > 0 ? "bg-destructive/10 text-destructive" : "bg-accent/10 text-accent",
     }
   ];
 
