@@ -1,6 +1,7 @@
 "use client";
 
 import React, { createContext, useContext, useReducer, useEffect, useState, ReactNode } from "react";
+import { useAuth } from '@/context/AuthContext';
 import { supabase } from "@/lib/supabase";
 
 // ─── Types ───────────────────────────────────────────────────
@@ -292,11 +293,14 @@ interface StoreContextType {
 const StoreContext = createContext<StoreContextType | undefined>(undefined);
 
 export function StoreProvider({ children }: { children: ReactNode }) {
+  const { activeStore } = useAuth();
   const [state, dispatchBase] = useReducer(storeReducer, initialState);
   const [isInitialized, setIsInitialized] = useState(false);
 
   // Load from Supabase
   useEffect(() => {
+    if (!activeStore) return;
+
     async function loadData() {
       try {
         const [
@@ -309,14 +313,14 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           { data: inventory },
           { data: expenses }
         ] = await Promise.all([
-          supabase.from('settings').select('*').single(),
-          supabase.from('categories').select('*'),
-          supabase.from('products').select('*'),
-          supabase.from('sales').select('*, items:sale_items(*)'),
-          supabase.from('customers').select('*'),
-          supabase.from('orders').select('*, items:order_items(*)'),
+          supabase.from('settings').select('*').eq('store_id', activeStore.id).maybeSingle(),
+          supabase.from('categories').select('*').eq('store_id', activeStore.id),
+          supabase.from('products').select('*').eq('store_id', activeStore.id),
+          supabase.from('sales').select('*, items:sale_items(*)').eq('store_id', activeStore.id),
+          supabase.from('customers').select('*').eq('store_id', activeStore.id),
+          supabase.from('orders').select('*, items:order_items(*)').eq('store_id', activeStore.id),
           supabase.from('inventory_sessions').select('*, items:inventory_items(*)'),
-          supabase.from('expenses').select('*')
+          supabase.from('expenses').select('*').eq('store_id', activeStore.id)
         ]);
 
         const payload: any = {
@@ -423,7 +427,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       }
     }
     loadData();
-  }, []);
+  }, [activeStore]);
 
   // Sync to local storage for unmigrated data (sales, inventory) just so it doesn't break
   useEffect(() => {
@@ -437,12 +441,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     try {
       if (action.type === "ADD_PRODUCT") {
         const p = action.payload;
-        const { error } = await supabase.from('products').insert([{
+        const { error } = await supabase.from('products').insert([{ store_id: activeStore.id, 
           id: p.id, name: p.name, sku: p.sku, category: p.category, 
           price: p.price, cost: p.cost, stock: p.stock, 
           min_stock: p.minStock, image: p.image
         }]);
-        if (error) console.error("Supabase Add Product Error:", error);
+        if (error) { console.error("Supabase Add Product Error:", error); alert("Erreur Supabase Produit: " + error.message + " (Code: " + error.code + ")"); }
       } 
       else if (action.type === "DELETE_PRODUCT") {
         const { error } = await supabase.from('products').delete().eq('id', action.payload);
@@ -477,7 +481,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       else if (action.type === "COMPLETE_SALE") {
         const s = action.payload;
         // Insert sale header
-        const { error: saleError } = await supabase.from('sales').insert([{
+        const { error: saleError } = await supabase.from('sales').insert([{ store_id: activeStore.id, 
           id: s.id, subtotal: s.subtotal, tax: s.tax, discount: s.discount,
           total: s.total, payment_method: s.paymentMethod, customer_name: s.customerName,
           created_at: s.createdAt
@@ -503,7 +507,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       }
       else if (action.type === "ADD_CUSTOMER") {
         const c = action.payload;
-        const { error } = await supabase.from('customers').insert([{
+        const { error } = await supabase.from('customers').insert([{ store_id: activeStore.id, 
           id: c.id, name: c.name, phone: c.phone, email: c.email,
           total_purchases: c.totalPurchases, last_visit: c.lastVisit
         }]);
@@ -511,7 +515,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       }
       else if (action.type === "ADD_ORDER") {
         const o = action.payload;
-        const { error } = await supabase.from('orders').insert([{
+        const { error } = await supabase.from('orders').insert([{ store_id: activeStore.id, 
           id: o.id, supplier_name: o.supplierName, total_cost: o.totalCost,
           status: o.status, created_at: o.createdAt, expected_at: o.expectedAt
         }]);
@@ -541,7 +545,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       }
       else if (action.type === "ADD_EXPENSE") {
         const e = action.payload;
-        const { error } = await supabase.from('expenses').insert([{
+        const { error } = await supabase.from('expenses').insert([{ store_id: activeStore.id, 
            id: e.id, date: e.date, category: e.category, description: e.description, amount: e.amount
         }]);
         if (error) console.error("Supabase Add Expense Error:", error);
@@ -559,7 +563,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       }
       else if (action.type === "ADD_INVENTORY_SESSION") {
         const s = action.payload;
-        const { error } = await supabase.from('inventory_sessions').insert([{
+        const { error } = await supabase.from('inventory_sessions').insert([{ store_id: activeStore.id, 
            id: s.id, date: s.date, total_variance_value: s.totalVarianceValue, notes: s.notes
         }]);
         if (!error && s.items && s.items.length > 0) {

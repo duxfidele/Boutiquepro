@@ -21,6 +21,7 @@ import {
   Store,
   Truck,
   HelpCircle,
+  Users,
 } from "lucide-react";
 
 const navItems = [
@@ -31,6 +32,7 @@ const navItems = [
   { href: "/expenses", label: "Dépenses", icon: Receipt },
   { href: "/analytics", label: "Analytique", icon: BarChart3 },
   { href: "/orders", label: "Commandes", icon: Truck },
+  { href: "/team", label: "Mon Équipe", icon: Users },
   { href: "/settings", label: "Paramètres", icon: Settings },
   { href: "/support", label: "Aide & Support", icon: HelpCircle },
 ];
@@ -39,7 +41,7 @@ export default function Sidebar({ isOpen, onClose }: { isOpen?: boolean, onClose
   const [collapsed, setCollapsed] = useState(false);
   const pathname = usePathname();
   const { lowStockProducts, state } = useStore();
-  const { signOut } = useAuth();
+  const { role, signOut, stores, activeStore, setActiveStore } = useAuth();
 
   return (
     <>
@@ -70,7 +72,6 @@ export default function Sidebar({ isOpen, onClose }: { isOpen?: boolean, onClose
         <div className="flex flex-col w-full space-y-1">
           {navItems.map((item) => {
             // Role based filtering
-            const { role } = useAuth();
             if (role === 'cashier' && !['/pos', '/products', '/customers', '/orders'].includes(item.href)) {
               return null;
             }
@@ -109,13 +110,27 @@ export default function Sidebar({ isOpen, onClose }: { isOpen?: boolean, onClose
       </nav>
 
       {/* Store selector */}
-      {!collapsed && (
+      {!collapsed && stores?.length > 0 && (
         <div className="block border-t border-border/50 p-3 animate-fade-in">
           <div className="flex items-center gap-3 rounded-xl bg-secondary/50 px-3 py-2.5">
-            <Store className="h-4 w-4 text-muted-foreground" />
+            <Store className="h-4 w-4 text-muted-foreground shrink-0" />
             <div className="flex-1 min-w-0">
-              <p className="text-xs font-medium truncate">{state.settings.name}</p>
-              <p className="text-[10px] text-muted-foreground">Boutique principale</p>
+              <select 
+                value={activeStore?.id || ''}
+                onChange={(e) => {
+                  const s = stores.find(x => x.id === e.target.value);
+                  if (s) {
+                    setActiveStore(s);
+                    window.location.reload(); // Recharger pour rafraîchir le contexte de données
+                  }
+                }}
+                className="w-full bg-transparent text-xs font-medium truncate outline-none cursor-pointer appearance-none"
+              >
+                {stores.map(s => (
+                  <option key={s.id} value={s.id}>{s.name}</option>
+                ))}
+              </select>
+              <p className="text-[10px] text-muted-foreground capitalize">{activeStore?.role === 'admin' ? 'Administrateur' : 'Caissier'}</p>
             </div>
           </div>
         </div>

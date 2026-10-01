@@ -16,7 +16,7 @@ import {
   LogOut,
   Settings as SettingsIcon,
   X,
-  Download, Menu,
+  Download, Menu, Users,
 } from "lucide-react";
 
 export default function Header({ onMenuClick }: { onMenuClick?: () => void }) {
@@ -69,7 +69,7 @@ export default function Header({ onMenuClick }: { onMenuClick?: () => void }) {
             <span className="hidden sm:inline">Installer l&apos;App</span>
           </button>
         )}
-        <div className="hidden md:flex items-center gap-2 text-sm text-muted-foreground">
+        <div className="flex items-center gap-2 text-sm text-muted-foreground">
           <span className="inline-flex items-center gap-1.5 rounded-lg bg-accent/10 px-2.5 py-1 text-xs font-medium text-accent">
             <span className="h-1.5 w-1.5 rounded-full bg-accent animate-pulse" />
             En ligne
