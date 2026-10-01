@@ -49,3 +49,23 @@ Le système gère 2 niveaux d'accès configurés à la fois dans le frontend (UI
 - Développer la génération de rapports avancés (PDF).
 - Implémenter l'impression des tickets de caisse.
 - Affiner la gestion des remises spécifiques au niveau des caissiers.
+
+## ⚠️ Points de Vigilance & Optimisations Techniques (Recommandations Architecturales)
+Pour passer d'un prototype fonctionnel à un logiciel de production à grande échelle, les points suivants devront être traités :
+
+1. **Transaction Atomique des Ventes :** Actuellement, l'enregistrement d'une vente se fait en 3 appels (Création vente -> Ajout items -> Baisse du stock). Si le réseau coupe au milieu, la base est corrompue. Il faut tout regrouper dans une fonction Postgres (`RPC`) pour garantir l'atomicité.
+2. **Offline-First Réel :** Le cache PWA permet d'afficher l'interface sans internet, mais pour *créer* une vente hors-ligne, il faut implémenter une base de données locale (IndexedDB) avec une file d'attente de synchronisation et une gestion des conflits de stock au retour du réseau.
+3. **Sécurisation stricte de la table Profils :** Restreindre la politique RLS sur la table `profiles` pour éviter d'exposer les emails de tous les utilisateurs (ex: utiliser une fonction RPC qui répond uniquement "vrai/faux" lors de l'ajout d'un caissier).
+4. **Validation stricte du `store_id` :** Remplacer le trigger d'urgence `saas_auto_store_trigger` par une vérification stricte `WITH CHECK` dans les policies RLS. Le frontend doit impérativement fournir le bon ID.
+5. **Vérification RLS en écriture :** S'assurer que les politiques RLS interdisent fermement l'écriture (modification de stock, suppression de produits) aux caissiers au niveau de la base, pour ne pas dépendre uniquement du masquage de l'interface.
+6. **Performance des RLS :** Ajouter des index SQL sur `(user_id, store_id)` dans `store_members` et optimiser les fonctions pour éviter les ralentissements sur les grosses requêtes.
+
+## 🌟 Nouvelles Fonctionnalités à Développer (Roadmap)
+- Impression des tickets de caisse (Fonctionnalité POS basique).
+- Clôture de caisse (Ouverture/fermeture de session avec calcul des écarts d'espèces).
+- Paiements multiples (Espèces, Mobile Money, Carte) et paiements mixtes.
+- Ventes à crédit pour les clients réguliers (très demandé en Afrique).
+- Retours et annulations de ventes avec un journal d'audit détaillé.
+- Scan de code-barres via l'appareil photo du téléphone/tablette.
+- Facturation de l'abonnement SaaS (Stripe/Paystack) pour la monétisation.
+- Sauvegardes et export CSV/PDF des données pour les commerçants.
