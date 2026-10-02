@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import {
   usePathname } from "next/navigation";
@@ -43,6 +43,31 @@ export default function Sidebar({ isOpen, onClose }: { isOpen?: boolean, onClose
   const pathname = usePathname();
   const { lowStockProducts, state } = useStore();
   const { user, role, signOut, stores, activeStore, setActiveStore } = useAuth();
+  const [cashierName, setCashierName] = useState<string | null>(null);
+
+  useEffect(() => {
+    const fetchCashier = async () => {
+      if (activeStore && activeStore.role === 'admin') {
+        const { data } = await supabase
+          .from('store_members')
+          .select('profiles(full_name, email)')
+          .eq('store_id', activeStore.id)
+          .eq('role', 'cashier')
+          .limit(1)
+          .single();
+        
+        if (data && data.profiles) {
+          // @ts-ignore
+          setCashierName(data.profiles.full_name || data.profiles.email || 'Caissier sans nom');
+        } else {
+          setCashierName('Aucun caissier');
+        }
+      } else {
+        setCashierName(null);
+      }
+    };
+    fetchCashier();
+  }, [activeStore]);
 
   const handleCreateStore = async (storeName: string) => {
     try {
@@ -144,9 +169,11 @@ export default function Sidebar({ isOpen, onClose }: { isOpen?: boolean, onClose
                   <option key={s.id} value={s.id}>{s.name}</option>
                 ))}
               </select>
-              <p className="text-[10px] text-muted-foreground capitalize">
-                {user?.user_metadata?.full_name ? <span className="font-semibold text-foreground mr-1">{user.user_metadata.full_name}</span> : null}
-                ({activeStore?.role === 'admin' ? 'Administrateur' : 'Caissier'})
+              <p className="text-[10px] text-muted-foreground truncate">
+                {activeStore?.role === 'admin' 
+                  ? <span className="text-primary font-medium">Géré par : {cashierName || '...'}</span>
+                  : <span className="capitalize font-medium">Caissier</span>
+                }
               </p>
             </div>
           </div>
