@@ -1,7 +1,7 @@
 # BoutiquePro - Documentation de l'Application
 
 ## 📋 Présentation
-BoutiquePro est une application web moderne (SaaS) conçue pour la gestion commerciale et le point de vente (POS). Elle permet à de multiples commerçants de gérer leurs boutiques, leurs stocks, leurs ventes et leurs employés depuis une interface unique. L'application est installable (PWA) et fonctionne parfaitement sur ordinateur comme sur mobile.
+BoutiquePro est une application web moderne (SaaS) conçue pour la gestion commerciale et le point de vente (POS). Elle permet à de multiples commerçants de gérer leurs boutiques, leurs stocks, leurs ventes et leurs employés depuis une interface unique. L'application est installable (PWA) et est actuellement au stade de **MVP fonctionnel** (la base de données pouvant être corrompue si le réseau coupe lors d'une vente, une sécurisation est prévue en Phase 1).
 
 ## 🛠️ Stack Technique
 - **Frontend :** Next.js 14 (App Router), React, Tailwind CSS, Lucide React (Icônes)
@@ -50,22 +50,26 @@ Le système gère 2 niveaux d'accès configurés à la fois dans le frontend (UI
 - Implémenter l'impression des tickets de caisse.
 - Affiner la gestion des remises spécifiques au niveau des caissiers.
 
-## ⚠️ Points de Vigilance & Optimisations Techniques (Recommandations Architecturales)
-Pour passer d'un prototype fonctionnel à un logiciel de production à grande échelle, les points suivants devront être traités :
+## 🚀 Roadmap & Points de Vigilance (Priorisation)
 
-1. **Transaction Atomique des Ventes :** Actuellement, l'enregistrement d'une vente se fait en 3 appels (Création vente -> Ajout items -> Baisse du stock). Si le réseau coupe au milieu, la base est corrompue. Il faut tout regrouper dans une fonction Postgres (`RPC`) pour garantir l'atomicité.
-2. **Offline-First Réel :** Le cache PWA permet d'afficher l'interface sans internet, mais pour *créer* une vente hors-ligne, il faut implémenter une base de données locale (IndexedDB) avec une file d'attente de synchronisation et une gestion des conflits de stock au retour du réseau.
-3. **Sécurisation stricte de la table Profils :** Restreindre la politique RLS sur la table `profiles` pour éviter d'exposer les emails de tous les utilisateurs (ex: utiliser une fonction RPC qui répond uniquement "vrai/faux" lors de l'ajout d'un caissier).
-4. **Validation stricte du `store_id` :** Remplacer le trigger d'urgence `saas_auto_store_trigger` par une vérification stricte `WITH CHECK` dans les policies RLS. Le frontend doit impérativement fournir le bon ID.
-5. **Vérification RLS en écriture :** S'assurer que les politiques RLS interdisent fermement l'écriture (modification de stock, suppression de produits) aux caissiers au niveau de la base, pour ne pas dépendre uniquement du masquage de l'interface.
-6. **Performance des RLS :** Ajouter des index SQL sur `(user_id, store_id)` dans `store_members` et optimiser les fonctions pour éviter les ralentissements sur les grosses requêtes.
+Afin de passer de l'état de **MVP fonctionnel** à un logiciel de production robuste, la suite du développement est structurée en 3 phases prioritaires :
 
-## 🌟 Nouvelles Fonctionnalités à Développer (Roadmap)
-- Impression des tickets de caisse (Fonctionnalité POS basique).
-- Clôture de caisse (Ouverture/fermeture de session avec calcul des écarts d'espèces).
-- Paiements multiples (Espèces, Mobile Money, Carte) et paiements mixtes.
-- Ventes à crédit pour les clients réguliers (très demandé en Afrique).
-- Retours et annulations de ventes avec un journal d'audit détaillé.
-- Scan de code-barres via l'appareil photo du téléphone/tablette.
-- Facturation de l'abonnement SaaS (Stripe/Paystack) pour la monétisation.
-- Sauvegardes et export CSV/PDF des données pour les commerçants.
+### Phase 1 : Sécurité et Intégrité (Avant tout vrai client)
+- **Transaction Atomique des Ventes :** Actuellement, l'enregistrement se fait en 3 appels (Création vente -> Ajout items -> Baisse du stock). Si le réseau coupe, la base est corrompue. Il faut utiliser une fonction Postgres (`RPC`) pour garantir l'atomicité.
+- **Vérification RLS en écriture :** S'assurer que les politiques RLS interdisent fermement l'écriture (modification de stock, suppression de produits, etc.) aux caissiers. Écriture réservée à l'admin.
+- **Sécurisation stricte de la table Profils :** Restreindre la politique RLS (ex: utiliser une fonction RPC qui répond uniquement "vrai/faux" lors de l'ajout d'un caissier au lieu d'exposer les profils).
+- **Validation stricte du `store_id` :** Suppression du trigger d'urgence `saas_auto_store_trigger`, remplacé par une validation stricte `WITH CHECK` dans les policies RLS.
+- **Performance des RLS :** Ajouter un index SQL sur `(user_id, store_id)` dans `store_members` pour éviter les ralentissements.
+
+### Phase 2 : Le minimum pour vendre le produit
+- **Impression des tickets de caisse :** Fonctionnalité POS basique incontournable.
+- **Paiements multiples :** Intégration de Mobile Money (en priorité), paiements mixtes et espèces.
+- **Retours et annulations de ventes :** Avec un journal d'audit détaillé pour la traçabilité.
+- **Clôture de caisse :** Ouverture/fermeture de session avec calcul des écarts d'espèces.
+
+### Phase 3 : Différenciation et mise à l'échelle
+- **Ventes à crédit :** Pour les clients réguliers (très demandé sur le marché ouest-africain).
+- **Scan de code-barres :** Via l'appareil photo du téléphone ou de la tablette.
+- **Offline-First Réel :** Implémenter une base de données locale (IndexedDB) avec file d'attente de synchronisation. Chantier complexe, à lancer seulement s'il devient un argument de vente décisif.
+- **Facturation de l'abonnement SaaS :** Privilégier des solutions comme Paystack, Flutterwave ou une intégration directe Mobile Money (plus réalistes que Stripe pour le marché ciblé).
+- **Sauvegardes et Exports :** Export CSV/PDF des données pour les commerçants.

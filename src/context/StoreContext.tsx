@@ -480,29 +480,23 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       }
       else if (action.type === "COMPLETE_SALE") {
         const s = action.payload;
-        // Insert sale header
-        const { error: saleError } = await supabase.from('sales').insert([{ store_id: activeStore.id, 
-          id: s.id, subtotal: s.subtotal, tax: s.tax, discount: s.discount,
-          total: s.total, payment_method: s.paymentMethod, customer_name: s.customerName,
-          created_at: s.createdAt
-        }]);
-        if (saleError) console.error("Supabase Sale Error:", saleError);
-        else if (s.items && s.items.length > 0) {
-          // Insert sale items
-          const itemsToInsert = s.items.map((i: any) => ({
-            id: 'si' + Math.random().toString(36).substring(7),
-            sale_id: s.id, product_id: i.productId, product_name: i.productName,
-            quantity: i.quantity, unit_price: i.unitPrice, total: i.total
-          }));
-          await supabase.from('sale_items').insert(itemsToInsert);
-          
-          // Update product stock in DB
-          for (const item of s.items) {
-             const prod = state.products.find((p: any) => p.id === item.productId);
-             if (prod) {
-                await supabase.from('products').update({ stock: Math.max(0, prod.stock - item.quantity) }).eq('id', prod.id);
-             }
-          }
+        
+        // RPC call for atomic sale
+        const { error: saleError } = await supabase.rpc('create_sale', {
+          p_store_id: activeStore.id,
+          p_sale_id: s.id,
+          p_subtotal: s.subtotal,
+          p_tax: s.tax,
+          p_discount: s.discount,
+          p_total: s.total,
+          p_payment_method: s.paymentMethod,
+          p_customer_name: s.customerName || null,
+          p_created_at: s.createdAt,
+          p_items: s.items
+        });
+
+        if (saleError) {
+          console.error("Supabase Sale Error:", saleError);
         }
       }
       else if (action.type === "ADD_CUSTOMER") {

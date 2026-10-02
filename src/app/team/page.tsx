@@ -48,13 +48,12 @@ export default function TeamPage() {
     if (!email) return;
 
     try {
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('id')
-        .eq('email', email)
-        .single();
+      const { data: profileId, error: rpcError } = await supabase
+        .rpc('get_user_id_by_email', { p_email: email });
 
-      if (!profile) {
+      if (rpcError) throw rpcError;
+
+      if (!profileId) {
         toast.error("Aucun utilisateur trouvé avec cet email. Le caissier doit d'abord créer un compte sur l'application.");
         return;
       }
@@ -71,7 +70,7 @@ export default function TeamPage() {
         .from('store_members')
         .insert({
           store_id: storeData.store_id,
-          user_id: profile.id,
+          user_id: profileId,
           role: 'cashier'
         });
 
