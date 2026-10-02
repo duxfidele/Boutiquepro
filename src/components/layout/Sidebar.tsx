@@ -26,16 +26,16 @@ import {
 } from "lucide-react";
 
 const navItems = [
-  { href: "/", label: "Tableau de bord", icon: LayoutDashboard },
-  { href: "/products", label: "Produits & Stock", icon: Package },
-  { href: "/inventory", label: "Inventaire", icon: ClipboardList },
-  { href: "/pos", label: "Point de Vente", icon: ShoppingCart },
-  { href: "/expenses", label: "Dépenses", icon: Receipt },
-  { href: "/analytics", label: "Analytique", icon: BarChart3 },
-  { href: "/orders", label: "Commandes", icon: Truck },
-  { href: "/team", label: "Mon Équipe", icon: Users },
-  { href: "/settings", label: "Paramètres", icon: Settings },
-  { href: "/support", label: "Aide & Support", icon: HelpCircle },
+  { href: "/", label: "Tableau de bord", icon: LayoutDashboard, adminOnly: false },
+  { href: "/products", label: "Produits & Stock", icon: Package, adminOnly: false },
+  { href: "/inventory", label: "Inventaire", icon: ClipboardList, adminOnly: false },
+  { href: "/pos", label: "Point de Vente", icon: ShoppingCart, adminOnly: false },
+  { href: "/expenses", label: "Dépenses", icon: Receipt, adminOnly: true },
+  { href: "/analytics", label: "Analytique", icon: BarChart3, adminOnly: true },
+  { href: "/orders", label: "Commandes", icon: Truck, adminOnly: true },
+  { href: "/team", label: "Mon Équipe", icon: Users, adminOnly: true },
+  { href: "/settings", label: "Paramètres", icon: Settings, adminOnly: true },
+  { href: "/support", label: "Aide & Support", icon: HelpCircle, adminOnly: false },
 ];
 
 export default function Sidebar({ isOpen, onClose }: { isOpen?: boolean, onClose?: () => void }) {
@@ -109,7 +109,7 @@ export default function Sidebar({ isOpen, onClose }: { isOpen?: boolean, onClose
       {/* Navigation */}
       <nav className="flex-1 overflow-y-auto py-4 px-3 no-scrollbar">
         <div className="flex flex-col w-full space-y-1">
-          {navItems.map((item) => {
+          {navItems.filter(item => !item.adminOnly || role === 'admin').map((item) => {
             // Role based filtering
             if (role === 'cashier' && !['/', '/pos', '/products', '/customers'].includes(item.href)) {
               return null;
