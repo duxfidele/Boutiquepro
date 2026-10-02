@@ -42,7 +42,7 @@ export default function Sidebar({ isOpen, onClose }: { isOpen?: boolean, onClose
   const [collapsed, setCollapsed] = useState(false);
   const pathname = usePathname();
   const { lowStockProducts, state } = useStore();
-  const { role, signOut, stores, activeStore, setActiveStore } = useAuth();
+  const { user, role, signOut, stores, activeStore, setActiveStore } = useAuth();
 
   const handleCreateStore = async (storeName: string) => {
     try {
@@ -144,7 +144,10 @@ export default function Sidebar({ isOpen, onClose }: { isOpen?: boolean, onClose
                   <option key={s.id} value={s.id}>{s.name}</option>
                 ))}
               </select>
-              <p className="text-[10px] text-muted-foreground capitalize">{activeStore?.role === 'admin' ? 'Administrateur' : 'Caissier'}</p>
+              <p className="text-[10px] text-muted-foreground capitalize">
+                {user?.user_metadata?.full_name ? <span className="font-semibold text-foreground mr-1">{user.user_metadata.full_name}</span> : null}
+                ({activeStore?.role === 'admin' ? 'Administrateur' : 'Caissier'})
+              </p>
             </div>
           </div>
           
@@ -167,6 +170,22 @@ export default function Sidebar({ isOpen, onClose }: { isOpen?: boolean, onClose
 
       {/* Bottom actions */}
       <div className="flex flex-col border-t border-border/50 p-3 gap-2">
+        <Link
+          href="/profile"
+          className="flex w-full items-center gap-3 rounded-xl py-2 px-3 hover:bg-secondary transition-colors group"
+        >
+          <div className="h-8 w-8 rounded-full bg-primary/20 text-primary flex items-center justify-center font-bold uppercase shrink-0">
+            {user?.user_metadata?.full_name?.charAt(0) || user?.email?.charAt(0) || 'U'}
+          </div>
+          {!collapsed && (
+            <div className="flex-1 min-w-0 text-left">
+              <p className="text-sm font-medium text-foreground truncate group-hover:text-primary transition-colors">
+                {user?.user_metadata?.full_name || 'Mon Profil'}
+              </p>
+              <p className="text-[10px] text-muted-foreground truncate">{user?.email}</p>
+            </div>
+          )}
+        </Link>
         <button
           onClick={signOut}
           className="flex w-full items-center justify-center rounded-xl py-2 text-destructive hover:bg-destructive/10 transition-colors"
