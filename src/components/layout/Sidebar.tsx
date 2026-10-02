@@ -8,6 +8,7 @@ import {
   useStore } from "@/context/StoreContext";
 import {
   useAuth } from "@/context/AuthContext";
+import { supabase } from "@/lib/supabase";
 import {
   LogOut,
   LayoutDashboard, ClipboardList, Receipt,
@@ -42,6 +43,19 @@ export default function Sidebar({ isOpen, onClose }: { isOpen?: boolean, onClose
   const pathname = usePathname();
   const { lowStockProducts, state } = useStore();
   const { role, signOut, stores, activeStore, setActiveStore } = useAuth();
+
+  const handleCreateStore = async (storeName: string) => {
+    try {
+      const { data: storeId, error } = await supabase.rpc('create_new_store', { p_name: storeName });
+      if (error) throw error;
+      if (storeId) {
+         alert("Boutique créée avec succès !");
+         window.location.reload();
+      }
+    } catch (e: any) {
+      alert("Erreur lors de la création : " + e.message);
+    }
+  };
 
   return (
     <>
@@ -118,10 +132,20 @@ export default function Sidebar({ isOpen, onClose }: { isOpen?: boolean, onClose
               <select 
                 value={activeStore?.id || ''}
                 onChange={(e) => {
-                  const s = stores.find(x => x.id === e.target.value);
-                  if (s) {
-                    setActiveStore(s);
-                    window.location.reload(); // Recharger pour rafraîchir le contexte de données
+                  const val = e.target.value;
+                  if (val === 'NEW_STORE') {
+                     const name = window.prompt("Nom de la nouvelle boutique :");
+                     if (name && name.trim().length > 0) {
+                        handleCreateStore(name.trim());
+                     }
+                     // Force select to revert
+                     e.target.value = activeStore?.id || '';
+                  } else {
+                     const s = stores.find(x => x.id === val);
+                     if (s) {
+                       setActiveStore(s);
+                       window.location.reload(); // Recharger pour rafraîchir le contexte de données
+                     }
                   }
                 }}
                 className="w-full bg-transparent text-xs font-medium truncate outline-none cursor-pointer appearance-none"
@@ -129,6 +153,7 @@ export default function Sidebar({ isOpen, onClose }: { isOpen?: boolean, onClose
                 {stores.map(s => (
                   <option key={s.id} value={s.id}>{s.name}</option>
                 ))}
+                <option value="NEW_STORE" className="font-bold text-primary">+ Créer une boutique</option>
               </select>
               <p className="text-[10px] text-muted-foreground capitalize">{activeStore?.role === 'admin' ? 'Administrateur' : 'Caissier'}</p>
             </div>
