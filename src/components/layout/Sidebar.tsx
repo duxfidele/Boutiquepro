@@ -178,7 +178,12 @@ export default function Sidebar({ isOpen, onClose }: { isOpen?: boolean, onClose
             </div>
           </div>
           
-          {role === 'admin' && (
+          </div>
+      )}
+
+      {/* Bouton de création toujours visible si admin ou pas de boutique */}
+      {!collapsed && (!activeStore || role === 'admin') && (
+        <div className="px-3 pb-3">
             <button
               onClick={() => {
                 const name = window.prompt("Nom de la nouvelle boutique :");
@@ -191,7 +196,6 @@ export default function Sidebar({ isOpen, onClose }: { isOpen?: boolean, onClose
               <span className="text-lg leading-none">+</span>
               Créer une boutique
             </button>
-          )}
         </div>
       )}
 
