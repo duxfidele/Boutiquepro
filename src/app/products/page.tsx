@@ -19,6 +19,7 @@ import {
 } from "lucide-react";
 
 export default function ProductsPage() {
+  const { role } = useAuth();
   const { state, dispatch, formatPrice } = useStore();
   const [search, setSearch] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("Tous");
@@ -239,7 +240,7 @@ export default function ProductsPage() {
                 <div className="mt-3 flex items-end justify-between">
                   <div>
                     <p className="text-lg font-bold text-primary">{formatPrice(p.price)}</p>
-                    <p className="text-[10px] text-muted-foreground">Coût: {formatPrice(p.cost)}</p>
+                    {role === "admin" && <p className="text-[10px] text-muted-foreground">Coût: {formatPrice(p.cost)}</p>}
                   </div>
                   <div className="text-right">
                     <p className={`text-sm font-semibold ${p.stock <= p.minStock ? "text-destructive" : "text-foreground"}`}>
@@ -252,7 +253,7 @@ export default function ProductsPage() {
                 {/* Margin badge */}
                 <div className="mt-3 flex items-center gap-2">
                   <span className="rounded-full bg-accent/10 px-2 py-0.5 text-[10px] font-medium text-accent">
-                    Marge: {p.price > 0 ? Math.round(((p.price - p.cost) / p.price) * 100) : 0}%
+                    {role === "admin" ? `Marge: ${p.price > 0 ? Math.round(((p.price - p.cost) / p.price) * 100) : 0}%` : ""}
                   </span>
                 </div>
 
@@ -304,14 +305,14 @@ export default function ProductsPage() {
                     <span className="rounded-full bg-secondary px-2 py-0.5 text-xs">{p.category}</span>
                   </td>
                   <td className="px-4 py-3 text-right text-sm font-medium">{formatPrice(p.price)}</td>
-                  <td className="px-4 py-3 text-right text-xs text-muted-foreground">{formatPrice(p.cost)}</td>
+                  {role === "admin" && <td className="px-4 py-3 text-right text-xs text-muted-foreground">{formatPrice(p.cost)}</td>}
                   <td className="px-4 py-3 text-right">
                     <span className={`text-sm font-semibold ${p.stock <= p.minStock ? "text-destructive" : ""}`}>
                       {p.stock}
                     </span>
                   </td>
                   <td className="px-4 py-3 text-right">
-                    <span className="text-xs text-accent font-medium">{p.price > 0 ? Math.round(((p.price - p.cost) / p.price) * 100) : 0}%</span>
+                    {role === "admin" && <span className="text-xs text-accent font-medium">{p.price > 0 ? Math.round(((p.price - p.cost) / p.price) * 100) : 0}%</span>}
                   </td>
                   <td className="px-4 py-3 text-right">
                     <div className="flex items-center justify-end gap-1">
@@ -390,13 +391,15 @@ export default function ProductsPage() {
                     className="w-full rounded-xl border border-border/60 bg-secondary/30 px-3 py-2.5 text-base sm:text-sm focus:border-primary/40 focus:outline-none focus:ring-2 focus:ring-primary/20"
                   />
                 </div>
-                <div>
-                  <label className="text-xs font-medium text-muted-foreground mb-1.5 block">Coût d&apos;achat (FCFA)</label>
-                  <input
-                    type="number" value={form.cost || ""} onChange={(e) => setForm({ ...form, cost: Number(e.target.value) })}
-                    className="w-full rounded-xl border border-border/60 bg-secondary/30 px-3 py-2.5 text-base sm:text-sm focus:border-primary/40 focus:outline-none focus:ring-2 focus:ring-primary/20"
-                  />
-                </div>
+                {role === 'admin' && (
+                  <div>
+                    <label className="text-xs font-medium text-muted-foreground mb-1.5 block">Coût d&apos;achat (FCFA)</label>
+                    <input
+                      type="number" value={form.cost || ""} onChange={(e) => setForm({ ...form, cost: Number(e.target.value) })}
+                      className="w-full rounded-xl border border-border/60 bg-secondary/30 px-3 py-2.5 text-base sm:text-sm focus:border-primary/40 focus:outline-none focus:ring-2 focus:ring-primary/20"
+                    />
+                  </div>
+                )}
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -423,7 +426,7 @@ export default function ProductsPage() {
                   <div>
                     <p className="text-sm font-medium">{form.name}</p>
                     <p className="text-xs text-muted-foreground">{form.sku} • {formatPrice(form.price)}</p>
-                    {form.price > 0 && form.cost > 0 && (
+                    {role === 'admin' && form.price > 0 && form.cost > 0 && (
                       <p className="text-[10px] text-accent">Marge: {Math.round(((form.price - form.cost) / form.price) * 100)}%</p>
                     )}
                   </div>
