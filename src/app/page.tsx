@@ -158,6 +158,39 @@ export default function Dashboard() {
   const categoryEntries = Object.entries(categorySales).sort((a, b) => b[1] - a[1]);
   const maxCategory = categoryEntries.length > 0 ? categoryEntries[0][1] : 1;
 
+  if (!activeStore) {
+    return (
+      <div className="flex flex-col items-center justify-center h-[70vh] text-center px-4">
+        <div className="bg-card border border-border/50 rounded-3xl p-8 max-w-md w-full shadow-sm">
+          <div className="h-16 w-16 bg-primary/10 text-primary rounded-2xl flex items-center justify-center mx-auto mb-6">
+            <ShoppingBag className="h-8 w-8" />
+          </div>
+          <h2 className="text-2xl font-bold mb-2">Bienvenue sur BoutiquePro</h2>
+          
+          <div className="space-y-4">
+            <p className="text-muted-foreground text-sm">
+              Votre espace de travail est prêt, mais vous n'avez sélectionné aucune boutique.
+            </p>
+            
+            <div className="p-4 bg-orange-500/10 border border-orange-500/20 rounded-xl">
+              <p className="text-sm font-medium text-orange-600">
+                👤 Si vous êtes <strong>Caissier</strong> :
+                <br />Vous êtes en attente d'affectation par votre responsable.
+              </p>
+            </div>
+
+            <div className="p-4 bg-primary/10 border border-primary/20 rounded-xl">
+              <p className="text-sm font-medium text-primary">
+                👑 Si vous êtes le <strong>Propriétaire</strong> :
+                <br />Cliquez sur <strong>+ Créer une boutique</strong> dans le menu pour commencer !
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   const categoryColors = ["bg-primary", "bg-accent", "bg-chart-3", "bg-chart-4", "bg-chart-5"];
 
   return (
