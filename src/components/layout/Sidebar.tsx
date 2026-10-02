@@ -125,27 +125,17 @@ export default function Sidebar({ isOpen, onClose }: { isOpen?: boolean, onClose
 
       {/* Store selector */}
       {!collapsed && stores?.length > 0 && (
-        <div className="block border-t border-border/50 p-3 animate-fade-in">
+        <div className="block border-t border-border/50 p-3 animate-fade-in space-y-2">
           <div className="flex items-center gap-3 rounded-xl bg-secondary/50 px-3 py-2.5">
             <Store className="h-4 w-4 text-muted-foreground shrink-0" />
             <div className="flex-1 min-w-0">
               <select 
                 value={activeStore?.id || ''}
                 onChange={(e) => {
-                  const val = e.target.value;
-                  if (val === 'NEW_STORE') {
-                     const name = window.prompt("Nom de la nouvelle boutique :");
-                     if (name && name.trim().length > 0) {
-                        handleCreateStore(name.trim());
-                     }
-                     // Force select to revert
-                     e.target.value = activeStore?.id || '';
-                  } else {
-                     const s = stores.find(x => x.id === val);
-                     if (s) {
-                       setActiveStore(s);
-                       window.location.reload(); // Recharger pour rafraîchir le contexte de données
-                     }
+                  const s = stores.find(x => x.id === e.target.value);
+                  if (s) {
+                    setActiveStore(s);
+                    window.location.reload(); // Recharger pour rafraîchir le contexte de données
                   }
                 }}
                 className="w-full bg-transparent text-xs font-medium truncate outline-none cursor-pointer appearance-none"
@@ -153,11 +143,25 @@ export default function Sidebar({ isOpen, onClose }: { isOpen?: boolean, onClose
                 {stores.map(s => (
                   <option key={s.id} value={s.id}>{s.name}</option>
                 ))}
-                <option value="NEW_STORE" className="font-bold text-primary">+ Créer une boutique</option>
               </select>
               <p className="text-[10px] text-muted-foreground capitalize">{activeStore?.role === 'admin' ? 'Administrateur' : 'Caissier'}</p>
             </div>
           </div>
+          
+          {role === 'admin' && (
+            <button
+              onClick={() => {
+                const name = window.prompt("Nom de la nouvelle boutique :");
+                if (name && name.trim().length > 0) {
+                  handleCreateStore(name.trim());
+                }
+              }}
+              className="flex w-full items-center justify-center gap-2 rounded-xl py-2 bg-primary/10 text-primary hover:bg-primary/20 transition-colors text-sm font-semibold"
+            >
+              <span className="text-lg leading-none">+</span>
+              Créer une boutique
+            </button>
+          )}
         </div>
       )}
 
