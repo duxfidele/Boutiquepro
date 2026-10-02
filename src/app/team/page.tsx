@@ -7,20 +7,14 @@ import { UserPlus, Shield, User, Trash2 } from 'lucide-react';
 const toast = { success: (msg: string) => alert(msg), error: (msg: string) => alert(msg) };
 
 export default function TeamPage() {
-  const { user } = useAuth();
+  const { user, activeStore } = useAuth();
   const [members, setMembers] = useState<any[]>([]);
   const [email, setEmail] = useState('');
   const [loading, setLoading] = useState(true);
 
   const fetchMembers = async () => {
     try {
-      const { data: storeData } = await supabase
-        .from('store_members')
-        .select('store_id')
-        .eq('user_id', user?.id)
-        .single();
-      
-      if (!storeData) return;
+      if (!activeStore) return;
 
       const { data: membersData, error } = await supabase
         .from('store_members')
@@ -28,7 +22,7 @@ export default function TeamPage() {
           id, role,
           profiles:user_id(id, email)
         `)
-        .eq('store_id', storeData.store_id);
+        .eq('store_id', activeStore.id);
 
       if (error) throw error;
       setMembers(membersData || []);
@@ -40,8 +34,8 @@ export default function TeamPage() {
   };
 
   useEffect(() => {
-    if (user) fetchMembers();
-  }, [user]);
+    if (user && activeStore) fetchMembers();
+  }, [user, activeStore]);
 
   const handleAddCashier = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -58,18 +52,12 @@ export default function TeamPage() {
         return;
       }
 
-      const { data: storeData } = await supabase
-        .from('store_members')
-        .select('store_id')
-        .eq('user_id', user?.id)
-        .single();
-
-      if (!storeData) return;
+      if (!activeStore) return;
 
       const { error } = await supabase
         .from('store_members')
         .insert({
-          store_id: storeData.store_id,
+          store_id: activeStore.id,
           user_id: profileId,
           role: 'cashier'
         });
@@ -83,9 +71,9 @@ export default function TeamPage() {
       toast.success("Caissier ajouté avec succès !");
       setEmail('');
       fetchMembers();
-    } catch (error) {
+    } catch (error: any) {
       console.error(error);
-      toast.error("Erreur lors de l'ajout du caissier.");
+      toast.error("Erreur lors de l'ajout du caissier : " + (error.message || JSON.stringify(error)));
     }
   };
 
