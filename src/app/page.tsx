@@ -33,7 +33,7 @@ const paymentLabels: Record<string, string> = {
 };
 
 export default function Dashboard() {
-  const { role } = useAuth();
+  const { role, activeStore, stores } = useAuth();
   const {
     state,
     formatPrice,
