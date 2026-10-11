@@ -54,9 +54,12 @@ Les données sont strictement cloisonnées grâce aux **Row Level Security (RLS)
   - **Révocation :** Retrait d'un caissier d'une boutique en 1 clic.
 
 ### 2. Caissier (`cashier`)
-- **Isolation stricte de l'interface :**
-  - Le tableau de bord administrateur (`/`), l'analytique (`/analytics`), les dépenses (`/expenses`), les commandes (`/orders`), l'équipe (`/team`) et les paramètres (`/settings`) lui sont **totalement inaccessibles**.
-  - Si un caissier tente d'aller sur `/`, il est automatiquement redirigé vers sa caisse (`/pos`).
+- **Tableau de bord personnalisé (`/`) :**
+  - Le caissier a accès à son propre tableau de bord pour évaluer ses performances de la journée.
+  - Il y consulte **exclusivement ses propres ventes** : CA personnel du jour, nombre de tickets encaissés, panier moyen et ses transactions récentes.
+  - **Protection des données sensibles du patron :** Le bénéfice net, les prix d'achat, les marges, les dépenses du gérant et les ventes des autres collègues sont **totalement masqués**.
+- **Isolation stricte de l'interface d'administration :**
+  - L'analytique globale (`/analytics`), les dépenses (`/expenses`), les commandes fournisseurs (`/orders`), l'équipe (`/team`) et les paramètres (`/settings`) lui sont **totalement inaccessibles**.
   - Il ne peut **pas changer de boutique** ni créer de boutique : son interface est verrouillée sur la boutique qui lui a été affectée.
 - **Catalogue Produits (`/products`) sécurisé :**
   - Consultation du stock et des prix de vente uniquement.
@@ -64,8 +67,7 @@ Les données sont strictement cloisonnées grâce aux **Row Level Security (RLS)
   - Les boutons de création, modification et suppression de produits sont désactivés pour son profil.
 - **Point de Vente (POS) :**
   - Enregistrement des ventes, choix du mode de paiement (Espèces, Mobile Money, Carte).
-  - Application de remises en pourcentage (%) ou en montant fixe (FCFA).
-  - Impression immédiate du ticket de caisse.
+  - Gestion de session de caisse : fond initial, point d'étape (Rapport X), clôture journalière et Rapport Z.
 
 ---
 
