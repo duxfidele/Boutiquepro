@@ -162,6 +162,7 @@ export default function POSPage() {
   const [payMethod, setPayMethod] = useState<"cash" | "mobile_money" | "card" | "credit">("cash");
   const [customerPhone, setCustomerPhone] = useState("");
   const [downPayment, setDownPayment] = useState<number | "">("");
+  const [dueDate, setDueDate] = useState<string>("");
   const [customerName, setCustomerName] = useState("");
   const [showReceipt, setShowReceipt] = useState(false);
   const [showInvoice, setShowInvoice] = useState(false);
@@ -214,9 +215,21 @@ export default function POSPage() {
     const deposit = isCredit ? (downPayment !== "" ? Number(downPayment) : 0) : total;
     const remaining = isCredit ? Math.max(0, total - deposit) : 0;
     const status = isCredit ? (remaining === 0 ? "paid" : (deposit > 0 ? "partial" : "unpaid")) : "paid";
+    const now = new Date().toISOString();
+    const saleId = "s" + Date.now();
+
+    const initialPayments: DebtPayment[] = (isCredit && deposit > 0) ? [{
+      id: "rec-" + Date.now(),
+      saleId,
+      amount: deposit,
+      paymentMethod: "cash",
+      paidAt: now,
+      note: "Acompte initial à la caisse",
+      cashierName: user?.email?.split("@")[0] || "Caissier",
+    }] : [];
 
     const sale: Sale = {
-      id: "s" + Date.now(),
+      id: saleId,
       items: cart.map((c) => ({
         productId: c.product.id,
         productName: c.product.name,
@@ -231,12 +244,14 @@ export default function POSPage() {
       paymentMethod: payMethod,
       amountGiven: finalAmountGiven,
       change: change,
-      customerName: customerName.trim() || undefined,
+      customerName: customerName.trim() || (isCredit ? "Client Crédit" : undefined),
       customerPhone: customerPhone.trim() || undefined,
+      dueDate: isCredit && dueDate ? dueDate : undefined,
       amountPaid: deposit,
       remainingAmount: remaining,
       paymentStatus: status,
-      createdAt: new Date().toISOString(),
+      payments: initialPayments,
+      createdAt: now,
       userId: user?.id,
     };
 
@@ -248,6 +263,7 @@ export default function POSPage() {
     setCustomerName("");
     setCustomerPhone("");
     setDownPayment("");
+    setDueDate("");
     setShowSuccess(true);
   };
 
@@ -816,7 +832,7 @@ export default function POSPage() {
                     </span>
                   </div>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-1.5">
                     <div className="relative">
                       <Phone className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3 w-3 text-muted-foreground" />
                       <input
@@ -830,13 +846,22 @@ export default function POSPage() {
                     <div>
                       <input
                         type="number"
-                        placeholder="Acompte versé aujourd'hui..."
+                        placeholder="Acompte versé (FCFA)..."
                         value={downPayment}
                         onChange={(e) => {
                           const v = e.target.value;
                           setDownPayment(v === "" ? "" : Math.min(total, Math.max(0, Number(v))));
                         }}
                         className="w-full rounded-lg border border-border/50 bg-background px-2.5 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-purple-500/30 font-semibold"
+                      />
+                    </div>
+                    <div>
+                      <input
+                        type="date"
+                        title="Échéance remboursement (optionnel)"
+                        value={dueDate}
+                        onChange={(e) => setDueDate(e.target.value)}
+                        className="w-full rounded-lg border border-border/50 bg-background px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-purple-500/30 font-medium text-muted-foreground"
                       />
                     </div>
                   </div>

@@ -857,6 +857,17 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
           // Succès ou vente déjà présente (idempotent code 23505)
           if (!saleError || saleError.code === "23505") {
+            if (s.paymentMethod === "credit") {
+              try {
+                await supabase.from("sales").update({
+                  customer_phone: s.customerPhone || null,
+                  amount_paid: s.amountPaid ?? 0,
+                  remaining_amount: s.remainingAmount ?? s.total,
+                  payment_status: s.paymentStatus || 'unpaid',
+                  due_date: s.dueDate || null,
+                }).eq("id", s.id).eq("store_id", activeStore.id);
+              } catch (e) {}
+            }
             await removeOfflineSale(s.id);
             success++;
           } else {
@@ -1106,24 +1117,58 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         }
 
         if (sales) {
-          payload.sales = sales.map((s: any) => ({
-            ...s,
-            paymentMethod: s.payment_method || "cash",
-            customerName: s.customer_name,
-            customerPhone: s.customer_phone,
-            amountPaid: Number(s.amount_paid) || (s.payment_method === 'credit' ? 0 : s.total),
-            remainingAmount: Number(s.remaining_amount) ?? (s.payment_method === 'credit' ? s.total : 0),
-            paymentStatus: s.payment_status || (s.payment_method === 'credit' ? 'unpaid' : 'paid'),
-            dueDate: s.due_date,
-            createdAt: s.created_at,
-            payments: localStoredPayments.filter((p) => p.saleId === s.id),
-            items: s.items ? s.items.map((i: any) => ({
-              ...i,
-              productId: i.product_id,
-              productName: i.product_name,
-              unitPrice: i.unit_price
-            })) : []
-          }));
+          payload.sales = sales.map((s: any) => {
+            const isCreditSale = s.payment_method === 'credit';
+            const total = Number(s.total) || 0;
+            const salePayments = localStoredPayments.filter((p) => p.saleId === s.id);
+            const paymentsSum = salePayments.reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
+
+            const rawPaid = s.amount_paid !== null && s.amount_paid !== undefined ? Number(s.amount_paid) : null;
+            const rawRemaining = s.remaining_amount !== null && s.remaining_amount !== undefined ? Number(s.remaining_amount) : null;
+
+            let amountPaid = rawPaid !== null ? rawPaid : (isCreditSale ? paymentsSum : total);
+            if (isCreditSale && paymentsSum > amountPaid) {
+              amountPaid = paymentsSum;
+            }
+
+            let remainingAmount = rawRemaining !== null ? rawRemaining : (isCreditSale ? Math.max(0, total - amountPaid) : 0);
+            if (isCreditSale && rawRemaining === null) {
+              remainingAmount = Math.max(0, total - amountPaid);
+            }
+
+            const paymentStatus = s.payment_status || (isCreditSale ? (remainingAmount === 0 ? 'paid' : amountPaid > 0 ? 'partial' : 'unpaid') : 'paid');
+
+            const resolvedPayments = salePayments.length > 0 ? salePayments : (
+              (isCreditSale && amountPaid > 0) ? [{
+                id: `init-${s.id}`,
+                saleId: s.id,
+                amount: amountPaid,
+                paymentMethod: "cash" as const,
+                paidAt: s.created_at,
+                note: "Acompte initial à la caisse",
+                cashierName: "Caissier"
+              }] : []
+            );
+
+            return {
+              ...s,
+              paymentMethod: s.payment_method || "cash",
+              customerName: s.customer_name,
+              customerPhone: s.customer_phone,
+              amountPaid,
+              remainingAmount,
+              paymentStatus,
+              dueDate: s.due_date,
+              createdAt: s.created_at,
+              payments: resolvedPayments,
+              items: s.items ? s.items.map((i: any) => ({
+                ...i,
+                productId: i.product_id,
+                productName: i.product_name,
+                unitPrice: i.unit_price
+              })) : []
+            };
+          });
         }
         if (customers) {
           payload.customers = customers.map((c: any) => ({
@@ -1285,6 +1330,20 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       else if (action.type === "COMPLETE_SALE") {
         const s = action.payload;
 
+        // Sauvegarder l'acompte initial de la vente à crédit dans le registre local des remboursements
+        if (s.paymentMethod === "credit" && s.payments && s.payments.length > 0 && typeof window !== "undefined" && activeStore?.id) {
+          try {
+            const storeKey = `boutiquepro_debt_payments_${activeStore.id}`;
+            const existingStored: DebtPayment[] = JSON.parse(localStorage.getItem(storeKey) || "[]");
+            const newPayments = s.payments.filter((p) => !existingStored.some((e) => e.id === p.id));
+            if (newPayments.length > 0) {
+              localStorage.setItem(storeKey, JSON.stringify([...newPayments, ...existingStored]));
+            }
+          } catch (e) {
+            console.warn("Erreur stockage acompte initial:", e);
+          }
+        }
+
         // 1. Si le navigateur est hors-ligne, basculer directement dans la file d'attente locale
         if (typeof window !== "undefined" && !navigator.onLine) {
           await saveOfflineSale(activeStore.id, s);
@@ -1310,6 +1369,23 @@ export function StoreProvider({ children }: { children: ReactNode }) {
               console.warn("Erreur serveur Supabase, basculement en sauvegarde hors-ligne sécurisée:", saleError);
               await saveOfflineSale(activeStore.id, s);
               setPendingSyncCount((prev) => prev + 1);
+            } else {
+              // Si la vente est à crédit ou comporte des métadonnées (acompte, reste dû, téléphone, échéance), mettre à jour la table sales
+              try {
+                await supabase
+                  .from("sales")
+                  .update({
+                    customer_phone: s.customerPhone || null,
+                    amount_paid: s.amountPaid ?? (s.paymentMethod === 'credit' ? 0 : s.total),
+                    remaining_amount: s.remainingAmount ?? (s.paymentMethod === 'credit' ? s.total : 0),
+                    payment_status: s.paymentStatus || (s.paymentMethod === 'credit' ? 'unpaid' : 'paid'),
+                    due_date: s.dueDate || null,
+                  })
+                  .eq("id", s.id)
+                  .eq("store_id", activeStore.id);
+              } catch (upErr) {
+                console.warn("Erreur mise à jour métadonnées crédit vente:", upErr);
+              }
             }
           } catch (netErr) {
             console.warn("Réseau indisponible, basculement en file d'attente hors-ligne:", netErr);
@@ -1324,11 +1400,16 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             const isCash = s.paymentMethod === "cash";
             const isMM = s.paymentMethod === "mobile_money";
             const isCard = s.paymentMethod === "card";
-            const newCash = state.activeCashSession.totalCashSales + (isCash ? s.total : 0);
+            const isCredit = s.paymentMethod === "credit";
+            const downPayment = isCredit ? (s.amountPaid || 0) : 0;
+            const cashEntry = isCredit ? downPayment : (isCash ? s.total : 0);
+            const effectiveAmount = isCredit ? downPayment : s.total;
+
+            const newCash = state.activeCashSession.totalCashSales + cashEntry;
             const newMM = state.activeCashSession.totalMobileMoneySales + (isMM ? s.total : 0);
             const newCard = state.activeCashSession.totalCardSales + (isCard ? s.total : 0);
             const newCount = state.activeCashSession.totalSalesCount + 1;
-            const newTotal = state.activeCashSession.totalSalesAmount + s.total;
+            const newTotal = state.activeCashSession.totalSalesAmount + effectiveAmount;
             const newExpected = state.activeCashSession.openingAmount + newCash;
 
             await supabase.from("cash_sessions").update({

@@ -1,6 +1,7 @@
 "use client";
 
-import React, { useState, useMemo, useRef } from "react";
+import React, { useState, useMemo } from "react";
+import Link from "next/link";
 import { useStore, Sale, DebtPayment } from "@/context/StoreContext";
 import { 
   BookOpen, 
@@ -15,33 +16,28 @@ import {
   CreditCard, 
   Wallet, 
   Calendar, 
-  Plus,
-  ArrowRight,
-  TrendingDown,
-  UserCheck,
-  Check,
-  X,
-  FileText,
-  Printer,
-  History,
-  Receipt,
-  UserPlus,
-  Send,
-  AlertTriangle
+  ArrowRight, 
+  TrendingDown, 
+  UserCheck, 
+  Check, 
+  X, 
+  Printer, 
+  History, 
+  Receipt, 
+  ShoppingCart,
+  ArrowUpRight
 } from "lucide-react";
 
 export default function DebtsPage() {
   const { 
     state, 
     recordDebtPayment, 
-    createDirectDebt, 
     activeStore, 
     activeCashSession,
     formatPrice 
   } = useStore();
 
   const sales = useMemo(() => state?.sales || [], [state?.sales]);
-  const customers = useMemo(() => state?.customers || [], [state?.customers]);
 
   // Tab navigation: "debts" (créances) | "recovery" (journal des recouvrements)
   const [activeTab, setActiveTab] = useState<"debts" | "recovery">("debts");
@@ -51,7 +47,6 @@ export default function DebtsPage() {
   const [statusFilter, setStatusFilter] = useState<"all" | "unpaid" | "partial" | "paid" | "overdue">("all");
 
   // Modals
-  const [showNewDebtModal, setShowNewDebtModal] = useState(false);
   const [selectedDebt, setSelectedDebt] = useState<Sale | null>(null);
   const [selectedReceipt, setSelectedReceipt] = useState<{
     debt: Sale;
@@ -60,17 +55,6 @@ export default function DebtsPage() {
     newRemaining: number;
   } | null>(null);
 
-  // New Debt Form State
-  const [newCustName, setNewCustName] = useState("");
-  const [newCustPhone, setNewCustPhone] = useState("");
-  const [newDescription, setNewDescription] = useState("");
-  const [newTotalAmount, setNewTotalAmount] = useState("");
-  const [newInitialDeposit, setNewInitialDeposit] = useState("");
-  const [newDepositMethod, setNewDepositMethod] = useState<"cash" | "mobile_money" | "card">("cash");
-  const [newDueDate, setNewDueDate] = useState("");
-  const [newNotes, setNewNotes] = useState("");
-  const [isCreatingDebt, setIsCreatingDebt] = useState(false);
-
   // Payment Form State in Modal
   const [paymentAmount, setPaymentAmount] = useState<string>("");
   const [paymentMethod, setPaymentMethod] = useState<"cash" | "mobile_money" | "card">("cash");
@@ -78,7 +62,7 @@ export default function DebtsPage() {
   const [isSubmittingPayment, setIsSubmittingPayment] = useState(false);
   const [paymentSuccess, setPaymentSuccess] = useState<string | null>(null);
 
-  // All sales that are credit or have debt tracking
+  // All sales that are credit or have debt tracking (issues du panier POS)
   const debtSales = useMemo(() => {
     return sales.filter(
       (s) => s.paymentMethod === "credit" || (s.remainingAmount !== undefined && s.remainingAmount > 0)
@@ -95,7 +79,6 @@ export default function DebtsPage() {
         });
       }
     });
-    // Sort descending by paidAt
     return list.sort((a, b) => new Date(b.payment.paidAt).getTime() - new Date(a.payment.paidAt).getTime());
   }, [debtSales]);
 
@@ -160,13 +143,11 @@ export default function DebtsPage() {
       const remaining = s.remainingAmount ?? (s.paymentStatus === "paid" ? 0 : s.total);
       const isOverdue = remaining > 0 && s.dueDate && new Date(s.dueDate) < now;
       
-      // Status filter
       if (statusFilter === "unpaid" && (remaining <= 0 || (s.amountPaid && s.amountPaid > 0))) return false;
       if (statusFilter === "partial" && (remaining <= 0 || !s.amountPaid || s.amountPaid === 0)) return false;
       if (statusFilter === "paid" && remaining > 0) return false;
       if (statusFilter === "overdue" && !isOverdue) return false;
 
-      // Search filter
       if (search.trim()) {
         const query = search.toLowerCase();
         const nameMatch = s.customerName?.toLowerCase().includes(query);
@@ -215,7 +196,6 @@ export default function DebtsPage() {
       setPaymentSuccess(`Encaissement de ${effectiveAmount.toLocaleString("fr-FR")} FCFA enregistré avec succès !`);
 
       if (paymentRecord) {
-        // Open receipt modal automatically
         setTimeout(() => {
           setSelectedReceipt({
             debt: {
@@ -245,79 +225,11 @@ export default function DebtsPage() {
     }
   };
 
-  // Submit direct new debt
-  const handleCreateDirectDebt = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const tot = parseFloat(newTotalAmount);
-    if (!newCustName.trim() || isNaN(tot) || tot <= 0) {
-      alert("Veuillez saisir un nom de client et un montant valide.");
-      return;
-    }
-
-    const dep = newInitialDeposit ? parseFloat(newInitialDeposit) : 0;
-    if (dep > tot) {
-      alert("L'acompte initial ne peut pas dépasser le montant total de la créance.");
-      return;
-    }
-
-    setIsCreatingDebt(true);
-    try {
-      const created = await createDirectDebt({
-        customerName: newCustName.trim(),
-        customerPhone: newCustPhone.trim() || undefined,
-        description: newDescription.trim() || "Créance client",
-        totalAmount: tot,
-        initialDeposit: dep,
-        depositPaymentMethod: newDepositMethod,
-        dueDate: newDueDate || undefined,
-        notes: newNotes.trim() || undefined
-      });
-
-      setShowNewDebtModal(false);
-      // Reset form
-      setNewCustName("");
-      setNewCustPhone("");
-      setNewDescription("");
-      setNewTotalAmount("");
-      setNewInitialDeposit("");
-      setNewDueDate("");
-      setNewNotes("");
-
-      // If initial deposit made, offer to show receipt
-      if (dep > 0 && created.payments && created.payments.length > 0) {
-        setSelectedReceipt({
-          debt: created,
-          payment: created.payments[0],
-          previousPaid: 0,
-          newRemaining: tot - dep
-        });
-      }
-    } catch (err) {
-      console.error(err);
-      alert("Erreur lors de la création de la créance.");
-    } finally {
-      setIsCreatingDebt(false);
-    }
-  };
-
-  // Quick helper to set due date
-  const setQuickDueDate = (days: number) => {
-    const d = new Date();
-    d.setDate(d.getDate() + days);
-    setNewDueDate(d.toISOString().split("T")[0]);
-  };
-
-  const setEndOfMonthDueDate = () => {
-    const d = new Date();
-    const lastDay = new Date(d.getFullYear(), d.getMonth() + 1, 0);
-    setNewDueDate(lastDay.toISOString().split("T")[0]);
-  };
-
   // WhatsApp link generator for reminders
   const generateWhatsAppReminder = (debt: Sale) => {
     if (!debt.customerPhone) return null;
     let cleanPhone = debt.customerPhone.replace(/\D/g, "");
-    if (cleanPhone.length === 8) cleanPhone = "229" + cleanPhone; // Fallback
+    if (cleanPhone.length === 8) cleanPhone = "229" + cleanPhone;
     
     const remaining = debt.remainingAmount ?? debt.total;
     const storeName = activeStore?.name || "Notre Boutique";
@@ -338,17 +250,10 @@ export default function DebtsPage() {
     const storeName = activeStore?.name || "Notre Boutique";
     const statusTxt = rem === 0 ? "Votre dette est désormais TOTALEMENT SOLDÉE. Félicitations !" : `Il vous reste un solde de ${rem.toLocaleString("fr-FR")} FCFA.`;
     const msg = encodeURIComponent(
-      `Bonjour ${debt.customerName || "cher client"},
-
-` +
-      `Nous confirmons la bonne réception de votre versement de ${payment.amount.toLocaleString("fr-FR")} FCFA effectué le ${new Date(payment.paidAt).toLocaleDateString("fr-FR")} auprès de ${storeName}.
-
-` +
-      `Quittance N° #${payment.id.slice(-6)}
-` +
-      `${statusTxt}
-
-` +
+      `Bonjour ${debt.customerName || "cher client"},\n\n` +
+      `Nous confirmons la bonne réception de votre versement de ${payment.amount.toLocaleString("fr-FR")} FCFA effectué le ${new Date(payment.paidAt).toLocaleDateString("fr-FR")} auprès de ${storeName}.\n\n` +
+      `Quittance N° #${payment.id.slice(-6)}\n` +
+      `${statusTxt}\n\n` +
       `Merci pour votre fidélité et bonne journée !`
     );
     return `https://wa.me/${cleanPhone}?text=${msg}`;
@@ -373,19 +278,19 @@ export default function DebtsPage() {
               Carnet de Dettes & Recouvrement
             </h1>
             <p className="text-sm text-muted-foreground">
-              Enregistrez vos créances clients, encaissez les versements et imprimez vos quittances.
+              Suivi des crédits clients issus de la caisse, encaissement des acomptes et quittances officielles.
             </p>
           </div>
         </div>
 
-        {/* Action Button: Saisir une créance */}
-        <button
-          onClick={() => setShowNewDebtModal(true)}
-          className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-primary to-indigo-600 text-white font-semibold text-sm hover:opacity-95 transition-all shadow-md flex items-center justify-center gap-2"
+        {/* Action Button: Lien direct vers la Caisse POS */}
+        <Link
+          href="/pos"
+          className="px-4 py-2.5 rounded-xl bg-primary text-primary-foreground font-semibold text-sm hover:opacity-95 transition-all shadow-md flex items-center justify-center gap-2"
         >
-          <Plus className="w-4 h-4 stroke-[2.5]" />
-          <span>Saisir une créance</span>
-        </button>
+          <ShoppingCart className="w-4 h-4" />
+          <span>Nouvelle vente en caisse</span>
+        </Link>
       </div>
 
       {/* Main Tab Navigation */}
@@ -422,7 +327,7 @@ export default function DebtsPage() {
       </div>
 
       {/* ============================================================== */}
-      {/* TAB 1: CREANCES CLIENTS */}
+      {/* TAB 1: CRÉANCES CLIENTS */}
       {/* ============================================================== */}
       {activeTab === "debts" && (
         <div className="space-y-6">
@@ -497,7 +402,7 @@ export default function DebtsPage() {
               <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
               <input
                 type="text"
-                placeholder="Rechercher client, téléphone, motif..."
+                placeholder="Rechercher client, téléphone, article..."
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 className="w-full pl-10 pr-4 py-2 bg-secondary/50 border border-border/50 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
@@ -567,7 +472,7 @@ export default function DebtsPage() {
                   <tr className="border-b border-border/50 bg-secondary/30 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
                     <th className="py-3.5 px-4">Client</th>
                     <th className="py-3.5 px-4">Date & Échéance</th>
-                    <th className="py-3.5 px-4">Motif / Articles</th>
+                    <th className="py-3.5 px-4">Articles du Panier</th>
                     <th className="py-3.5 px-4 text-right">Montant Total</th>
                     <th className="py-3.5 px-4 text-right">Déjà Payé</th>
                     <th className="py-3.5 px-4 text-right">Reste Dû</th>
@@ -580,20 +485,19 @@ export default function DebtsPage() {
                     <tr>
                       <td colSpan={8} className="py-14 text-center text-muted-foreground">
                         <BookOpen className="w-12 h-12 mx-auto text-muted-foreground/30 mb-3" />
-                        <p className="font-semibold text-base text-foreground">Aucune créance trouvée</p>
+                        <p className="font-semibold text-base text-foreground">Aucune créance enregistrée</p>
                         <p className="text-xs text-muted-foreground mt-1 max-w-md mx-auto">
                           {search 
                             ? "Aucun résultat pour cette recherche." 
-                            : "Vous n'avez pas de créance enregistrée pour ce filtre. Cliquez sur le bouton '+ Saisir une créance' ci-dessus pour en ajouter une !"}
+                            : "Les ventes passées en caisse avec le mode 'Crédit Client' ou avec un acompte partiel apparaîtront automatiquement ici."}
                         </p>
-                        {!search && (
-                          <button
-                            onClick={() => setShowNewDebtModal(true)}
-                            className="mt-4 px-4 py-2 rounded-xl bg-primary text-primary-foreground text-xs font-bold shadow hover:bg-primary/90"
-                          >
-                            + Saisir une créance maintenant
-                          </button>
-                        )}
+                        <Link
+                          href="/pos"
+                          className="mt-4 inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-primary text-primary-foreground text-xs font-bold shadow hover:bg-primary/90"
+                        >
+                          <ShoppingCart className="w-3.5 h-3.5" />
+                          Effectuer une vente à crédit en caisse
+                        </Link>
                       </td>
                     </tr>
                   ) : (
@@ -604,7 +508,7 @@ export default function DebtsPage() {
                       const isPartial = paid > 0 && remaining > 0;
                       const isOverdue = remaining > 0 && debt.dueDate && new Date(debt.dueDate) < new Date();
                       const waLink = generateWhatsAppReminder(debt);
-                      const itemsDesc = (debt.items || []).map((i) => `${i.quantity}x ${i.productName}`).join(", ") || debt.notes || "Créance client";
+                      const itemsDesc = (debt.items || []).map((i) => `${i.quantity}x ${i.productName}`).join(", ") || debt.notes || "Achat à crédit";
 
                       return (
                         <tr key={debt.id} className="hover:bg-secondary/20 transition-colors">
@@ -827,7 +731,7 @@ export default function DebtsPage() {
                         <Receipt className="w-12 h-12 mx-auto text-muted-foreground/30 mb-3" />
                         <p className="font-semibold text-base text-foreground">Aucun versement de recouvrement enregistré</p>
                         <p className="text-xs text-muted-foreground mt-1">
-                          Les versements encaissés lors du recouvrement de vos créances apparaîtront automatiquement ici.
+                          Les versements d'acomptes et de remboursement de vos clients apparaîtront automatiquement ici.
                         </p>
                       </td>
                     </tr>
@@ -929,270 +833,7 @@ export default function DebtsPage() {
       )}
 
       {/* ============================================================== */}
-      {/* MODAL 1: NOUVELLE CRÉANCE DIRECTE */}
-      {/* ============================================================== */}
-      {showNewDebtModal && (
-        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="glass-card max-w-lg w-full rounded-2xl border border-border/80 shadow-2xl p-6 animate-in fade-in zoom-in-95 duration-150 max-h-[92vh] overflow-y-auto">
-            <div className="flex items-center justify-between pb-4 border-b border-border/50">
-              <div className="flex items-center gap-2.5">
-                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-primary/20 to-indigo-500/10 text-primary flex items-center justify-center">
-                  <UserPlus className="w-5 h-5" />
-                </div>
-                <div>
-                  <h3 className="font-bold text-foreground text-lg">Saisir une Nouvelle Créance</h3>
-                  <p className="text-xs text-muted-foreground">Enregistrez un achat à crédit ou une dette client</p>
-                </div>
-              </div>
-              <button
-                onClick={() => setShowNewDebtModal(false)}
-                className="p-1.5 rounded-lg text-muted-foreground hover:bg-secondary"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <form onSubmit={handleCreateDirectDebt} className="mt-4 space-y-4">
-              {/* Customer selection / Autocomplete */}
-              <div>
-                <label className="block text-xs font-semibold text-foreground mb-1.5">
-                  Nom du Client <span className="text-rose-500">*</span>
-                </label>
-                <input
-                  type="text"
-                  required
-                  placeholder="Ex: M. Amadou Diallo, Mme Sophie..."
-                  value={newCustName}
-                  onChange={(e) => setNewCustName(e.target.value)}
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-secondary/50 border border-border/70 text-sm focus:outline-none focus:ring-2 focus:ring-primary/40 font-medium"
-                />
-
-                {/* Quick suggestions from existing customers */}
-                {customers.length > 0 && !newCustName && (
-                  <div className="flex gap-1.5 overflow-x-auto mt-2 pb-1">
-                    <span className="text-[11px] text-muted-foreground py-0.5 whitespace-nowrap">Clients récents :</span>
-                    {customers.slice(0, 4).map((c) => (
-                      <button
-                        key={c.id}
-                        type="button"
-                        onClick={() => {
-                          setNewCustName(c.name);
-                          if (c.phone) setNewCustPhone(c.phone);
-                        }}
-                        className="px-2 py-0.5 rounded-md bg-secondary text-[11px] hover:bg-secondary/80 text-foreground whitespace-nowrap"
-                      >
-                        {c.name}
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
-
-              {/* Phone number */}
-              <div>
-                <label className="block text-xs font-semibold text-foreground mb-1.5 flex items-center justify-between">
-                  <span>Numéro de Téléphone (WhatsApp)</span>
-                  <span className="text-[11px] text-muted-foreground font-normal">Pour rappels automatiques</span>
-                </label>
-                <div className="relative">
-                  <Phone className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                  <input
-                    type="tel"
-                    placeholder="Ex: 97 00 11 22 ou +229..."
-                    value={newCustPhone}
-                    onChange={(e) => setNewCustPhone(e.target.value)}
-                    className="w-full pl-10 pr-3.5 py-2.5 rounded-xl bg-secondary/50 border border-border/70 text-sm focus:outline-none focus:ring-2 focus:ring-primary/40"
-                  />
-                </div>
-              </div>
-
-              {/* Description / Motif */}
-              <div>
-                <label className="block text-xs font-semibold text-foreground mb-1.5">
-                  Motif / Désignation des articles
-                </label>
-                <input
-                  type="text"
-                  placeholder="Ex: 2 sacs de riz 50kg + 1 bidon huile, Crédit boutique..."
-                  value={newDescription}
-                  onChange={(e) => setNewDescription(e.target.value)}
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-secondary/50 border border-border/70 text-sm focus:outline-none focus:ring-2 focus:ring-primary/40"
-                />
-              </div>
-
-              {/* Total Amount */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-semibold text-foreground mb-1.5">
-                    Montant Total de la Dette <span className="text-rose-500">*</span>
-                  </label>
-                  <div className="relative">
-                    <input
-                      type="number"
-                      required
-                      min="1"
-                      placeholder="0"
-                      value={newTotalAmount}
-                      onChange={(e) => setNewTotalAmount(e.target.value)}
-                      className="w-full px-3.5 py-2.5 rounded-xl bg-secondary/50 border border-border/70 text-foreground font-bold text-base focus:outline-none focus:ring-2 focus:ring-primary/40"
-                    />
-                    <span className="absolute right-3.5 top-1/2 -translate-y-1/2 text-xs font-semibold text-muted-foreground">
-                      FCFA
-                    </span>
-                  </div>
-                </div>
-
-                {/* Initial deposit */}
-                <div>
-                  <label className="block text-xs font-semibold text-foreground mb-1.5">
-                    Acompte versé aujourd'hui
-                  </label>
-                  <div className="relative">
-                    <input
-                      type="number"
-                      min="0"
-                      max={newTotalAmount || undefined}
-                      placeholder="0 (aucun)"
-                      value={newInitialDeposit}
-                      onChange={(e) => setNewInitialDeposit(e.target.value)}
-                      className="w-full px-3.5 py-2.5 rounded-xl bg-secondary/50 border border-border/70 text-emerald-500 font-bold text-base focus:outline-none focus:ring-2 focus:ring-primary/40"
-                    />
-                    <span className="absolute right-3.5 top-1/2 -translate-y-1/2 text-xs font-semibold text-muted-foreground">
-                      FCFA
-                    </span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Mode de l'acompte si acompte > 0 */}
-              {newInitialDeposit && parseFloat(newInitialDeposit) > 0 && (
-                <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20 space-y-2">
-                  <div className="flex items-center justify-between text-xs">
-                    <span className="font-semibold text-emerald-500">Mode de règlement de l'acompte :</span>
-                    <span className="text-[11px] text-muted-foreground">
-                      Reste à devoir : {((parseFloat(newTotalAmount) || 0) - (parseFloat(newInitialDeposit) || 0)).toLocaleString("fr-FR")} FCFA
-                    </span>
-                  </div>
-                  <div className="grid grid-cols-3 gap-2">
-                    <button
-                      type="button"
-                      onClick={() => setNewDepositMethod("cash")}
-                      className={`py-1.5 px-2 rounded-lg text-xs font-medium border text-center transition-all ${
-                        newDepositMethod === "cash"
-                          ? "bg-primary text-white border-primary"
-                          : "bg-secondary text-muted-foreground border-border/50"
-                      }`}
-                    >
-                      Espèces
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setNewDepositMethod("mobile_money")}
-                      className={`py-1.5 px-2 rounded-lg text-xs font-medium border text-center transition-all ${
-                        newDepositMethod === "mobile_money"
-                          ? "bg-amber-500 text-white border-amber-500"
-                          : "bg-secondary text-muted-foreground border-border/50"
-                      }`}
-                    >
-                      Mobile Money
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setNewDepositMethod("card")}
-                      className={`py-1.5 px-2 rounded-lg text-xs font-medium border text-center transition-all ${
-                        newDepositMethod === "card"
-                          ? "bg-blue-500 text-white border-blue-500"
-                          : "bg-secondary text-muted-foreground border-border/50"
-                      }`}
-                    >
-                      Carte
-                    </button>
-                  </div>
-                </div>
-              )}
-
-              {/* Due Date & shortcuts */}
-              <div>
-                <label className="block text-xs font-semibold text-foreground mb-1.5 flex items-center justify-between">
-                  <span>Date d'échéance (Promesse de paiement)</span>
-                  <span className="text-[11px] text-muted-foreground font-normal">Facultatif</span>
-                </label>
-                <input
-                  type="date"
-                  value={newDueDate}
-                  onChange={(e) => setNewDueDate(e.target.value)}
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-secondary/50 border border-border/70 text-sm focus:outline-none focus:ring-2 focus:ring-primary/40"
-                />
-                <div className="flex gap-1.5 mt-2 overflow-x-auto pb-1">
-                  <button
-                    type="button"
-                    onClick={() => setQuickDueDate(7)}
-                    className="px-2.5 py-1 rounded-lg bg-secondary text-xs hover:bg-secondary/80 font-medium whitespace-nowrap"
-                  >
-                    +7 jours
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setQuickDueDate(15)}
-                    className="px-2.5 py-1 rounded-lg bg-secondary text-xs hover:bg-secondary/80 font-medium whitespace-nowrap"
-                  >
-                    +15 jours
-                  </button>
-                  <button
-                    type="button"
-                    onClick={setEndOfMonthDueDate}
-                    className="px-2.5 py-1 rounded-lg bg-secondary text-xs hover:bg-secondary/80 font-medium whitespace-nowrap"
-                  >
-                    Fin du mois
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setQuickDueDate(30)}
-                    className="px-2.5 py-1 rounded-lg bg-secondary text-xs hover:bg-secondary/80 font-medium whitespace-nowrap"
-                  >
-                    +30 jours
-                  </button>
-                </div>
-              </div>
-
-              {/* Notes */}
-              <div>
-                <label className="block text-xs font-semibold text-foreground mb-1.5">
-                  Observation / Remarque particulière
-                </label>
-                <textarea
-                  rows={2}
-                  placeholder="Ex: Promis de régler après sa paye..."
-                  value={newNotes}
-                  onChange={(e) => setNewNotes(e.target.value)}
-                  className="w-full px-3.5 py-2 rounded-xl bg-secondary/50 border border-border/70 text-xs focus:outline-none focus:ring-2 focus:ring-primary/40 resize-none"
-                />
-              </div>
-
-              {/* Submit Buttons */}
-              <div className="flex gap-3 pt-3 border-t border-border/50">
-                <button
-                  type="button"
-                  onClick={() => setShowNewDebtModal(false)}
-                  className="flex-1 py-2.5 rounded-xl bg-secondary text-secondary-foreground font-semibold text-xs hover:bg-secondary/80 transition-colors"
-                >
-                  Annuler
-                </button>
-                <button
-                  type="submit"
-                  disabled={isCreatingDebt || !newCustName.trim() || !newTotalAmount}
-                  className="flex-1 py-2.5 rounded-xl bg-primary text-primary-foreground font-bold text-xs hover:bg-primary/90 transition-all flex items-center justify-center gap-2 shadow-md disabled:opacity-50"
-                >
-                  {isCreatingDebt ? "Enregistrement..." : "Enregistrer la Créance"}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* ============================================================== */}
-      {/* MODAL 2: FICHE CRÉANCE & RECOUVREMENT */}
+      {/* MODAL: FICHE CRÉANCE & ENCAISSEMENT RECOUVREMENT */}
       {/* ============================================================== */}
       {selectedDebt && (
         <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
@@ -1244,6 +885,13 @@ export default function DebtsPage() {
                   )}
 
                   <div className="flex justify-between items-center text-xs">
+                    <span className="text-muted-foreground">Articles achetés :</span>
+                    <span className="font-medium text-foreground truncate max-w-[250px]">
+                      {(selectedDebt.items || []).map(i => `${i.quantity}x ${i.productName}`).join(", ") || "Vente"}
+                    </span>
+                  </div>
+
+                  <div className="flex justify-between items-center text-xs">
                     <span className="text-muted-foreground">Montant total initial :</span>
                     <span className="font-bold text-foreground">{selectedDebt.total.toLocaleString("fr-FR")} FCFA</span>
                   </div>
@@ -1282,7 +930,7 @@ export default function DebtsPage() {
                     <div className="flex items-center gap-2">
                       <div className="w-2 h-2 rounded-full bg-primary" />
                       <h4 className="font-bold text-foreground text-xs uppercase tracking-wider">
-                        Encaisser un versement maintenant
+                        Encaisser un versement de recouvrement
                       </h4>
                     </div>
 
@@ -1369,6 +1017,11 @@ export default function DebtsPage() {
                           <span>Carte</span>
                         </button>
                       </div>
+                      {paymentMethod === "cash" && activeCashSession && (
+                        <p className="text-[11px] text-emerald-500 mt-2 flex items-center gap-1">
+                          <Check className="w-3 h-3" /> Sera automatiquement ajouté au tiroir de votre session de caisse en cours.
+                        </p>
+                      )}
                     </div>
 
                     {/* Optional Note */}
@@ -1461,12 +1114,11 @@ export default function DebtsPage() {
       )}
 
       {/* ============================================================== */}
-      {/* MODAL 3: QUITTANCE / REÇU DE RECOUVREMENT IMPRIMABLE */}
+      {/* MODAL: QUITTANCE / REÇU DE RECOUVREMENT IMPRIMABLE */}
       {/* ============================================================== */}
       {selectedReceipt && (
         <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="glass-card max-w-sm w-full rounded-2xl border border-border/80 shadow-2xl p-6 animate-in fade-in zoom-in-95 duration-150">
-            {/* Header modal controls */}
             <div className="flex items-center justify-between pb-3 border-b border-border/50">
               <span className="font-bold text-xs uppercase text-muted-foreground tracking-wider flex items-center gap-1.5">
                 <Receipt className="w-4 h-4 text-primary" /> Quittance Officielle
@@ -1502,7 +1154,7 @@ export default function DebtsPage() {
                   </div>
                 )}
                 <div className="flex justify-between text-gray-600">
-                  <span>Créance N° :</span>
+                  <span>Vente N° :</span>
                   <span>#{selectedReceipt.debt.id.slice(-6)}</span>
                 </div>
               </div>
@@ -1520,7 +1172,7 @@ export default function DebtsPage() {
 
               <div className="py-2.5 border-b border-dashed border-gray-400 space-y-1 text-[11px]">
                 <div className="flex justify-between">
-                  <span>Total dette initiale :</span>
+                  <span>Total achat initial :</span>
                   <span>{selectedReceipt.debt.total.toLocaleString("fr-FR")} F</span>
                 </div>
                 <div className="flex justify-between">
