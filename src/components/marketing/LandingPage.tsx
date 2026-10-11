@@ -6,11 +6,12 @@ interface LandingPageProps {
 
 export default function LandingPage({ onLoginClick }: LandingPageProps) {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [isAnnual, setIsAnnual] = useState(false);
   return (
     <div className="bg-surface font-sans text-on-surface antialiased">
       <header className="fixed top-0 left-0 right-0 z-50 bg-surface-container-lowest/90 backdrop-blur-md border-b border-surface-container"><div className="h-20 max-w-7xl mx-auto px-margin-mobile md:px-margin flex items-center justify-between"><div className="flex items-center gap-space-sm"><img alt="BoutiquePro Logo" className="h-8 w-auto object-contain" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCkwJcy-N76VP1yekSGQpP8jSEU8FTJG_iuVLi4LY-f4uAiDpV6HF-gutXQ_EWly0hpQQAL89wwgpO7O0SvS2u4PWN9UnlE1KOt3nd2tOXRYHF17O67h7NZiSdkXsSh3xTvQoC5NJHW8qG8mOX8lQupDHD21gmJYBgKrVe0NLJVxa_5SQFzn-KRHg4qZOKBrKmhQHHQpciyfQ3Meenut-jhBSZlTgqKidW77JEaNRI"/><span className="font-headline-sm text-lg sm:text-headline-sm text-on-surface tracking-tight font-bold">BoutiquePro</span></div><nav className="hidden lg:flex items-center gap-space-lg"><a className="font-title-md text-title-md text-on-surface-variant hover:text-primary transition-colors font-medium" href="#features">Fonctionnalités</a><a className="font-title-md text-title-md text-on-surface-variant hover:text-primary transition-colors font-medium" href="#how-it-works">Comment ça marche</a><a className="font-title-md text-title-md text-on-surface-variant hover:text-primary transition-colors font-medium" href="#tarifs">Tarifs</a><a className="font-title-md text-title-md text-on-surface-variant hover:text-primary transition-colors font-medium" href="#faq-accordion">FAQ</a></nav><div className="flex items-center gap-2 sm:gap-space-md">
 <button className="lg:hidden text-on-surface p-2 flex items-center justify-center" onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}><span className="material-symbols-outlined">{isMobileMenuOpen ? 'close' : 'menu'}</span></button>
-<button onClick={() => onLoginClick(false)} className="font-title-md text-title-md text-on-surface-variant hover:text-on-surface transition-colors hidden sm:inline-flex font-semibold mr-4">Se connecter</button><button onClick={() => onLoginClick(true)} className="inline-flex items-center justify-center px-4 sm:px-6 py-2 rounded-xl bg-primary text-on-primary font-title-md text-sm sm:text-base hover:bg-primary-container active:scale-[0.98] transition-all shadow-sm font-semibold whitespace-nowrap"><span className="hidden sm:inline">Commencer gratuitement</span><span className="sm:hidden">Démarrer</span></button></div></div>
+<button onClick={() => onLoginClick(false)} className="font-title-md text-title-md text-on-surface-variant hover:text-on-surface transition-colors hidden sm:inline-flex font-semibold mr-4">Se connecter</button><button onClick={() => onLoginClick(true)} className="inline-flex items-center justify-center px-4 sm:px-6 py-2 rounded-xl bg-primary text-on-primary font-title-md text-sm sm:text-base hover:bg-primary-container active:scale-[0.98] transition-all shadow-sm font-semibold whitespace-nowrap"><span className="hidden sm:inline">Essai gratuit 14 jours</span><span className="sm:hidden">Démarrer</span></button></div></div>
 {isMobileMenuOpen && (
   <div className="lg:hidden absolute top-20 left-0 right-0 bg-surface-container-lowest border-b border-surface-container shadow-2xl p-6 flex flex-col gap-6 z-40 animate-in slide-in-from-top-2">
     <a onClick={() => setIsMobileMenuOpen(false)} className="font-title-md text-lg text-on-surface-variant hover:text-primary transition-colors font-medium flex items-center gap-3" href="#features">
@@ -38,7 +39,7 @@ export default function LandingPage({ onLoginClick }: LandingPageProps) {
 <div className="absolute top-48 left-1/4 w-80 h-80 bg-secondary/5 rounded-full blur-2xl pointer-events-none -z-10"></div>
 <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-surface-container border border-outline-variant/30 text-primary font-title-md text-sm shadow-sm mb-6 transition-all hover:bg-surface-container-high cursor-default">
 <span className="inline-block w-2 h-2 rounded-full bg-primary animate-pulse"></span>
-<span className="font-medium">✨ La gestion de boutique, enfin simplifiée.</span>
+<span className="font-medium">✨ 14 jours d&apos;essai gratuit • Sans carte bancaire</span>
 </div>
 <h1 className="max-w-5xl font-display-hero text-4xl md:text-5xl font-extrabold tracking-tight text-on-surface mb-6">
       Gérez votre boutique. Suivez vos ventes.<br className="hidden md:inline"/>
@@ -49,7 +50,7 @@ export default function LandingPage({ onLoginClick }: LandingPageProps) {
     </p>
 <div className="flex flex-col sm:flex-row items-center justify-center gap-4 mb-4 w-full sm:w-auto">
 <button onClick={() => onLoginClick(true)} className="w-full sm:w-auto inline-flex items-center justify-center gap-3 px-8 py-4 rounded-xl bg-primary text-on-primary font-title-md text-base hover:bg-primary-container active:scale-[0.98] transition-all shadow-md shadow-primary/20 font-bold">
-<span>Commencer gratuitement</span>
+<span>Démarrer 14 jours gratuits</span>
 <span className="material-symbols-outlined text-xl">arrow_forward</span>
 </button>
 <a className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-7 py-4 rounded-xl bg-surface-container-lowest text-on-surface font-title-md text-base border border-outline-variant/40 hover:bg-surface-container-low active:scale-[0.98] transition-all shadow-sm font-semibold" href="#mockup">
@@ -58,6 +59,8 @@ export default function LandingPage({ onLoginClick }: LandingPageProps) {
 </a>
 </div>
 <p className="text-sm text-outline flex items-center justify-center gap-2 mb-16 flex-wrap font-medium">
+<span>14 jours d&apos;essai offert</span>
+<span>•</span>
 <span>Sans carte bancaire</span>
 <span>•</span>
 <span>Configuration en 2 minutes</span>
@@ -487,77 +490,146 @@ export default function LandingPage({ onLoginClick }: LandingPageProps) {
 
 {/* 11. TARIFICATION */}
 <section className="w-full py-20 px-4 md:px-8 bg-surface-container-low/40" id="tarifs">
-<div className="max-w-6xl mx-auto">
-<div className="text-center max-w-2xl mx-auto mb-16">
-<span className="text-xs text-primary font-bold uppercase tracking-wider">Tarification juste</span>
-<h2 className="text-3xl font-extrabold text-on-surface mt-2 mb-3">Un abonnement adapté à votre activité.</h2>
-<p className="text-base text-on-surface-variant font-medium">Des tarifs transparents, sans frais cachés, payables en monnaie locale.</p>
+<div className="max-w-5xl mx-auto">
+<div className="text-center max-w-2xl mx-auto mb-10">
+<span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200 text-xs font-black uppercase tracking-wider mb-3">
+  🎁 14 JOURS D&apos;ESSAI GRATUIT INCLUS
+</span>
+<h2 className="text-3xl md:text-4xl font-extrabold text-on-surface mt-1 mb-3">
+  Testez gratuitement pendant 2 semaines.
+</h2>
+<p className="text-base text-on-surface-variant font-medium">
+  Accédez à 100% des fonctionnalités professionnelles dès votre inscription. Aucune carte bancaire requise. Vous ne payez que si vous êtes conquis !
+</p>
 </div>
-<div className="grid grid-cols-1 lg:grid-cols-3 gap-8 items-stretch">
-<div className="bg-surface-container-lowest p-8 rounded-2xl border border-outline-variant/30 shadow-sm flex flex-col justify-between">
-<div>
-<span className="text-xs font-bold text-outline uppercase tracking-wider">Démarrage</span>
-<h3 className="text-2xl font-extrabold text-on-surface mt-1 mb-2">GRATUIT</h3>
-<p className="text-xs text-on-surface-variant mb-6 font-medium">Idéal pour tester et démarrer votre boutique en toute sérénité.</p>
-<div className="text-3xl font-extrabold text-on-surface mb-6">
-              0 <span className="text-sm font-semibold text-outline">FCFA / mois</span>
+
+{/* Toggle Mensuel / Annuel */}
+<div className="flex items-center justify-center gap-4 mb-12">
+  <span className={`text-sm font-bold transition-colors ${!isAnnual ? 'text-primary' : 'text-on-surface-variant'}`}>
+    Facturation Mensuelle
+  </span>
+  <button
+    type="button"
+    onClick={() => setIsAnnual(!isAnnual)}
+    className={`relative inline-flex h-8 w-15 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-hidden ${isAnnual ? 'bg-primary' : 'bg-surface-container-high'}`}
+  >
+    <span className={`pointer-events-none inline-block h-7 w-7 transform rounded-full bg-white shadow-md ring-0 transition duration-200 ease-in-out ${isAnnual ? 'translate-x-7' : 'translate-x-0'}`} />
+  </button>
+  <span className={`text-sm font-bold flex items-center gap-2 transition-colors ${isAnnual ? 'text-primary' : 'text-on-surface-variant'}`}>
+    Facturation Annuelle
+    <span className="px-2.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-700 text-[11px] font-extrabold uppercase border border-emerald-500/20">
+      2 mois offerts
+    </span>
+  </span>
 </div>
-<ul className="space-y-3 text-sm text-on-surface-variant mb-8 font-medium">
-<li className="flex items-center gap-2"><span className="material-symbols-outlined text-primary text-base">check</span> Jusqu&apos;à 50 produits</li>
-<li className="flex items-center gap-2"><span className="material-symbols-outlined text-primary text-base">check</span> Ventes et tickets illimités</li>
-<li className="flex items-center gap-2"><span className="material-symbols-outlined text-primary text-base">check</span> Tableau de bord essentiel</li>
-<li className="flex items-center gap-2"><span className="material-symbols-outlined text-primary text-base">check</span> Reçus WhatsApp</li>
-<li className="flex items-center gap-2 text-outline"><span className="material-symbols-outlined text-base">remove</span> Suivi multi-utilisateurs</li>
-</ul>
+
+{/* Les 2 Grilles Principales */}
+<div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-stretch max-w-4xl mx-auto">
+  
+  {/* PLAN PRO */}
+  <div className="bg-surface-container-lowest p-8 rounded-3xl border border-outline-variant/40 shadow-md flex flex-col justify-between hover:shadow-lg transition-all relative">
+    <div className="inline-block px-3 py-1 rounded-full bg-primary/10 text-primary text-[11px] font-bold uppercase tracking-wider w-fit mb-4">
+      Boutique Individuelle
+    </div>
+    <div>
+      <h3 className="text-2xl font-extrabold text-on-surface mb-1">PRO</h3>
+      <p className="text-xs text-on-surface-variant mb-6 font-medium">Pour commerçants indépendants voulant un suivi précis et rigoureux.</p>
+      
+      <div className="mb-2">
+        <div className="text-4xl font-black text-on-surface">
+          {isAnnual ? "50 000" : "5 000"}{" "}
+          <span className="text-sm font-bold text-outline">FCFA / {isAnnual ? "an" : "mois"}</span>
+        </div>
+        {isAnnual && (
+          <p className="text-xs text-emerald-700 font-bold mt-1">Soit ~4 166 FCFA / mois (10 000 F d&apos;économie)</p>
+        )}
+      </div>
+
+      <div className="py-2.5 px-3 rounded-xl bg-emerald-50/70 border border-emerald-200 text-emerald-800 text-xs font-bold mb-6 flex items-center gap-2">
+        <span className="material-symbols-outlined text-base">verified</span>
+        <span>14 jours d&apos;essai gratuit offerts</span>
+      </div>
+
+      <ul className="space-y-3.5 text-sm text-on-surface mb-8 font-medium">
+        <li className="flex items-center gap-2.5 font-semibold"><span className="material-symbols-outlined text-primary text-lg">check_circle</span> 1 Boutique &amp; 1 Gérant</li>
+        <li className="flex items-center gap-2.5 font-semibold"><span className="material-symbols-outlined text-primary text-lg">check_circle</span> Produits et ventes illimités</li>
+        <li className="flex items-center gap-2.5"><span className="material-symbols-outlined text-primary text-lg">check_circle</span> <b>Mode Hors-ligne (PWA)</b> même sans internet</li>
+        <li className="flex items-center gap-2.5"><span className="material-symbols-outlined text-primary text-lg">check_circle</span> Reçus thermiques 80mm &amp; Factures A4 (TVA 0%)</li>
+        <li className="flex items-center gap-2.5"><span className="material-symbols-outlined text-primary text-lg">check_circle</span> Suivi des charges &amp; Bénéfice Net réel</li>
+        <li className="flex items-center gap-2.5"><span className="material-symbols-outlined text-primary text-lg">check_circle</span> Carnet de crédit &amp; Dettes clients</li>
+        <li className="flex items-center gap-2.5"><span className="material-symbols-outlined text-primary text-lg">check_circle</span> Alertes de stock automatiques</li>
+        <li className="flex items-center gap-2.5"><span className="material-symbols-outlined text-primary text-lg">check_circle</span> Exports Excel &amp; Support WhatsApp</li>
+      </ul>
+    </div>
+
+    <button 
+      onClick={() => onLoginClick(true)} 
+      className="w-full py-4 rounded-2xl bg-surface-container text-on-surface font-extrabold text-base text-center hover:bg-surface-container-high active:scale-[0.98] transition-all"
+    >
+      Tester Pro gratuitement 14 jours
+    </button>
+  </div>
+
+  {/* PLAN BUSINESS */}
+  <div className="bg-surface-container-lowest p-8 rounded-3xl border-2 border-primary shadow-2xl flex flex-col justify-between relative transform md:-translate-y-2">
+    <div className="absolute -top-4 left-1/2 -translate-x-1/2 px-4 py-1.5 rounded-full bg-primary text-on-primary text-[11px] font-black uppercase tracking-wider shadow-md">
+      ⭐ Le plus complet • Équipe &amp; Multi-Boutiques
+    </div>
+    <div>
+      <div className="inline-block px-3 py-1 rounded-full bg-secondary/10 text-secondary text-[11px] font-bold uppercase tracking-wider w-fit mb-4">
+        Multi-Caisses &amp; Équipe
+      </div>
+      <h3 className="text-2xl font-extrabold text-on-surface mb-1">BUSINESS</h3>
+      <p className="text-xs text-on-surface-variant mb-6 font-medium">Pour boutiques avec employés, caissiers ou plusieurs points de vente.</p>
+      
+      <div className="mb-2">
+        <div className="text-4xl font-black text-primary">
+          {isAnnual ? "150 000" : "15 000"}{" "}
+          <span className="text-sm font-bold text-outline">FCFA / {isAnnual ? "an" : "mois"}</span>
+        </div>
+        {isAnnual && (
+          <p className="text-xs text-emerald-700 font-bold mt-1">Soit 12 500 FCFA / mois (30 000 F d&apos;économie)</p>
+        )}
+      </div>
+
+      <div className="py-2.5 px-3 rounded-xl bg-emerald-50/70 border border-emerald-200 text-emerald-800 text-xs font-bold mb-6 flex items-center gap-2">
+        <span className="material-symbols-outlined text-base">verified</span>
+        <span>14 jours d&apos;essai gratuit offerts</span>
+      </div>
+
+      <ul className="space-y-3.5 text-sm text-on-surface mb-8 font-medium">
+        <li className="flex items-center gap-2.5 font-bold text-primary"><span className="material-symbols-outlined text-primary text-lg">verified</span> Toutes les fonctionnalités Pro incluses</li>
+        <li className="flex items-center gap-2.5 font-bold"><span className="material-symbols-outlined text-secondary text-lg">check_circle</span> <b>Comptes Caissiers avec accès restreints</b></li>
+        <li className="flex items-center gap-2.5 font-bold"><span className="material-symbols-outlined text-secondary text-lg">check_circle</span> <b>Clôtures de Caisse certifiées (Rapports X &amp; Z)</b></li>
+        <li className="flex items-center gap-2.5"><span className="material-symbols-outlined text-secondary text-lg">check_circle</span> Décompte d&apos;espèces &amp; Détection des écarts</li>
+        <li className="flex items-center gap-2.5"><span className="material-symbols-outlined text-secondary text-lg">check_circle</span> <b>Gestion Multi-Boutiques</b> (jusqu&apos;à 3 magasins)</li>
+        <li className="flex items-center gap-2.5"><span className="material-symbols-outlined text-secondary text-lg">check_circle</span> Suivi à distance en temps réel sur mobile</li>
+        <li className="flex items-center gap-2.5"><span className="material-symbols-outlined text-secondary text-lg">check_circle</span> Support VIP dédié WhatsApp 7j/7</li>
+      </ul>
+    </div>
+
+    <button 
+      onClick={() => onLoginClick(true)} 
+      className="w-full py-4 rounded-2xl bg-primary text-on-primary font-black text-base text-center hover:bg-primary-container shadow-xl shadow-primary/25 active:scale-[0.98] transition-all"
+    >
+      Tester Business gratuitement 14 jours
+    </button>
+  </div>
+
 </div>
-<button onClick={() => onLoginClick(true)} className="w-full py-3 rounded-xl bg-surface-container text-on-surface font-bold text-base text-center hover:bg-surface-container-high transition-all">
-            Commencer gratuitement
-          </button>
+
+{/* Mentions de réassurance sous la tarification */}
+<div className="mt-12 text-center text-xs text-on-surface-variant font-medium flex flex-wrap items-center justify-center gap-6">
+  <span className="flex items-center gap-1.5">
+    <span className="material-symbols-outlined text-primary text-base">payments</span>
+    Paiement en monnaie locale via Mobile Money (MTN, Moov, Orange, Wave)
+  </span>
+  <span className="flex items-center gap-1.5">
+    <span className="material-symbols-outlined text-emerald-600 text-base">lock</span>
+    Sans engagement • Annulation en 1 clic
+  </span>
 </div>
-<div className="bg-surface-container-lowest p-8 rounded-2xl border-2 border-primary shadow-xl flex flex-col justify-between relative transform lg:-translate-y-2">
-<div className="absolute -top-4 left-1/2 -translate-x-1/2 px-4 py-1 rounded-full bg-primary text-on-primary text-[10px] font-bold uppercase tracking-wider shadow-sm">
-            ⭐ Le plus populaire
-          </div>
-<div>
-<span className="text-xs font-bold text-primary uppercase tracking-wider">Croissance</span>
-<h3 className="text-2xl font-extrabold text-on-surface mt-1 mb-2">PRO</h3>
-<p className="text-xs text-on-surface-variant mb-6 font-medium">Pour les commerçants établis voulant un contrôle sans faille.</p>
-<div className="text-3xl font-extrabold text-primary mb-6">
-              5 000 <span className="text-sm font-semibold text-outline">FCFA / mois</span>
-</div>
-<ul className="space-y-3 text-sm text-on-surface mb-8 font-medium">
-<li className="flex items-center gap-2 font-bold"><span className="material-symbols-outlined text-primary text-base">check_circle</span> Produits illimités</li>
-<li className="flex items-center gap-2 font-bold"><span className="material-symbols-outlined text-primary text-base">check_circle</span> Alertes de stock automatiques</li>
-<li className="flex items-center gap-2"><span className="material-symbols-outlined text-primary text-base">check</span> Carnet de crédit &amp; dettes clients</li>
-<li className="flex items-center gap-2"><span className="material-symbols-outlined text-primary text-base">check</span> Suivi des charges &amp; dépenses</li>
-<li className="flex items-center gap-2"><span className="material-symbols-outlined text-primary text-base">check</span> Rapports PDF &amp; Excel</li>
-<li className="flex items-center gap-2"><span className="material-symbols-outlined text-primary text-base">check</span> Support WhatsApp prioritaire</li>
-</ul>
-</div>
-<button onClick={() => onLoginClick(true)} className="w-full py-3.5 rounded-xl bg-primary text-on-primary font-bold text-base text-center hover:bg-primary-container shadow-md shadow-primary/20 transition-all">
-            Commencer avec Pro
-          </button>
-</div>
-<div className="bg-surface-container-lowest p-8 rounded-2xl border border-outline-variant/30 shadow-sm flex flex-col justify-between">
-<div>
-<span className="text-xs font-bold text-secondary uppercase tracking-wider">Multi-Boutiques</span>
-<h3 className="text-2xl font-extrabold text-on-surface mt-1 mb-2">BUSINESS</h3>
-<p className="text-xs text-on-surface-variant mb-6 font-medium">Pour entreprises commerciales et boutiques à plusieurs caisses.</p>
-<div className="text-3xl font-extrabold text-on-surface mb-6">
-              15 000 <span className="text-sm font-semibold text-outline">FCFA / mois</span>
-</div>
-<ul className="space-y-3 text-sm text-on-surface-variant mb-8 font-medium">
-<li className="flex items-center gap-2"><span className="material-symbols-outlined text-secondary text-base">check</span> Toutes les fonctionnalités Pro</li>
-<li className="flex items-center gap-2 font-bold"><span className="material-symbols-outlined text-secondary text-base">check</span> Multi-utilisateurs (Caissiers)</li>
-<li className="flex items-center gap-2"><span className="material-symbols-outlined text-secondary text-base">check</span> Gestion multi-points de vente</li>
-<li className="flex items-center gap-2"><span className="material-symbols-outlined text-secondary text-base">check</span> Statistiques avancées de marges</li>
-</ul>
-</div>
-<button onClick={() => onLoginClick(true)} className="w-full py-3 rounded-xl bg-surface-container text-on-surface font-bold text-base text-center hover:bg-surface-container-high transition-all">
-            Choisir Business
-          </button>
-</div>
-</div>
+
 </div>
 </section>
 
@@ -573,29 +645,38 @@ export default function LandingPage({ onLoginClick }: LandingPageProps) {
     <div className="space-y-4">
       <details className="group bg-surface-container-lowest rounded-xl border border-outline-variant/30 shadow-sm overflow-hidden open:ring-2 open:ring-primary/20">
         <summary className="flex items-center justify-between p-6 cursor-pointer list-none font-bold text-on-surface hover:text-primary transition-colors">
-          <span>Faut-il une connexion internet pour utiliser BoutiquePro ?</span>
+          <span>Combien de temps dure l&apos;essai gratuit et comment ça marche ?</span>
           <span className="material-symbols-outlined text-outline group-open:rotate-180 transition-transform">expand_more</span>
         </summary>
         <div className="p-6 pt-0 text-on-surface-variant font-medium">
-          Oui, l&apos;application nécessite une connexion internet. C&apos;est ce qui nous permet de synchroniser vos données en temps réel sur le cloud et de garantir qu&apos;aucune vente ne soit perdue si votre appareil tombe en panne.
+          Vous bénéficiez de <b>14 jours complets (2 semaines) d&apos;essai gratuit</b> avec un accès total à l&apos;application dès votre inscription, sans carte bancaire requise. Vous pouvez enregistrer vos produits, encaisser vos clients et tester la caisse. À la fin des 14 jours, vous choisissez simplement votre formule (Pro à 5 000 FCFA ou Business à 15 000 FCFA) pour continuer.
         </div>
       </details>
       <details className="group bg-surface-container-lowest rounded-xl border border-outline-variant/30 shadow-sm overflow-hidden open:ring-2 open:ring-primary/20">
         <summary className="flex items-center justify-between p-6 cursor-pointer list-none font-bold text-on-surface hover:text-primary transition-colors">
-          <span>Est-ce que je peux l&apos;utiliser sur mon téléphone mobile ?</span>
+          <span>Faut-il obligatoirement une connexion internet pour vendre ?</span>
           <span className="material-symbols-outlined text-outline group-open:rotate-180 transition-transform">expand_more</span>
         </summary>
         <div className="p-6 pt-0 text-on-surface-variant font-medium">
-          Absolument ! L&apos;interface de BoutiquePro a été spécialement conçue pour s&apos;adapter parfaitement à l&apos;écran de votre smartphone. Vous pouvez gérer votre boutique de n&apos;importe où.
+          <b>Non, pas en permanence !</b> Grâce à notre mode Hors-ligne (PWA), votre caisse continue de fonctionner même en cas de coupure internet. Vous pouvez encaisser vos clients et imprimer vos tickets. Dès que votre connexion se rétablit, toutes vos ventes sont automatiquement sauvegardées et synchronisées sur le cloud.
         </div>
       </details>
       <details className="group bg-surface-container-lowest rounded-xl border border-outline-variant/30 shadow-sm overflow-hidden open:ring-2 open:ring-primary/20">
         <summary className="flex items-center justify-between p-6 cursor-pointer list-none font-bold text-on-surface hover:text-primary transition-colors">
-          <span>Puis-je créer des comptes pour mes employés ou caissiers ?</span>
+          <span>Puis-je créer des comptes pour mes caissiers et employés ?</span>
           <span className="material-symbols-outlined text-outline group-open:rotate-180 transition-transform">expand_more</span>
         </summary>
         <div className="p-6 pt-0 text-on-surface-variant font-medium">
-          Pour le moment, l&apos;application est configurée pour un seul propriétaire par compte pour une simplicité maximale. La gestion multi-utilisateurs avec des droits restreints pour les caissiers est une fonctionnalité qui sera ajoutée très bientôt !
+          <b>Oui, absolument !</b> Avec la formule Business, vous pouvez créer des accès sécurisés pour chacun de vos caissiers. Chaque caissier ne peut accéder qu&apos;à la caisse de sa propre boutique et ne peut en aucun cas voir vos prix d&apos;achat, vos marges bénéficiaires ou les autres boutiques. Vous disposez aussi des clôtures de caisse (Rapports X et Z) avec décompte d&apos;espèces.
+        </div>
+      </details>
+      <details className="group bg-surface-container-lowest rounded-xl border border-outline-variant/30 shadow-sm overflow-hidden open:ring-2 open:ring-primary/20">
+        <summary className="flex items-center justify-between p-6 cursor-pointer list-none font-bold text-on-surface hover:text-primary transition-colors">
+          <span>Comment s&apos;effectue le règlement de l&apos;abonnement ?</span>
+          <span className="material-symbols-outlined text-outline group-open:rotate-180 transition-transform">expand_more</span>
+        </summary>
+        <div className="p-6 pt-0 text-on-surface-variant font-medium">
+          Le paiement s&apos;effectue directement en monnaie locale via <b>Mobile Money</b> (MTN Mobile Money, Moov Money, Orange Money, Wave) ou par carte bancaire. Aucun prélèvement automatique surprise n&apos;est effectué sans votre accord.
         </div>
       </details>
     </div>
@@ -618,7 +699,7 @@ export default function LandingPage({ onLoginClick }: LandingPageProps) {
       </p>
 <div className="flex flex-col sm:flex-row items-center justify-center gap-4 w-full sm:w-auto mb-8">
 <button onClick={() => onLoginClick(true)} className="w-full sm:w-auto inline-flex items-center justify-center gap-3 px-8 py-4 rounded-xl bg-surface-container-lowest text-primary font-bold text-base hover:bg-surface-bright active:scale-[0.98] transition-all shadow-xl">
-<span>Commencer gratuitement</span>
+<span>Démarrer vos 14 jours gratuits</span>
 <span className="material-symbols-outlined text-xl">arrow_forward</span>
 </button>
 </div>
