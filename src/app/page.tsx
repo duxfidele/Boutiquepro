@@ -18,6 +18,7 @@ import {
   CreditCard,
   Smartphone,
   Banknote,
+  HelpCircle,
 } from "lucide-react";
 import { ProductAvatar } from "@/components/ui/ProductAvatar";
 

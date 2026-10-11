@@ -32,7 +32,15 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         
       if (data && data.length > 0) {
         // @ts-ignore
-        const valid = data.filter((d: any) => d.stores && d.stores.id);
+        const valid = data.map((d: any) => {
+          const st = Array.isArray(d.stores) ? d.stores[0] : d.stores;
+          return {
+            role: d.role,
+            store_id: d.store_id,
+            id: st?.id || d.store_id,
+            name: st?.name || 'Ma Boutique'
+          };
+        }).filter((d: any) => d.id);
 
         // ISOLATION STRICTE : Si l'utilisateur est un caissier
         const cashierStore = valid.find((d: any) => d.role === 'cashier');
@@ -40,8 +48,8 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         if (cashierStore) {
           // Le caissier ne voit QUE sa boutique assignée, rien d'autre !
           const singleStore = [{
-            id: cashierStore.stores.id,
-            name: cashierStore.stores.name,
+            id: cashierStore.id,
+            name: cashierStore.name,
             role: 'cashier'
           }];
           setStores(singleStore);
@@ -52,8 +60,8 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
         // Sinon c'est un administrateur : il voit toutes ses boutiques
         const mappedStores = valid.map((d: any) => ({
-          id: d.stores.id,
-          name: d.stores.name,
+          id: d.id,
+          name: d.name,
           role: d.role
         }));
 
