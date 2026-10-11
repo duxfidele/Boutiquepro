@@ -16,7 +16,20 @@ import {
   CreditCard,
   Package,
   Target,
+  FileSpreadsheet,
+  Download,
+  FileText,
+  CheckCircle2,
+  X,
 } from "lucide-react";
+import {
+  exportSalesJournal,
+  exportExpensesJournal,
+  exportInventoryValuation,
+  exportGeneralLedger,
+  ExportFormat,
+  DateFilterOptions
+} from "@/lib/accountingExport";
 import { ProductAvatar } from "@/components/ui/ProductAvatar";
 
 const paymentLabels: Record<string, string> = {
@@ -34,6 +47,37 @@ const paymentIcons: Record<string, React.ReactNode> = {
 export default function AnalyticsPage() {
   const { state, formatPrice, totalRevenue, totalOrders, averageBasket, categorySales } = useStore();
   const [period, setPeriod] = useState<"all" | "today" | "week">("all");
+  
+  // Modal Export Comptable
+  const [showExportModal, setShowExportModal] = useState(false);
+  const [exportType, setExportType] = useState<"sales" | "expenses" | "inventory" | "ledger">("sales");
+  const [exportPeriod, setExportPeriod] = useState<"all" | "month" | "last_month" | "week" | "today">("month");
+  const [exportFormat, setExportFormat] = useState<ExportFormat>("excel");
+  const [exportSuccessNotice, setExportSuccessNotice] = useState<string | null>(null);
+
+  const handleRunExport = () => {
+    const filter: DateFilterOptions = { period: exportPeriod };
+    const currency = state.settings.currency || "FCFA";
+
+    if (exportType === "sales") {
+      exportSalesJournal(state.sales, currency, exportFormat, filter);
+      setExportSuccessNotice("Journal des Ventes téléchargé avec succès !");
+    } else if (exportType === "expenses") {
+      exportExpensesJournal(state.expenses || [], currency, exportFormat, filter);
+      setExportSuccessNotice("Journal des Dépenses téléchargé avec succès !");
+    } else if (exportType === "inventory") {
+      exportInventoryValuation(state.products, currency, exportFormat);
+      setExportSuccessNotice("Valorisation des Stocks téléchargée avec succès !");
+    } else if (exportType === "ledger") {
+      exportGeneralLedger(state.sales, state.expenses || [], state.products, currency, exportFormat, filter);
+      setExportSuccessNotice("Grand Livre & Compte de Résultat téléchargé !");
+    }
+
+    setTimeout(() => {
+      setExportSuccessNotice(null);
+      setShowExportModal(false);
+    }, 1500);
+  };
 
   // Computed analytics (Concordance stricte avec le tableau de bord et prise en compte des remises)
   const analytics = useMemo(() => {
@@ -154,23 +198,34 @@ export default function AnalyticsPage() {
             Analyse détaillée de la performance de votre boutique
           </p>
         </div>
-        {/* Period selector */}
-        <div className="flex items-center gap-2 bg-secondary/40 rounded-xl p-1">
-          {[
-            { id: "all" as const, label: "Tout" },
-            { id: "week" as const, label: "7 jours" },
-            { id: "today" as const, label: "Aujourd'hui" },
-          ].map((p) => (
-            <button
-              key={p.id}
-              onClick={() => setPeriod(p.id)}
-              className={`rounded-lg px-4 py-2 text-xs font-medium transition-all ${
-                period === p.id ? "bg-background shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              {p.label}
-            </button>
-          ))}
+        <div className="flex items-center gap-2 flex-wrap">
+          {/* Bouton Export Comptable */}
+          <button
+            onClick={() => setShowExportModal(true)}
+            className="flex items-center gap-2 bg-primary text-primary-foreground px-4 py-2 rounded-xl text-xs font-bold hover:opacity-90 transition-opacity shadow-sm active:scale-95"
+          >
+            <Download className="h-3.5 w-3.5" />
+            <span>Export Comptable (Excel / CSV)</span>
+          </button>
+
+          {/* Period selector */}
+          <div className="flex items-center gap-1 bg-secondary/40 rounded-xl p-1">
+            {[
+              { id: "all" as const, label: "Tout" },
+              { id: "week" as const, label: "7 jours" },
+              { id: "today" as const, label: "Aujourd'hui" },
+            ].map((p) => (
+              <button
+                key={p.id}
+                onClick={() => setPeriod(p.id)}
+                className={`rounded-lg px-3 py-1.5 text-xs font-medium transition-all ${
+                  period === p.id ? "bg-background shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                {p.label}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 
@@ -358,6 +413,307 @@ export default function AnalyticsPage() {
           ))}
         </div>
       </div>
+
+      {/* ───────────────────────────────────────────────────────────── */}
+      {/* SECTION : CENTRE D'EXPORTATION COMPTABLE & FISCAL             */}
+      {/* ───────────────────────────────────────────────────────────── */}
+      <div className="rounded-2xl border border-border/50 bg-card p-6 shadow-sm space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3 border-b border-border/40">
+          <div>
+            <h2 className="text-base font-bold text-foreground flex items-center gap-2">
+              <FileSpreadsheet className="h-5 w-5 text-primary" />
+              Centre d'Exportation Comptable & Fiscal
+            </h2>
+            <p className="text-xs text-muted-foreground">
+              Générez vos journaux officiels conformes pour votre expert-comptable ou logiciels fiscaux
+            </p>
+          </div>
+          <span className="text-[11px] font-semibold text-emerald-600 bg-emerald-500/10 px-2.5 py-1 rounded-full border border-emerald-500/20 self-start sm:self-auto">
+            Formats Excel (.xls) & CSV
+          </span>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          {/* Card 1 : Ventes */}
+          <div className="p-4 rounded-xl border border-border/40 bg-secondary/20 hover:bg-secondary/40 transition-colors flex flex-col justify-between space-y-3">
+            <div>
+              <div className="flex items-center justify-between mb-1.5">
+                <span className="text-xs font-bold text-foreground flex items-center gap-1.5">
+                  <DollarSign className="h-4 w-4 text-emerald-500" />
+                  Journal des Ventes
+                </span>
+                <span className="text-[10px] text-muted-foreground">{state.sales.length} ventes</span>
+              </div>
+              <p className="text-[11px] text-muted-foreground">
+                Détail de chaque encaissement, articles, remises et modes de règlement.
+              </p>
+            </div>
+            <div className="flex gap-2 pt-2 border-t border-border/40">
+              <button
+                onClick={() => exportSalesJournal(state.sales, state.settings.currency, "excel")}
+                className="flex-1 py-1.5 rounded-lg bg-emerald-600/10 hover:bg-emerald-600/20 text-emerald-700 dark:text-emerald-400 text-xs font-bold transition-colors flex items-center justify-center gap-1"
+                title="Télécharger en format Excel"
+              >
+                <FileSpreadsheet className="h-3 w-3" /> Excel
+              </button>
+              <button
+                onClick={() => exportSalesJournal(state.sales, state.settings.currency, "csv")}
+                className="flex-1 py-1.5 rounded-lg bg-secondary hover:bg-secondary/80 text-foreground text-xs font-medium transition-colors flex items-center justify-center gap-1"
+                title="Télécharger en format CSV"
+              >
+                <FileText className="h-3 w-3" /> CSV
+              </button>
+            </div>
+          </div>
+
+          {/* Card 2 : Dépenses */}
+          <div className="p-4 rounded-xl border border-border/40 bg-secondary/20 hover:bg-secondary/40 transition-colors flex flex-col justify-between space-y-3">
+            <div>
+              <div className="flex items-center justify-between mb-1.5">
+                <span className="text-xs font-bold text-foreground flex items-center gap-1.5">
+                  <ShoppingBag className="h-4 w-4 text-orange-500" />
+                  Journal des Dépenses
+                </span>
+                <span className="text-[10px] text-muted-foreground">{state.expenses?.length || 0} frais</span>
+              </div>
+              <p className="text-[11px] text-muted-foreground">
+                Charges d'exploitation, factures, loyers, salaires et frais divers.
+              </p>
+            </div>
+            <div className="flex gap-2 pt-2 border-t border-border/40">
+              <button
+                onClick={() => exportExpensesJournal(state.expenses || [], state.settings.currency, "excel")}
+                className="flex-1 py-1.5 rounded-lg bg-emerald-600/10 hover:bg-emerald-600/20 text-emerald-700 dark:text-emerald-400 text-xs font-bold transition-colors flex items-center justify-center gap-1"
+                title="Télécharger en format Excel"
+              >
+                <FileSpreadsheet className="h-3 w-3" /> Excel
+              </button>
+              <button
+                onClick={() => exportExpensesJournal(state.expenses || [], state.settings.currency, "csv")}
+                className="flex-1 py-1.5 rounded-lg bg-secondary hover:bg-secondary/80 text-foreground text-xs font-medium transition-colors flex items-center justify-center gap-1"
+                title="Télécharger en format CSV"
+              >
+                <FileText className="h-3 w-3" /> CSV
+              </button>
+            </div>
+          </div>
+
+          {/* Card 3 : Valorisation Stocks */}
+          <div className="p-4 rounded-xl border border-border/40 bg-secondary/20 hover:bg-secondary/40 transition-colors flex flex-col justify-between space-y-3">
+            <div>
+              <div className="flex items-center justify-between mb-1.5">
+                <span className="text-xs font-bold text-foreground flex items-center gap-1.5">
+                  <Package className="h-4 w-4 text-blue-500" />
+                  Valorisation Stocks
+                </span>
+                <span className="text-[10px] text-muted-foreground">{state.products.length} réf.</span>
+              </div>
+              <p className="text-[11px] text-muted-foreground">
+                Inventaire physique, valorisation au coût d'achat et au prix de vente.
+              </p>
+            </div>
+            <div className="flex gap-2 pt-2 border-t border-border/40">
+              <button
+                onClick={() => exportInventoryValuation(state.products, state.settings.currency, "excel")}
+                className="flex-1 py-1.5 rounded-lg bg-emerald-600/10 hover:bg-emerald-600/20 text-emerald-700 dark:text-emerald-400 text-xs font-bold transition-colors flex items-center justify-center gap-1"
+                title="Télécharger en format Excel"
+              >
+                <FileSpreadsheet className="h-3 w-3" /> Excel
+              </button>
+              <button
+                onClick={() => exportInventoryValuation(state.products, state.settings.currency, "csv")}
+                className="flex-1 py-1.5 rounded-lg bg-secondary hover:bg-secondary/80 text-foreground text-xs font-medium transition-colors flex items-center justify-center gap-1"
+                title="Télécharger en format CSV"
+              >
+                <FileText className="h-3 w-3" /> CSV
+              </button>
+            </div>
+          </div>
+
+          {/* Card 4 : Compte de Résultat */}
+          <div className="p-4 rounded-xl border border-border/40 bg-secondary/20 hover:bg-secondary/40 transition-colors flex flex-col justify-between space-y-3">
+            <div>
+              <div className="flex items-center justify-between mb-1.5">
+                <span className="text-xs font-bold text-foreground flex items-center gap-1.5">
+                  <TrendingUp className="h-4 w-4 text-purple-500" />
+                  Compte de Résultat
+                </span>
+                <span className="text-[10px] text-muted-foreground">P&L Bilan</span>
+              </div>
+              <p className="text-[11px] text-muted-foreground">
+                Synthèse générale : CA, COGS, marge brute, charges et résultat net.
+              </p>
+            </div>
+            <div className="flex gap-2 pt-2 border-t border-border/40">
+              <button
+                onClick={() => exportGeneralLedger(state.sales, state.expenses || [], state.products, state.settings.currency, "excel")}
+                className="flex-1 py-1.5 rounded-lg bg-emerald-600/10 hover:bg-emerald-600/20 text-emerald-700 dark:text-emerald-400 text-xs font-bold transition-colors flex items-center justify-center gap-1"
+                title="Télécharger en format Excel"
+              >
+                <FileSpreadsheet className="h-3 w-3" /> Excel
+              </button>
+              <button
+                onClick={() => exportGeneralLedger(state.sales, state.expenses || [], state.products, state.settings.currency, "csv")}
+                className="flex-1 py-1.5 rounded-lg bg-secondary hover:bg-secondary/80 text-foreground text-xs font-medium transition-colors flex items-center justify-center gap-1"
+                title="Télécharger en format CSV"
+              >
+                <FileText className="h-3 w-3" /> CSV
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* ───────────────────────────────────────────────────────────── */}
+      {/* MODAL : EXPORT COMPTABLE SUR-MESURE AVEC FILTRES             */}
+      {/* ───────────────────────────────────────────────────────────── */}
+      {showExportModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 animate-fade-in overflow-y-auto">
+          <div className="bg-card border border-border/60 rounded-3xl p-6 w-full max-w-lg shadow-2xl space-y-5 animate-scale-in my-8">
+            <div className="flex items-center justify-between pb-3 border-b border-border/40">
+              <div className="flex items-center gap-2.5">
+                <div className="h-10 w-10 rounded-2xl bg-primary/10 text-primary flex items-center justify-center">
+                  <Download className="h-5 w-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-foreground">Export Comptable & Fiscal</h3>
+                  <p className="text-xs text-muted-foreground">Choisissez le document, la période et le format</p>
+                </div>
+              </div>
+              <button 
+                onClick={() => setShowExportModal(false)}
+                className="h-8 w-8 rounded-full hover:bg-secondary flex items-center justify-center text-muted-foreground"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            {exportSuccessNotice ? (
+              <div className="py-8 text-center space-y-3">
+                <CheckCircle2 className="h-12 w-12 text-emerald-500 mx-auto animate-bounce" />
+                <p className="text-sm font-bold text-foreground">{exportSuccessNotice}</p>
+                <p className="text-xs text-muted-foreground">Le fichier s'est ouvert dans vos téléchargements.</p>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {/* 1. Type de rapport */}
+                <div>
+                  <label className="text-xs font-bold text-foreground block mb-2">1. Type de document à exporter</label>
+                  <div className="grid grid-cols-2 gap-2">
+                    {[
+                      { id: "sales" as const, label: "Journal des Ventes", desc: "Recettes & modes paiement" },
+                      { id: "expenses" as const, label: "Journal des Dépenses", desc: "Charges & factures" },
+                      { id: "inventory" as const, label: "Valorisation Stocks", desc: "Coûts, prix & marges" },
+                      { id: "ledger" as const, label: "Compte de Résultat", desc: "Bilan global & bénéfice net" },
+                    ].map((t) => (
+                      <button
+                        key={t.id}
+                        type="button"
+                        onClick={() => setExportType(t.id)}
+                        className={`p-3 rounded-xl border text-left transition-all ${
+                          exportType === t.id 
+                            ? "border-primary bg-primary/5 text-primary ring-1 ring-primary/40 font-bold" 
+                            : "border-border/50 bg-secondary/20 hover:bg-secondary/40 text-muted-foreground"
+                        }`}
+                      >
+                        <p className="text-xs font-bold text-foreground">{t.label}</p>
+                        <p className="text-[10px] opacity-80 mt-0.5">{t.desc}</p>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* 2. Période (si applicable) */}
+                {exportType !== "inventory" && (
+                  <div>
+                    <label className="text-xs font-bold text-foreground block mb-2">2. Période couverte</label>
+                    <div className="grid grid-cols-3 gap-2 text-xs">
+                      {[
+                        { id: "month" as const, label: "Ce mois-ci" },
+                        { id: "last_month" as const, label: "Mois dernier" },
+                        { id: "week" as const, label: "7 derniers jours" },
+                        { id: "today" as const, label: "Aujourd'hui" },
+                        { id: "all" as const, label: "Tout l'historique" },
+                      ].map((p) => (
+                        <button
+                          key={p.id}
+                          type="button"
+                          onClick={() => setExportPeriod(p.id)}
+                          className={`py-2 px-2.5 rounded-xl border text-center transition-all ${
+                            exportPeriod === p.id 
+                              ? "border-primary bg-primary/10 text-primary font-bold" 
+                              : "border-border/50 bg-secondary/20 hover:bg-secondary/40 text-muted-foreground"
+                          }`}
+                        >
+                          {p.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* 3. Format */}
+                <div>
+                  <label className="text-xs font-bold text-foreground block mb-2">
+                    {exportType === "inventory" ? "2. Format du fichier" : "3. Format du fichier"}
+                  </label>
+                  <div className="grid grid-cols-2 gap-3">
+                    <button
+                      type="button"
+                      onClick={() => setExportFormat("excel")}
+                      className={`p-3 rounded-xl border flex items-center gap-3 transition-all ${
+                        exportFormat === "excel"
+                          ? "border-emerald-500 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 ring-1 ring-emerald-500 font-bold"
+                          : "border-border/50 bg-secondary/20 hover:bg-secondary/40 text-muted-foreground"
+                      }`}
+                    >
+                      <FileSpreadsheet className="h-6 w-6 text-emerald-600" />
+                      <div className="text-left">
+                        <p className="text-xs font-bold text-foreground">Microsoft Excel (.xls)</p>
+                        <p className="text-[10px] opacity-80">Mise en forme stylisée & totaux</p>
+                      </div>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setExportFormat("csv")}
+                      className={`p-3 rounded-xl border flex items-center gap-3 transition-all ${
+                        exportFormat === "csv"
+                          ? "border-primary bg-primary/10 text-primary ring-1 ring-primary font-bold"
+                          : "border-border/50 bg-secondary/20 hover:bg-secondary/40 text-muted-foreground"
+                      }`}
+                    >
+                      <FileText className="h-6 w-6 text-primary" />
+                      <div className="text-left">
+                        <p className="text-xs font-bold text-foreground">Fichier CSV (.csv)</p>
+                        <p className="text-[10px] opacity-80">Format standard universel (UTF-8)</p>
+                      </div>
+                    </button>
+                  </div>
+                </div>
+
+                <div className="flex gap-3 pt-3 border-t border-border/40">
+                  <button
+                    type="button"
+                    onClick={() => setShowExportModal(false)}
+                    className="flex-1 py-2.5 rounded-xl border border-border/60 text-xs font-medium hover:bg-secondary transition-colors"
+                  >
+                    Annuler
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleRunExport}
+                    className="flex-[1.5] py-2.5 rounded-xl bg-primary text-primary-foreground hover:opacity-90 text-xs font-bold transition-all shadow-md flex items-center justify-center gap-2"
+                  >
+                    <Download className="h-4 w-4" />
+                    Télécharger le document
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

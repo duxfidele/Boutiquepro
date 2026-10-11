@@ -4,6 +4,8 @@ import React, { useState, useMemo } from "react";
 import { useStore, Product } from "@/context/StoreContext";
 import { useAuth } from "@/context/AuthContext";
 import { ProductAvatar } from "@/components/ui/ProductAvatar";
+import { exportInventoryValuation } from "@/lib/accountingExport";
+import { FileSpreadsheet, Download } from "lucide-react";
 import {
   Package,
   Plus,
@@ -119,15 +121,27 @@ export default function ProductsPage() {
             {state.products.length} produits • {state.products.filter((p) => p.stock <= p.minStock).length} en alerte
           </p>
         </div>
-        {role === "admin" && (
+        <div className="flex items-center gap-2 flex-wrap">
           <button
-            onClick={openCreate}
-            className="flex items-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground hover:opacity-90 transition-opacity shadow-sm"
+            type="button"
+            onClick={() => exportInventoryValuation(state.products, state.settings.currency, "excel")}
+            className="flex items-center gap-1.5 rounded-xl border border-border/60 bg-secondary/40 hover:bg-secondary px-3 py-2 text-xs font-bold text-foreground transition-all shadow-xs"
+            title="Exporter l'inventaire complet en Excel"
           >
-            <Plus className="h-4 w-4" />
-            Nouveau produit
+            <FileSpreadsheet className="h-3.5 w-3.5 text-emerald-600" />
+            <span>Export Stock (Excel)</span>
           </button>
-        )}
+
+          {role === "admin" && (
+            <button
+              onClick={openCreate}
+              className="flex items-center gap-2 rounded-xl bg-primary px-4 py-2 text-xs font-bold text-primary-foreground hover:opacity-90 transition-opacity shadow-sm"
+            >
+              <Plus className="h-4 w-4" />
+              Nouveau produit
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Filters */}

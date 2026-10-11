@@ -2,7 +2,8 @@
 
 import React, { useState } from "react";
 import { useStore } from "@/context/StoreContext";
-import { Plus, Search, Edit2, Trash2, Receipt } from "lucide-react";
+import { Plus, Search, Edit2, Trash2, Receipt, FileSpreadsheet, Download } from "lucide-react";
+import { exportExpensesJournal } from "@/lib/accountingExport";
 
 export default function ExpensesPage() {
   const { state, dispatch, formatPrice } = useStore();
@@ -64,13 +65,25 @@ export default function ExpensesPage() {
           <h1 className="text-2xl lg:text-3xl font-bold text-foreground">Dépenses</h1>
           <p className="text-sm text-muted-foreground">Gérez vos charges et frais d'exploitation</p>
         </div>
-        <button
-          onClick={() => setShowModal(true)}
-          className="flex items-center gap-2 bg-primary text-white px-4 py-2 rounded-xl font-medium hover:bg-primary/90 transition-colors shadow-soft-sm active:scale-95"
-        >
-          <Plus className="h-4 w-4" />
-          Ajouter une Dépense
-        </button>
+        <div className="flex items-center gap-2 flex-wrap">
+          <button
+            type="button"
+            onClick={() => exportExpensesJournal(state.expenses || [], state.settings.currency, "excel")}
+            className="flex items-center gap-1.5 rounded-xl border border-border/60 bg-secondary/40 hover:bg-secondary px-3 py-2 text-xs font-bold text-foreground transition-all shadow-xs"
+            title="Exporter les dépenses en Excel"
+          >
+            <FileSpreadsheet className="h-3.5 w-3.5 text-emerald-600" />
+            <span>Export Dépenses (Excel)</span>
+          </button>
+
+          <button
+            onClick={() => setShowModal(true)}
+            className="flex items-center gap-2 bg-primary text-white px-4 py-2 rounded-xl text-xs font-bold hover:bg-primary/90 transition-colors shadow-soft-sm active:scale-95"
+          >
+            <Plus className="h-4 w-4" />
+            Ajouter une Dépense
+          </button>
+        </div>
       </div>
 
       {/* Summary Cards */}
