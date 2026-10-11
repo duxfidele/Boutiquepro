@@ -48,18 +48,27 @@ export default function Sidebar({ isOpen, onClose }: { isOpen?: boolean, onClose
   useEffect(() => {
     const fetchCashier = async () => {
       if (activeStore && activeStore.role === 'admin') {
-        const { data } = await supabase
-          .from('store_members')
-          .select('profiles(full_name, email)')
-          .eq('store_id', activeStore.id)
-          .eq('role', 'cashier')
-          .limit(1)
-          .single();
-        
-        if (data && data.profiles) {
-          // @ts-ignore
-          setCashierName(data.profiles.full_name || data.profiles.email || 'Caissier sans nom');
-        } else {
+        try {
+          const { data: member } = await supabase
+            .from('store_members')
+            .select('user_id')
+            .eq('store_id', activeStore.id)
+            .eq('role', 'cashier')
+            .limit(1)
+            .maybeSingle();
+          
+          if (member?.user_id) {
+            const { data: profile } = await supabase
+              .from('profiles')
+              .select('full_name, email')
+              .eq('id', member.user_id)
+              .maybeSingle();
+
+            setCashierName(profile?.full_name || profile?.email || 'Caissier');
+          } else {
+            setCashierName('Aucun caissier');
+          }
+        } catch {
           setCashierName('Aucun caissier');
         }
       } else {

@@ -3,162 +3,529 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/context/AuthContext';
-import { UserPlus, Shield, User, Trash2 } from 'lucide-react';
-const toast = { success: (msg: string) => alert(msg), error: (msg: string) => alert(msg) };
+import { UserPlus, Shield, User, Trash2, Store, Key, Mail, RefreshCw, CheckCircle2, AlertCircle, PlusCircle } from 'lucide-react';
 
 export default function TeamPage() {
-  const { user, activeStore } = useAuth();
+  const { user, stores, activeStore, setActiveStore } = useAuth();
+  
+  // Boutiques où l'utilisateur connecté est administrateur
+  const adminStores = stores?.filter((s: any) => s.role === 'admin') || [];
+  
+  // Boutique sélectionnée pour la gestion de l'équipe
+  const [selectedStoreId, setSelectedStoreId] = useState<string>(activeStore?.id || adminStores[0]?.id || '');
+  
   const [members, setMembers] = useState<any[]>([]);
-  const [email, setEmail] = useState('');
   const [loading, setLoading] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
+  const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
+  // Mode d'ajout : 'create' (créer un nouveau compte) ou 'assign' (relier un compte existant)
+  const [addMode, setAddMode] = useState<'create' | 'assign'>('create');
+
+  // Champs de formulaire
+  const [cashierName, setCashierName] = useState('');
+  const [cashierEmail, setCashierEmail] = useState('');
+  const [cashierPassword, setCashierPassword] = useState('');
+
+  // Synchroniser la boutique sélectionnée avec activeStore si présent
+  useEffect(() => {
+    if (activeStore?.id && !selectedStoreId) {
+      setSelectedStoreId(activeStore.id);
+    } else if (adminStores.length > 0 && !selectedStoreId) {
+      setSelectedStoreId(adminStores[0].id);
+    }
+  }, [activeStore, adminStores]);
+
+  // Récupérer les membres de la boutique sélectionnée (Ultra-robuste : 0 erreur 400)
   const fetchMembers = async () => {
+    if (!selectedStoreId) return;
+    setLoading(true);
+
     try {
-      if (!activeStore) return;
+      // 1. Essayer d'abord la fonction RPC serveur dédiée
+      const { data: rpcMembers, error: rpcError } = await supabase
+        .rpc('get_store_team_members', { p_store_id: selectedStoreId });
 
-      const { data: membersData, error } = await supabase
+      if (!rpcError && rpcMembers) {
+        setMembers(rpcMembers);
+        setLoading(false);
+        return;
+      }
+
+      // 2. Repli de sécurité si la RPC n'est pas encore exécutée : 2 requêtes propres
+      const { data: membersData, error: mError } = await supabase
         .from('store_members')
-        .select(`
-          id, role,
-          profiles:user_id(id, email)
-        `)
-        .eq('store_id', activeStore.id);
+        .select('id, user_id, role, created_at')
+        .eq('store_id', selectedStoreId);
 
-      if (error) throw error;
-      setMembers(membersData || []);
-    } catch (e) {
-      console.error(e);
+      if (mError) throw mError;
+
+      if (!membersData || membersData.length === 0) {
+        setMembers([]);
+        setLoading(false);
+        return;
+      }
+
+      const userIds = membersData.map((m: any) => m.user_id);
+      const { data: profilesData } = await supabase
+        .from('profiles')
+        .select('id, email, full_name')
+        .in('id', userIds);
+
+      const profileMap = new Map((profilesData || []).map((p: any) => [p.id, p]));
+
+      const combined = membersData.map((m: any) => {
+        const prof = profileMap.get(m.user_id);
+        return {
+          member_id: m.id,
+          user_id: m.user_id,
+          email: prof?.email || 'Email non renseigné',
+          full_name: prof?.full_name || (prof?.email ? prof.email.split('@')[0] : 'Membre'),
+          role: m.role,
+          created_at: m.created_at
+        };
+      });
+
+      // Trier : Admin en premier, puis caissiers
+      combined.sort((a: any, b: any) => (a.role === 'admin' ? -1 : 1));
+      setMembers(combined);
+    } catch (e: any) {
+      console.error('Erreur lors du chargement des membres :', e);
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    if (user && activeStore) fetchMembers();
-  }, [user, activeStore]);
+    if (selectedStoreId) {
+      fetchMembers();
+    }
+  }, [selectedStoreId]);
 
-  const handleAddCashier = async (e: React.FormEvent) => {
+  // Mode 1 : Créer directement un compte caissier (email + mot de passe)
+  const handleCreateCashier = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!email) return;
+    if (!cashierEmail || !cashierPassword || !selectedStoreId) return;
+
+    setSubmitting(true);
+    setMessage(null);
 
     try {
-      const { data: profileId, error: rpcError } = await supabase
-        .rpc('get_user_id_by_email', { p_email: email });
+      const { data, error } = await supabase.rpc('admin_create_cashier', {
+        p_store_id: selectedStoreId,
+        p_name: cashierName.trim() || cashierEmail.split('@')[0],
+        p_email: cashierEmail.trim().toLowerCase(),
+        p_password: cashierPassword
+      });
 
-      if (rpcError) throw rpcError;
+      if (error) throw error;
 
-      if (!profileId) {
-        toast.error("Aucun utilisateur trouvé avec cet email. Le caissier doit d'abord créer un compte sur l'application.");
-        return;
-      }
-
-      if (!activeStore) return;
-
-      const { error } = await supabase
-        .from('store_members')
-        .insert({
-          store_id: activeStore.id,
-          user_id: profileId,
-          role: 'cashier'
+      if (data && data.success === false) {
+        setMessage({ type: 'error', text: data.message });
+      } else {
+        setMessage({ 
+          type: 'success', 
+          text: data?.message || `Le compte du caissier ${cashierEmail} a été créé et lié à la boutique avec succès !`
         });
+        setCashierName('');
+        setCashierEmail('');
+        setCashierPassword('');
+        fetchMembers();
+      }
+    } catch (error: any) {
+      console.error(error);
+      setMessage({
+        type: 'error',
+        text: "Erreur lors de la création : " + (error.message || "Veuillez exécuter le script SQL saas_team_and_stores_management.sql dans Supabase.")
+      });
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  // Mode 2 : Lier un caissier déjà inscrit par son email
+  const handleAssignCashier = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!cashierEmail || !selectedStoreId) return;
+
+    setSubmitting(true);
+    setMessage(null);
+
+    try {
+      const { data, error } = await supabase.rpc('assign_cashier_by_email', {
+        p_store_id: selectedStoreId,
+        p_email: cashierEmail.trim().toLowerCase()
+      });
 
       if (error) {
-        if (error.code === '23505') toast.error("Cet utilisateur est déjà dans l'équipe.");
-        else throw error;
-        return;
+        // Fallback si la nouvelle RPC n'est pas encore créée
+        const { data: profileId, error: rpcError } = await supabase
+          .rpc('get_user_id_by_email', { p_email: cashierEmail.trim().toLowerCase() });
+
+        if (rpcError || !profileId) {
+          setMessage({
+            type: 'error',
+            text: "Aucun utilisateur trouvé avec cet email. Utilisez l'onglet \"Créer un compte caissier\" pour lui créer son accès directement."
+          });
+          setSubmitting(false);
+          return;
+        }
+
+        const { error: insertError } = await supabase
+          .from('store_members')
+          .insert({
+            store_id: selectedStoreId,
+            user_id: profileId,
+            role: 'cashier'
+          });
+
+        if (insertError) {
+          if (insertError.code === '23505') {
+            setMessage({ type: 'error', text: "Cet utilisateur est déjà caissier de cette boutique." });
+          } else {
+            throw insertError;
+          }
+          setSubmitting(false);
+          return;
+        }
+
+        setMessage({ type: 'success', text: "Caissier lié avec succès à la boutique !" });
+      } else if (data && data.success === false) {
+        setMessage({ type: 'error', text: data.message });
+      } else {
+        setMessage({ type: 'success', text: data?.message || "Caissier lié avec succès !" });
       }
 
-      toast.success("Caissier ajouté avec succès !");
-      setEmail('');
+      setCashierEmail('');
       fetchMembers();
     } catch (error: any) {
       console.error(error);
-      toast.error("Erreur lors de l'ajout du caissier : " + (error.message || JSON.stringify(error)));
+      setMessage({ type: 'error', text: "Erreur : " + (error.message || JSON.stringify(error)) });
+    } finally {
+      setSubmitting(false);
     }
   };
 
-  const handleRemoveMember = async (memberId: string) => {
-    if (!window.confirm("Voulez-vous vraiment retirer cet accès ?")) return;
-    
+  // Retirer un caissier de la boutique sélectionnée
+  const handleRemoveMember = async (memberId: string, memberRole: string) => {
+    if (memberRole === 'admin') {
+      alert("Impossible de retirer le gérant de la boutique !");
+      return;
+    }
+
+    if (!window.confirm("Voulez-vous vraiment retirer l'accès de ce caissier à cette boutique ?")) return;
+
     try {
-      await supabase.from('store_members').delete().eq('id', memberId);
-      toast.success("Accès retiré");
+      // 1. Essayer la RPC sécurisée
+      const { data, error } = await supabase.rpc('remove_cashier_from_store', {
+        p_store_id: selectedStoreId,
+        p_member_id: memberId
+      });
+
+      if (!error && data?.success) {
+        setMessage({ type: 'success', text: "Accès retiré avec succès." });
+      } else {
+        // Fallback delete
+        await supabase.from('store_members').delete().eq('id', memberId);
+        setMessage({ type: 'success', text: "Accès retiré avec succès." });
+      }
       fetchMembers();
-    } catch (e) {
-      toast.error("Erreur");
+    } catch (e: any) {
+      console.error(e);
+      setMessage({ type: 'error', text: "Erreur lors du retrait de l'accès." });
     }
   };
 
-  if (loading) return <div>Chargement...</div>;
+  const selectedStore = adminStores.find((s: any) => s.id === selectedStoreId);
 
   return (
-    <div className="max-w-4xl mx-auto space-y-6">
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+    <div className="max-w-5xl mx-auto space-y-6 animate-fade-in pb-12">
+      {/* En-tête avec sélecteur de boutique */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 glass-panel p-6 rounded-3xl border border-border/50">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Mon Équipe</h1>
-          <p className="text-muted-foreground">Gérez les accès de vos caissiers</p>
+          <h1 className="text-2xl font-bold tracking-tight text-foreground flex items-center gap-2">
+            <Store className="h-6 w-6 text-primary" />
+            Mon Équipe & Attribution des Boutiques
+          </h1>
+          <p className="text-sm text-muted-foreground mt-1">
+            Gérez vos boutiques et affectez vos caissiers en toute sécurité.
+          </p>
+        </div>
+
+        {/* Sélecteur de boutique dynamique */}
+        <div className="flex items-center gap-3 bg-secondary/50 p-2 rounded-2xl border border-border/40">
+          <span className="text-xs font-semibold text-muted-foreground pl-2 whitespace-nowrap">Boutique :</span>
+          <select
+            value={selectedStoreId}
+            onChange={(e) => {
+              setSelectedStoreId(e.target.value);
+              const storeObj = stores.find((s: any) => s.id === e.target.value);
+              if (storeObj) setActiveStore(storeObj);
+            }}
+            className="bg-background text-foreground text-sm font-bold px-3 py-2 rounded-xl border border-border/60 outline-none focus:ring-2 focus:ring-primary cursor-pointer"
+          >
+            {adminStores.map((s: any) => (
+              <option key={s.id} value={s.id}>
+                🏪 {s.name}
+              </option>
+            ))}
+          </select>
         </div>
       </div>
 
-      <div className="grid gap-6 md:grid-cols-2">
-        <div className="glass-panel p-6 rounded-2xl h-fit">
-          <h2 className="text-lg font-semibold flex items-center gap-2 mb-4">
-            <UserPlus className="h-5 w-5 text-primary" />
-            Ajouter un caissier
-          </h2>
-          <p className="text-sm text-muted-foreground mb-4">
-            Le caissier doit d'abord s'inscrire sur l'application. Ensuite, entrez son email ici pour lui donner accès à votre caisse.
-          </p>
-          <form onSubmit={handleAddCashier} className="space-y-4">
-            <div>
-              <input
-                type="email"
-                placeholder="Email du caissier..."
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                className="w-full rounded-xl border border-border/50 bg-secondary/50 px-4 py-2"
-                required
-              />
-            </div>
-            <button type="submit" className="w-full btn-primary py-2 rounded-xl">
-              Donner l'accès
+      {/* Message de notification */}
+      {message && (
+        <div
+          className={`p-4 rounded-2xl flex items-center gap-3 border animate-fade-in ${
+            message.type === 'error'
+              ? 'bg-destructive/10 border-destructive/20 text-destructive'
+              : 'bg-emerald-500/10 border-emerald-500/20 text-emerald-600 dark:text-emerald-400'
+          }`}
+        >
+          {message.type === 'error' ? (
+            <AlertCircle className="h-5 w-5 shrink-0" />
+          ) : (
+            <CheckCircle2 className="h-5 w-5 shrink-0" />
+          )}
+          <p className="text-sm font-medium">{message.text}</p>
+        </div>
+      )}
+
+      <div className="grid gap-6 lg:grid-cols-12">
+        {/* Formulaire d'attribution / création */}
+        <div className="lg:col-span-5 glass-panel p-6 rounded-3xl border border-border/50 space-y-5 h-fit">
+          <div className="flex items-center justify-between border-b border-border/40 pb-4">
+            <h2 className="text-lg font-bold flex items-center gap-2">
+              <UserPlus className="h-5 w-5 text-primary" />
+              Attribuer un caissier
+            </h2>
+            <span className="text-xs font-bold px-2.5 py-1 rounded-full bg-primary/10 text-primary">
+              {selectedStore?.name || 'Boutique'}
+            </span>
+          </div>
+
+          {/* Onglets de mode */}
+          <div className="grid grid-cols-2 gap-1.5 p-1 bg-secondary/60 rounded-2xl">
+            <button
+              type="button"
+              onClick={() => setAddMode('create')}
+              className={`py-2 text-xs font-bold rounded-xl transition-all ${
+                addMode === 'create'
+                  ? 'bg-background text-foreground shadow-sm'
+                  : 'text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              Créer un compte
             </button>
-          </form>
+            <button
+              type="button"
+              onClick={() => setAddMode('assign')}
+              className={`py-2 text-xs font-bold rounded-xl transition-all ${
+                addMode === 'assign'
+                  ? 'bg-background text-foreground shadow-sm'
+                  : 'text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              Compte existant
+            </button>
+          </div>
+
+          {addMode === 'create' ? (
+            /* Mode 1 : Création complète et directe */
+            <form onSubmit={handleCreateCashier} className="space-y-4">
+              <p className="text-xs text-muted-foreground leading-relaxed">
+                Créez directement l'accès de votre employé. Son compte sera immédiatement activé et rattaché à <strong>{selectedStore?.name}</strong> sans bloquer sur l'envoi d'email.
+              </p>
+
+              <div>
+                <label className="text-xs font-semibold text-muted-foreground mb-1 block">Nom du caissier</label>
+                <div className="relative">
+                  <User className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <input
+                    type="text"
+                    placeholder="Ex: Moussa Diop"
+                    value={cashierName}
+                    onChange={(e) => setCashierName(e.target.value)}
+                    className="w-full pl-9 pr-4 py-2.5 rounded-xl border border-border/60 bg-background text-sm focus:ring-2 focus:ring-primary outline-none"
+                    required
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="text-xs font-semibold text-muted-foreground mb-1 block">Adresse Email / Identifiant</label>
+                <div className="relative">
+                  <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <input
+                    type="email"
+                    placeholder="Ex: caissier@maboutique.com"
+                    value={cashierEmail}
+                    onChange={(e) => setCashierEmail(e.target.value)}
+                    className="w-full pl-9 pr-4 py-2.5 rounded-xl border border-border/60 bg-background text-sm focus:ring-2 focus:ring-primary outline-none"
+                    required
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="text-xs font-semibold text-muted-foreground mb-1 block">Mot de passe provisoire</label>
+                <div className="relative">
+                  <Key className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <input
+                    type="password"
+                    placeholder="Minimum 6 caractères"
+                    value={cashierPassword}
+                    onChange={(e) => setCashierPassword(e.target.value)}
+                    className="w-full pl-9 pr-4 py-2.5 rounded-xl border border-border/60 bg-background text-sm focus:ring-2 focus:ring-primary outline-none"
+                    required
+                    minLength={6}
+                  />
+                </div>
+              </div>
+
+              <button
+                type="submit"
+                disabled={submitting}
+                className="w-full btn-primary py-2.5 rounded-xl text-sm font-bold flex items-center justify-center gap-2 shadow-lg shadow-primary/20"
+              >
+                {submitting ? (
+                  <>
+                    <RefreshCw className="h-4 w-4 animate-spin" />
+                    Création en cours...
+                  </>
+                ) : (
+                  <>
+                    <PlusCircle className="h-4 w-4" />
+                    Créer et affecter à la boutique
+                  </>
+                )}
+              </button>
+            </form>
+          ) : (
+            /* Mode 2 : Liaison d'un compte déjà inscrit */
+            <form onSubmit={handleAssignCashier} className="space-y-4">
+              <p className="text-xs text-muted-foreground leading-relaxed">
+                Si votre caissier a déjà créé son compte sur l'application, saisissez son email pour le relier directement à <strong>{selectedStore?.name}</strong>.
+              </p>
+
+              <div>
+                <label className="text-xs font-semibold text-muted-foreground mb-1 block">Email du caissier</label>
+                <div className="relative">
+                  <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <input
+                    type="email"
+                    placeholder="email.caissier@gmail.com"
+                    value={cashierEmail}
+                    onChange={(e) => setCashierEmail(e.target.value)}
+                    className="w-full pl-9 pr-4 py-2.5 rounded-xl border border-border/60 bg-background text-sm focus:ring-2 focus:ring-primary outline-none"
+                    required
+                  />
+                </div>
+              </div>
+
+              <button
+                type="submit"
+                disabled={submitting}
+                className="w-full btn-primary py-2.5 rounded-xl text-sm font-bold flex items-center justify-center gap-2 shadow-lg shadow-primary/20"
+              >
+                {submitting ? (
+                  <>
+                    <RefreshCw className="h-4 w-4 animate-spin" />
+                    Attribution en cours...
+                  </>
+                ) : (
+                  <>
+                    <UserPlus className="h-4 w-4" />
+                    Affecter à cette boutique
+                  </>
+                )}
+              </button>
+            </form>
+          )}
         </div>
 
-        <div className="glass-panel p-0 rounded-2xl overflow-hidden">
-          <div className="p-4 border-b border-border/50 bg-secondary/20">
-            <h2 className="font-semibold">Membres actifs</h2>
+        {/* Liste des membres affectés à la boutique sélectionnée */}
+        <div className="lg:col-span-7 glass-panel p-0 rounded-3xl border border-border/50 overflow-hidden flex flex-col">
+          <div className="p-5 border-b border-border/50 bg-secondary/30 flex items-center justify-between">
+            <div>
+              <h2 className="font-bold text-foreground">Équipe de : {selectedStore?.name}</h2>
+              <p className="text-xs text-muted-foreground">{members.length} membre(s) enregistré(s)</p>
+            </div>
+            <button
+              onClick={fetchMembers}
+              disabled={loading}
+              className="p-2 text-muted-foreground hover:text-foreground rounded-xl hover:bg-secondary transition-colors"
+              title="Rafraîchir"
+            >
+              <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+            </button>
           </div>
-          <div className="divide-y divide-border/50">
-            {members.map((member) => (
-              <div key={member.id} className="p-4 flex items-center justify-between hover:bg-secondary/20 transition-colors">
-                <div className="flex items-center gap-3">
-                  <div className={`p-2 rounded-full ${member.role === 'admin' ? 'bg-primary/20 text-primary' : 'bg-orange-500/20 text-orange-500'}`}>
-                    {member.role === 'admin' ? <Shield className="h-4 w-4" /> : <User className="h-4 w-4" />}
+
+          <div className="divide-y divide-border/40 flex-1">
+            {loading ? (
+              <div className="p-12 text-center text-muted-foreground flex flex-col items-center justify-center gap-3">
+                <RefreshCw className="h-6 w-6 animate-spin text-primary" />
+                <span className="text-sm font-medium">Chargement de l'équipe...</span>
+              </div>
+            ) : members.length === 0 ? (
+              <div className="p-12 text-center text-muted-foreground text-sm flex flex-col items-center gap-2">
+                <User className="h-8 w-8 text-muted-foreground/40" />
+                <span>Aucun caissier n'est encore rattaché à cette boutique.</span>
+                <span className="text-xs">Utilisez le formulaire à gauche pour affecter un caissier.</span>
+              </div>
+            ) : (
+              members.map((member) => (
+                <div
+                  key={member.member_id || member.id}
+                  className="p-4 flex items-center justify-between hover:bg-secondary/20 transition-colors"
+                >
+                  <div className="flex items-center gap-3">
+                    <div
+                      className={`h-10 w-10 rounded-2xl flex items-center justify-center font-bold text-sm ${
+                        member.role === 'admin'
+                          ? 'bg-primary/20 text-primary border border-primary/30'
+                          : 'bg-amber-500/20 text-amber-500 border border-amber-500/30'
+                      }`}
+                    >
+                      {member.role === 'admin' ? (
+                        <Shield className="h-5 w-5" />
+                      ) : (
+                        member.full_name?.charAt(0).toUpperCase() || 'C'
+                      )}
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <p className="font-bold text-sm text-foreground">
+                          {member.full_name || 'Utilisateur'}
+                        </p>
+                        <span
+                          className={`text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full ${
+                            member.role === 'admin'
+                              ? 'bg-primary/10 text-primary'
+                              : 'bg-amber-500/10 text-amber-500'
+                          }`}
+                        >
+                          {member.role === 'admin' ? 'Gérant / Boss' : 'Caissier'}
+                        </span>
+                      </div>
+                      <p className="text-xs text-muted-foreground flex items-center gap-1.5 mt-0.5">
+                        <Mail className="h-3 w-3" />
+                        {member.email}
+                      </p>
+                    </div>
                   </div>
-                  <div>
-                    <p className="font-medium text-sm">
-                      {member.profiles?.email || 'Utilisateur inconnu'}
-                    </p>
-                    <p className="text-xs text-muted-foreground capitalize">{member.role}</p>
-                  </div>
+
+                  {member.role !== 'admin' && (
+                    <button
+                      onClick={() => handleRemoveMember(member.member_id || member.id, member.role)}
+                      className="p-2 text-destructive hover:bg-destructive/10 rounded-xl transition-colors"
+                      title="Retirer l'accès à cette boutique"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  )}
                 </div>
-                {member.role !== 'admin' && (
-                  <button 
-                    onClick={() => handleRemoveMember(member.id)}
-                    className="p-2 text-destructive hover:bg-destructive/10 rounded-lg transition-colors"
-                    title="Retirer l'accès"
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </button>
-                )}
-              </div>
-            ))}
-            {members.length === 0 && (
-              <div className="p-8 text-center text-muted-foreground text-sm">
-                Aucun membre trouvé
-              </div>
+              ))
             )}
           </div>
         </div>

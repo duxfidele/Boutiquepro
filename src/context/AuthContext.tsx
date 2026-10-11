@@ -32,12 +32,20 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         
       if (data && data.length > 0) {
         // @ts-ignore
-        const mappedStores = data.map((d: any) => ({ id: d.stores.id, name: d.stores.name, role: d.role }));
+        const mappedStores = data
+          .filter((d: any) => d.stores && d.stores.id)
+          .map((d: any) => ({ id: d.stores.id, name: d.stores.name, role: d.role }));
+        
         setStores(mappedStores);
         
         const savedStoreId = localStorage.getItem('activeStoreId');
         let selected = mappedStores.find((s: any) => s.id === savedStoreId);
-        if (!selected) selected = mappedStores[0];
+        
+        // Priorité intelligente : si caissier, lui ouvrir sa boutique de caisse par défaut
+        if (!selected) {
+          const cashierStore = mappedStores.find((s: any) => s.role === 'cashier');
+          selected = cashierStore || mappedStores[0];
+        }
         
         setActiveStore(selected);
       } else {
