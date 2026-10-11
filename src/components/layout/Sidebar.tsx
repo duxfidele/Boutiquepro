@@ -26,10 +26,10 @@ import {
 } from "lucide-react";
 
 const navItems = [
-  { href: "/", label: "Tableau de bord", icon: LayoutDashboard, adminOnly: false },
-  { href: "/products", label: "Produits & Stock", icon: Package, adminOnly: false },
-  { href: "/inventory", label: "Inventaire", icon: ClipboardList, adminOnly: false },
+  { href: "/", label: "Tableau de bord", icon: LayoutDashboard, adminOnly: true },
   { href: "/pos", label: "Point de Vente", icon: ShoppingCart, adminOnly: false },
+  { href: "/products", label: "Produits & Stock", icon: Package, adminOnly: false },
+  { href: "/inventory", label: "Inventaire", icon: ClipboardList, adminOnly: true },
   { href: "/expenses", label: "Dépenses", icon: Receipt, adminOnly: true },
   { href: "/analytics", label: "Analytique", icon: BarChart3, adminOnly: true },
   { href: "/orders", label: "Commandes", icon: Truck, adminOnly: true },
@@ -119,8 +119,8 @@ export default function Sidebar({ isOpen, onClose }: { isOpen?: boolean, onClose
       <nav className="flex-1 overflow-y-auto py-4 px-3 no-scrollbar">
         <div className="flex flex-col w-full space-y-1">
           {navItems.filter(item => !item.adminOnly || role === 'admin').map((item) => {
-            // Role based filtering
-            if (role === 'cashier' && !['/', '/pos', '/products', '/customers'].includes(item.href)) {
+            // Role based filtering : un caissier n'a accès qu'à la caisse, aux produits et au support
+            if (role === 'cashier' && !['/pos', '/products', '/support'].includes(item.href)) {
               return null;
             }
 
@@ -157,54 +157,62 @@ export default function Sidebar({ isOpen, onClose }: { isOpen?: boolean, onClose
         </div>
       </nav>
 
-      {/* Store selector */}
-      {!collapsed && stores?.length > 0 && (
+      {/* Store display / selector */}
+      {!collapsed && (
         <div className="block border-t border-border/50 p-3 animate-fade-in space-y-2">
-          <div className="flex items-center gap-3 rounded-xl bg-secondary/50 px-3 py-2.5">
-            <Store className="h-4 w-4 text-muted-foreground shrink-0" />
-            <div className="flex-1 min-w-0">
-              <select 
-                value={activeStore?.id || ''}
-                onChange={(e) => {
-                  const s = stores.find(x => x.id === e.target.value);
-                  if (s) {
-                    setActiveStore(s);
-                    window.location.reload(); // Recharger pour rafraîchir le contexte de données
-                  }
-                }}
-                className="w-full bg-transparent text-xs font-medium truncate outline-none cursor-pointer appearance-none"
-              >
-                {stores.map(s => (
-                  <option key={s.id} value={s.id}>{s.name}</option>
-                ))}
-              </select>
-              <p className="text-[10px] text-muted-foreground truncate">
-                {activeStore?.role === 'admin' 
-                  ? <span className="text-primary font-medium">Géré par : {cashierName || '...'}</span>
-                  : <span className="capitalize font-medium">Caissier</span>
-                }
-              </p>
+          {role === 'admin' ? (
+            /* ADMIN : Sélecteur de ses boutiques */
+            <div className="flex items-center gap-3 rounded-xl bg-secondary/50 px-3 py-2.5">
+              <Store className="h-4 w-4 text-primary shrink-0" />
+              <div className="flex-1 min-w-0">
+                <select 
+                  value={activeStore?.id || ''}
+                  onChange={(e) => {
+                    const s = stores.find(x => x.id === e.target.value);
+                    if (s) {
+                      setActiveStore(s);
+                      window.location.reload();
+                    }
+                  }}
+                  className="w-full bg-transparent text-xs font-bold truncate outline-none cursor-pointer appearance-none text-foreground"
+                >
+                  {stores.map(s => (
+                    <option key={s.id} value={s.id}>{s.name}</option>
+                  ))}
+                </select>
+                <p className="text-[10px] text-muted-foreground truncate">
+                  <span className="text-primary font-medium">{cashierName ? `Caisse: ${cashierName}` : 'Gérant'}</span>
+                </p>
+              </div>
             </div>
-          </div>
-          
-          </div>
+          ) : (
+            /* CAISSIER : Boutique FIXE et VERROUILLÉE, aucun changement possible */
+            <div className="flex items-center gap-3 rounded-xl bg-secondary/30 px-3 py-2.5 border border-border/40">
+              <Store className="h-4 w-4 text-amber-500 shrink-0" />
+              <div className="flex-1 min-w-0">
+                <p className="text-xs font-bold text-foreground truncate">{activeStore?.name || 'Ma Boutique'}</p>
+                <p className="text-[10px] text-amber-500 font-semibold uppercase tracking-wider">Caisse active</p>
+              </div>
+            </div>
+          )}
+        </div>
       )}
 
-      {/* Bouton de création toujours visible si admin ou pas de boutique */}
-      {!collapsed && (!activeStore || role === 'admin') && (
+      {/* Bouton de création : STRICTEMENT RÉSERVÉ AUX ADMINS */}
+      {!collapsed && role === 'admin' && (
         <div className="px-3 pb-3">
-            <button
-              onClick={() => {
-                const name = window.prompt("Nom de la nouvelle boutique :");
-                if (name && name.trim().length > 0) {
-                  handleCreateStore(name.trim());
-                }
-              }}
-              className="flex w-full items-center justify-center gap-2 rounded-xl py-2 bg-primary/10 text-primary hover:bg-primary/20 transition-colors text-sm font-semibold"
-            >
-              <span className="text-lg leading-none">+</span>
-              Créer une boutique
-            </button>
+          <button
+            onClick={() => {
+              const name = window.prompt("Nom de la nouvelle boutique :");
+              if (name && name.trim().length > 0) {
+                handleCreateStore(name.trim());
+              }
+            }}
+            className="flex w-full items-center justify-center gap-2 rounded-xl py-2 bg-primary/10 text-primary hover:bg-primary/20 transition-colors text-sm font-semibold"
+          >
+            <span className="text-lg leading-none">+</span>
+            Créer une boutique
+          </button>
         </div>
       )}
 

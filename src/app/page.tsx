@@ -1,7 +1,8 @@
 "use client";
 
-import React from "react";
+import React, { useEffect } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useStore } from "@/context/StoreContext";
 import { useAuth } from "@/context/AuthContext";
 import {
@@ -34,6 +35,24 @@ const paymentLabels: Record<string, string> = {
 
 export default function Dashboard() {
   const { role, activeStore, stores } = useAuth();
+  const router = useRouter();
+
+  // VERROUILLAGE SÉCURITÉ : Un caissier ne doit JAMAIS voir le tableau de bord du Boss
+  useEffect(() => {
+    if (role === 'cashier') {
+      router.replace('/pos');
+    }
+  }, [role, router]);
+
+  // Si c'est un caissier, afficher un loader de redirection immédiat
+  if (role === 'cashier') {
+    return (
+      <div className="flex flex-col items-center justify-center h-[60vh] gap-3">
+        <ShoppingCart className="h-10 w-10 text-primary animate-bounce" />
+        <p className="text-sm font-semibold text-muted-foreground">Ouverture de votre caisse en cours...</p>
+      </div>
+    );
+  }
   const {
     state,
     formatPrice,

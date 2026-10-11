@@ -32,20 +32,37 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         
       if (data && data.length > 0) {
         // @ts-ignore
-        const mappedStores = data
-          .filter((d: any) => d.stores && d.stores.id)
-          .map((d: any) => ({ id: d.stores.id, name: d.stores.name, role: d.role }));
+        const valid = data.filter((d: any) => d.stores && d.stores.id);
+
+        // ISOLATION STRICTE : Si l'utilisateur est un caissier
+        const cashierStore = valid.find((d: any) => d.role === 'cashier');
         
+        if (cashierStore) {
+          // Le caissier ne voit QUE sa boutique assignée, rien d'autre !
+          const singleStore = [{
+            id: cashierStore.stores.id,
+            name: cashierStore.stores.name,
+            role: 'cashier'
+          }];
+          setStores(singleStore);
+          setRole('cashier');
+          setActiveStore(singleStore[0]);
+          return;
+        }
+
+        // Sinon c'est un administrateur : il voit toutes ses boutiques
+        const mappedStores = valid.map((d: any) => ({
+          id: d.stores.id,
+          name: d.stores.name,
+          role: d.role
+        }));
+
         setStores(mappedStores);
+        setRole('admin');
         
         const savedStoreId = localStorage.getItem('activeStoreId');
         let selected = mappedStores.find((s: any) => s.id === savedStoreId);
-        
-        // Priorité intelligente : si caissier, lui ouvrir sa boutique de caisse par défaut
-        if (!selected) {
-          const cashierStore = mappedStores.find((s: any) => s.role === 'cashier');
-          selected = cashierStore || mappedStores[0];
-        }
+        if (!selected) selected = mappedStores[0];
         
         setActiveStore(selected);
       } else {
