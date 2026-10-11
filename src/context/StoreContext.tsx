@@ -233,20 +233,23 @@ export function getSalesForSession(
   allSales: Sale[],
   allSessions: CashSession[] = []
 ): Sale[] {
-  if (!session) return [];
+  if (!session || !session.openedAt) return [];
   const sessionOpenedTime = new Date(session.openedAt).getTime();
+  if (isNaN(sessionOpenedTime)) return [];
   const sessionClosedTime = session.closedAt ? new Date(session.closedAt).getTime() : Infinity;
 
   // Si la session est déjà clôturée officiellement
   if (session.status === "closed" && session.closedAt) {
     return (allSales || []).filter((s) => {
+      if (!s || !s.createdAt) return false;
       const saleTime = new Date(s.createdAt).getTime();
-      return saleTime >= sessionOpenedTime && saleTime <= sessionClosedTime;
+      return !isNaN(saleTime) && saleTime >= sessionOpenedTime && saleTime <= sessionClosedTime;
     });
   }
 
   // Session en cours : rechercher la dernière clôture avant cette session
   const previousClosedSessions = (allSessions || []).filter((cs) =>
+    cs &&
     cs.id !== session.id &&
     cs.status === "closed" &&
     cs.closedAt &&
@@ -260,7 +263,10 @@ export function getSalesForSession(
   }
 
   return (allSales || []).filter((s) => {
+    if (!s || !s.createdAt) return false;
     const saleTime = new Date(s.createdAt).getTime();
+    if (isNaN(saleTime)) return false;
+
     // 1. Vente après l'ouverture du shift
     if (saleTime >= sessionOpenedTime) return true;
 

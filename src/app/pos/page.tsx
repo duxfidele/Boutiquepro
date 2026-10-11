@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useMemo, useRef } from "react";
-import { useStore, Sale } from "@/context/StoreContext";
+import { useStore, Sale, CashSession, getSalesForSession } from "@/context/StoreContext";
 import { ProductAvatar } from "@/components/ui/ProductAvatar";
 import {
   ShoppingCart,
@@ -29,7 +29,6 @@ import {
   Clock,
   ShieldCheck,
 } from "lucide-react";
-import { CashSession } from "@/context/StoreContext";
 import { useAuth } from "@/context/AuthContext";
 import html2canvas from "html2canvas";
 import jsPDF from "jspdf";
@@ -276,16 +275,17 @@ export default function POSPage() {
   // Calcul dynamique en direct des ventes de la session / journée
   const currentSessionSales = useMemo(() => {
     if (!activeCashSession) return [];
-    return getSalesForSession(activeCashSession, state.sales, cashSessions);
-  }, [activeCashSession, state.sales, cashSessions]);
+    return getSalesForSession(activeCashSession, state?.sales || [], cashSessions || []);
+  }, [activeCashSession, state?.sales, cashSessions]);
 
   const currentSessionStats = useMemo(() => {
-    const cash = currentSessionSales.filter((s) => s.paymentMethod === "cash").reduce((sum, s) => sum + s.total, 0);
-    const mm = currentSessionSales.filter((s) => s.paymentMethod === "mobile_money").reduce((sum, s) => sum + s.total, 0);
-    const card = currentSessionSales.filter((s) => s.paymentMethod === "card").reduce((sum, s) => sum + s.total, 0);
-    const total = currentSessionSales.reduce((sum, s) => sum + s.total, 0);
-    const count = currentSessionSales.length;
-    const opening = activeCashSession?.openingAmount || 0;
+    const sales = currentSessionSales || [];
+    const cash = sales.filter((s) => s && s.paymentMethod === "cash").reduce((sum, s) => sum + (Number(s.total) || 0), 0);
+    const mm = sales.filter((s) => s && s.paymentMethod === "mobile_money").reduce((sum, s) => sum + (Number(s.total) || 0), 0);
+    const card = sales.filter((s) => s && s.paymentMethod === "card").reduce((sum, s) => sum + (Number(s.total) || 0), 0);
+    const total = sales.reduce((sum, s) => sum + (Number(s.total) || 0), 0);
+    const count = sales.length;
+    const opening = Number(activeCashSession?.openingAmount) || 0;
     const expectedCashInDrawer = opening + cash;
     return { cash, mm, card, total, count, opening, expectedCashInDrawer };
   }, [currentSessionSales, activeCashSession]);
