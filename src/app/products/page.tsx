@@ -2,6 +2,7 @@
 
 import React, { useState, useMemo } from "react";
 import { useStore, Product } from "@/context/StoreContext";
+import { useAuth } from "@/context/AuthContext";
 import { ProductAvatar } from "@/components/ui/ProductAvatar";
 import {
   Package,
@@ -118,13 +119,15 @@ export default function ProductsPage() {
             {state.products.length} produits • {state.products.filter((p) => p.stock <= p.minStock).length} en alerte
           </p>
         </div>
-        <button
-          onClick={openCreate}
-          className="flex items-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground hover:opacity-90 transition-opacity shadow-sm"
-        >
-          <Plus className="h-4 w-4" />
-          Nouveau produit
-        </button>
+        {role === "admin" && (
+          <button
+            onClick={openCreate}
+            className="flex items-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground hover:opacity-90 transition-opacity shadow-sm"
+          >
+            <Plus className="h-4 w-4" />
+            Nouveau produit
+          </button>
+        )}
       </div>
 
       {/* Filters */}
@@ -165,21 +168,25 @@ export default function ProductsPage() {
               >
                 <span>{cat.icon}</span> {cat.name}
               </button>
-              <button 
-                onClick={(e) => handleDeleteCategory(e, cat.id)} 
-                className="hidden group-hover:flex absolute -top-1 -right-1 bg-destructive text-white rounded-full p-0.5 z-10 shadow-sm hover:scale-110 transition-transform"
-                title="Supprimer la catégorie"
-              >
-                 <X className="h-2.5 w-2.5" />
-              </button>
+              {role === "admin" && (
+                <button 
+                  onClick={(e) => handleDeleteCategory(e, cat.id)} 
+                  className="hidden group-hover:flex absolute -top-1 -right-1 bg-destructive text-white rounded-full p-0.5 z-10 shadow-sm hover:scale-110 transition-transform"
+                  title="Supprimer la catégorie"
+                >
+                   <X className="h-2.5 w-2.5" />
+                </button>
+              )}
             </div>
           ))}
-          <button
-            onClick={() => setShowCategoryModal(true)}
-            className="whitespace-nowrap rounded-full border border-dashed border-primary/50 px-3.5 py-1.5 text-xs font-medium text-primary hover:bg-primary/5 transition-all flex items-center gap-1 shrink-0"
-          >
-            <Plus className="h-3.5 w-3.5" /> Catégorie
-          </button>
+          {role === "admin" && (
+            <button
+              onClick={() => setShowCategoryModal(true)}
+              className="whitespace-nowrap rounded-full border border-dashed border-primary/50 px-3.5 py-1.5 text-xs font-medium text-primary hover:bg-primary/5 transition-all flex items-center gap-1 shrink-0"
+            >
+              <Plus className="h-3.5 w-3.5" /> Catégorie
+            </button>
+          )}
         </div>
 
         {/* Stock filter & view toggle */}
@@ -257,21 +264,23 @@ export default function ProductsPage() {
                   </span>
                 </div>
 
-                {/* Actions (visible on hover) */}
-                <div className="mt-3 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                  <button
-                    onClick={() => openEdit(p)}
-                    className="flex-1 flex items-center justify-center gap-1.5 rounded-lg bg-secondary py-1.5 text-xs font-medium hover:bg-secondary/80 transition-colors"
-                  >
-                    <Edit3 className="h-3 w-3" /> Modifier
-                  </button>
-                  <button
-                    onClick={() => handleDelete(p.id)}
-                    className="flex items-center justify-center rounded-lg bg-destructive/10 px-3 py-1.5 text-xs text-destructive hover:bg-destructive/20 transition-colors"
-                  >
-                    <Trash2 className="h-3 w-3" />
-                  </button>
-                </div>
+                {/* Actions (visible on hover) uniquement pour le gérant */}
+                {role === "admin" && (
+                  <div className="mt-3 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <button
+                      onClick={() => openEdit(p)}
+                      className="flex-1 flex items-center justify-center gap-1.5 rounded-lg bg-secondary py-1.5 text-xs font-medium hover:bg-secondary/80 transition-colors"
+                    >
+                      <Edit3 className="h-3 w-3" /> Modifier
+                    </button>
+                    <button
+                      onClick={() => handleDelete(p.id)}
+                      className="flex items-center justify-center rounded-lg bg-destructive/10 px-3 py-1.5 text-xs text-destructive hover:bg-destructive/20 transition-colors"
+                    >
+                      <Trash2 className="h-3 w-3" />
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
           ))}
@@ -285,10 +294,10 @@ export default function ProductsPage() {
                 <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground">SKU</th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground">Catégorie</th>
                 <th className="px-4 py-3 text-right text-xs font-medium text-muted-foreground">Prix</th>
-                <th className="px-4 py-3 text-right text-xs font-medium text-muted-foreground">Coût</th>
+                {role === "admin" && <th className="px-4 py-3 text-right text-xs font-medium text-muted-foreground">Coût</th>}
                 <th className="px-4 py-3 text-right text-xs font-medium text-muted-foreground">Stock</th>
-                <th className="px-4 py-3 text-right text-xs font-medium text-muted-foreground">Marge</th>
-                <th className="px-4 py-3 text-right text-xs font-medium text-muted-foreground">Actions</th>
+                {role === "admin" && <th className="px-4 py-3 text-right text-xs font-medium text-muted-foreground">Marge</th>}
+                {role === "admin" && <th className="px-4 py-3 text-right text-xs font-medium text-muted-foreground">Actions</th>}
               </tr>
             </thead>
             <tbody>
@@ -314,16 +323,18 @@ export default function ProductsPage() {
                   <td className="px-4 py-3 text-right">
                     {role === "admin" && <span className="text-xs text-accent font-medium">{p.price > 0 ? Math.round(((p.price - p.cost) / p.price) * 100) : 0}%</span>}
                   </td>
-                  <td className="px-4 py-3 text-right">
-                    <div className="flex items-center justify-end gap-1">
-                      <button onClick={() => openEdit(p)} className="p-1.5 rounded-lg hover:bg-secondary transition-colors">
-                        <Edit3 className="h-3.5 w-3.5 text-muted-foreground" />
-                      </button>
-                      <button onClick={() => handleDelete(p.id)} className="p-1.5 rounded-lg hover:bg-destructive/10 transition-colors">
-                        <Trash2 className="h-3.5 w-3.5 text-destructive" />
-                      </button>
-                    </div>
-                  </td>
+                  {role === "admin" && (
+                    <td className="px-4 py-3 text-right">
+                      <div className="flex items-center justify-end gap-1">
+                        <button onClick={() => openEdit(p)} className="p-1.5 rounded-lg hover:bg-secondary transition-colors">
+                          <Edit3 className="h-3.5 w-3.5 text-muted-foreground" />
+                        </button>
+                        <button onClick={() => handleDelete(p.id)} className="p-1.5 rounded-lg hover:bg-destructive/10 transition-colors">
+                          <Trash2 className="h-3.5 w-3.5 text-destructive" />
+                        </button>
+                      </div>
+                    </td>
+                  )}
                 </tr>
               ))}
             </tbody>
