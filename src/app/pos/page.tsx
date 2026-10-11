@@ -423,7 +423,7 @@ export default function POSPage() {
         </div>
       </div>
 
-      <div className="flex flex-col lg:flex-row gap-6 lg:h-[calc(100vh-10.5rem)]">
+      <div className="flex flex-col lg:flex-row gap-5 lg:h-[calc(100vh-12.5rem)] min-h-[560px]">
       {/* Left Panel - Product Selection */}
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden lg:h-full h-[50vh]">
         {/* Search & Filters */}
@@ -496,69 +496,100 @@ export default function POSPage() {
       </div>
 
       {/* Right Panel - Cart & Checkout */}
-      <div className="w-full lg:w-[380px] shrink-0 flex flex-col rounded-2xl border border-border/40 bg-card overflow-hidden">
+      <div className="w-full lg:w-[410px] xl:w-[430px] shrink-0 flex flex-col rounded-2xl border border-border/40 bg-card h-full max-h-full overflow-hidden shadow-sm">
         {/* Cart Header */}
-        <div className="flex items-center justify-between border-b border-border/40 px-5 py-4">
+        <div className="flex items-center justify-between border-b border-border/40 px-4 py-3 bg-card shrink-0">
           <div className="flex items-center gap-2">
-            <ShoppingCart className="h-5 w-5 text-primary" />
-            <h2 className="text-base font-bold">Panier</h2>
+            <ShoppingCart className="h-4.5 w-4.5 text-primary" />
+            <h2 className="text-sm font-bold">Panier</h2>
             {cart.length > 0 && (
               <span className="flex h-5 min-w-[20px] items-center justify-center rounded-full bg-primary/10 px-1.5 text-[10px] font-bold text-primary">
-                {cart.reduce((s, c) => s + c.quantity, 0)}
+                {cart.reduce((s, c) => s + c.quantity, 0)} {cart.reduce((s, c) => s + c.quantity, 0) > 1 ? "articles" : "article"}
               </span>
             )}
           </div>
           {cart.length > 0 && (
             <button
+              type="button"
               onClick={() => dispatch({ type: "CLEAR_CART" })}
-              className="text-xs text-destructive hover:underline"
+              className="text-xs text-destructive hover:underline font-medium"
             >
-              Vider
+              Vider le panier
             </button>
           )}
         </div>
 
-        {/* Cart Items */}
-        <div className="flex-1 overflow-y-auto px-5 py-3 space-y-2 no-scrollbar">
+        {/* Cart Items - Zone avec hauteur garantie et défilement fluide */}
+        <div className="flex-1 min-h-[140px] overflow-y-auto px-4 py-2.5 space-y-2 no-scrollbar">
           {cart.length === 0 ? (
-            <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
+            <div className="flex flex-col items-center justify-center h-full py-8 text-muted-foreground text-center">
               <ShoppingCart className="h-10 w-10 mb-2 opacity-20" />
-              <p className="text-xs">Ajoutez des articles</p>
+              <p className="text-xs font-semibold">Votre panier est vide</p>
+              <p className="text-[10px] text-muted-foreground/80 mt-0.5">Cliquez sur un article à gauche pour l'ajouter</p>
             </div>
           ) : (
             cart.map((item) => (
               <div
                 key={item.product.id}
-                className="flex items-center gap-3 rounded-xl bg-secondary/30 p-3 animate-scale-in"
+                className="flex items-center gap-2.5 rounded-xl bg-secondary/30 p-2.5 border border-border/30 hover:border-border/60 transition-colors animate-scale-in"
               >
                 <ProductAvatar name={item.product.name} size="sm" />
                 <div className="flex-1 min-w-0">
-                  <p className="text-xs font-semibold truncate">{item.product.name}</p>
+                  <p className="text-xs font-semibold truncate text-foreground">{item.product.name}</p>
                   <p className="text-[10px] text-muted-foreground">{formatPrice(item.product.price)} / unité</p>
                 </div>
-                <div className="flex items-center gap-1.5">
+
+                {/* Contrôles de quantité : Moins, Saisie directe au clavier, Plus */}
+                <div className="flex items-center gap-1 shrink-0">
                   <button
+                    type="button"
                     onClick={() => dispatch({ type: "UPDATE_CART_QTY", payload: { productId: item.product.id, quantity: item.quantity - 1 } })}
-                    className="flex h-7 w-7 items-center justify-center rounded-lg bg-secondary hover:bg-secondary/80 transition-colors"
+                    className="flex h-7 w-7 items-center justify-center rounded-lg bg-secondary hover:bg-secondary/80 text-foreground transition-colors active:scale-95"
+                    title="Diminuer la quantité (-1)"
                   >
-                    <Minus className="h-3 w-3" />
+                    <Minus className="h-3.5 w-3.5" />
                   </button>
-                  <span className="w-6 text-center text-sm font-bold">{item.quantity}</span>
+
+                  {/* Saisie directe du nombre d'articles */}
+                  <input
+                    type="number"
+                    min="1"
+                    max={item.product.stock}
+                    value={item.quantity}
+                    onChange={(e) => {
+                      const raw = e.target.value;
+                      if (raw === "") return;
+                      const val = parseInt(raw, 10);
+                      if (!isNaN(val)) {
+                        const finalQty = Math.min(item.product.stock, Math.max(1, val));
+                        dispatch({ type: "UPDATE_CART_QTY", payload: { productId: item.product.id, quantity: finalQty } });
+                      }
+                    }}
+                    onFocus={(e) => e.target.select()}
+                    className="w-12 h-7 text-center text-xs font-bold rounded-lg border border-border/80 bg-background text-foreground focus:ring-2 focus:ring-primary/20 focus:border-primary focus:outline-none"
+                    title="Cliquez pour taper directement la quantité à acheter"
+                  />
+
                   <button
+                    type="button"
                     onClick={() => dispatch({ type: "UPDATE_CART_QTY", payload: { productId: item.product.id, quantity: item.quantity + 1 } })}
-                    className="flex h-7 w-7 items-center justify-center rounded-lg bg-secondary hover:bg-secondary/80 transition-colors"
+                    className="flex h-7 w-7 items-center justify-center rounded-lg bg-secondary hover:bg-secondary/80 text-foreground transition-colors disabled:opacity-40 disabled:cursor-not-allowed active:scale-95"
                     disabled={item.quantity >= item.product.stock}
+                    title={item.quantity >= item.product.stock ? "Stock maximum atteint" : "Augmenter la quantité (+1)"}
                   >
-                    <Plus className="h-3 w-3" />
+                    <Plus className="h-3.5 w-3.5" />
                   </button>
                 </div>
-                <div className="text-right ml-1">
-                  <p className="text-xs font-bold">{formatPrice(item.product.price * item.quantity)}</p>
+
+                <div className="text-right ml-1 shrink-0">
+                  <p className="text-xs font-bold text-primary">{formatPrice(item.product.price * item.quantity)}</p>
                   <button
+                    type="button"
                     onClick={() => dispatch({ type: "REMOVE_FROM_CART", payload: item.product.id })}
-                    className="mt-0.5"
+                    className="mt-0.5 inline-flex p-1 hover:bg-destructive/10 rounded transition-colors"
+                    title="Retirer cet article du panier"
                   >
-                    <Trash2 className="h-3 w-3 text-destructive/60 hover:text-destructive transition-colors" />
+                    <Trash2 className="h-3.5 w-3.5 text-destructive/70 hover:text-destructive" />
                   </button>
                 </div>
               </div>
@@ -566,187 +597,201 @@ export default function POSPage() {
           )}
         </div>
 
-        {/* Checkout section */}
+        {/* Section Encaissement & Finalisation (Toujours visible si le panier contient des articles) */}
         {cart.length > 0 && (
-          <div className="border-t border-border/40 px-5 py-4 space-y-3 bg-secondary/10">
-            {/* Customer name */}
-            <div className="relative">
-              <User className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
-              <input
-                type="text"
-                placeholder="Nom du patient/client (optionnel)"
-                value={customerName}
-                onChange={(e) => setCustomerName(e.target.value)}
-                className="w-full rounded-lg border border-border/40 bg-background pl-9 pr-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-primary/20"
-              />
-            </div>
-
-            {/* Discount Section (Gestion en pourcentage déduite du coût total) */}
-            <div className="space-y-2 rounded-xl bg-secondary/30 p-2.5 border border-border/40">
-              <div className="flex items-center justify-between">
-                <span className="text-[11px] font-semibold text-muted-foreground flex items-center gap-1">
-                  <Percent className="h-3 w-3 text-primary" /> Remise commerciale
-                </span>
-                <div className="flex rounded-lg border border-border/60 bg-background overflow-hidden p-0.5">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setDiscountType("percent");
-                      setDiscountValue("");
-                    }}
-                    className={`px-2 py-0.5 text-[10px] font-bold rounded transition-all ${
-                      discountType === "percent"
-                        ? "bg-primary text-primary-foreground shadow-xs"
-                        : "text-muted-foreground hover:text-foreground"
-                    }`}
-                  >
-                    % Pourcentage
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setDiscountType("fixed");
-                      setDiscountValue("");
-                    }}
-                    className={`px-2 py-0.5 text-[10px] font-bold rounded transition-all ${
-                      discountType === "fixed"
-                        ? "bg-primary text-primary-foreground shadow-xs"
-                        : "text-muted-foreground hover:text-foreground"
-                    }`}
-                  >
-                    FCFA Montant
-                  </button>
-                </div>
-              </div>
-
-              {/* Saisie de la remise */}
+          <div className="flex flex-col border-t border-border/40 bg-secondary/5 shrink-0">
+            {/* Options intermédiaires compactes et défilantes si petit écran */}
+            <div className="max-h-[220px] overflow-y-auto px-4 py-2.5 space-y-2.5 no-scrollbar">
+              {/* Nom du client (optionnel) */}
               <div className="relative">
-                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-bold text-muted-foreground">
-                  {discountType === "percent" ? "%" : state.settings.currency}
-                </span>
+                <User className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
                 <input
-                  type="number"
-                  placeholder={discountType === "percent" ? "Taux en % (ex: 10 pour 10%)" : "Montant fixe (ex: 5000)"}
-                  value={discountValue}
-                  onChange={(e) => {
-                    const raw = e.target.value;
-                    if (raw === "") {
-                      setDiscountValue("");
-                    } else {
-                      const num = Number(raw);
-                      if (discountType === "percent") {
-                        setDiscountValue(Math.min(100, Math.max(0, num)));
-                      } else {
-                        setDiscountValue(Math.min(subtotal, Math.max(0, num)));
-                      }
-                    }
-                  }}
-                  className="w-full rounded-lg border border-border/40 bg-background pl-9 pr-3 py-1.5 text-xs font-medium focus:outline-none focus:ring-2 focus:ring-primary/20"
+                  type="text"
+                  placeholder="Nom du client (optionnel)"
+                  value={customerName}
+                  onChange={(e) => setCustomerName(e.target.value)}
+                  className="w-full rounded-lg border border-border/50 bg-background pl-8 pr-3 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-primary/20"
                 />
               </div>
 
-              {/* Raccourcis de pourcentage */}
-              {discountType === "percent" && (
-                <div className="flex items-center gap-1.5 pt-0.5">
-                  {[5, 10, 15, 20, 25].map((pct) => (
+              {/* Remise commerciale compacte */}
+              <div className="space-y-1.5 rounded-xl bg-secondary/30 p-2 border border-border/40">
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] font-semibold text-muted-foreground flex items-center gap-1">
+                    <Percent className="h-3 w-3 text-primary" /> Remise commerciale
+                  </span>
+                  <div className="flex rounded-md border border-border/60 bg-background overflow-hidden p-0.5">
                     <button
-                      key={pct}
                       type="button"
-                      onClick={() => setDiscountValue(pct)}
-                      className={`flex-1 py-1 rounded-md text-[10px] font-bold border transition-colors ${
-                        discountValue === pct
-                          ? "bg-primary text-primary-foreground border-primary"
-                          : "border-border/60 bg-background/50 hover:bg-secondary text-muted-foreground"
+                      onClick={() => {
+                        setDiscountType("percent");
+                        setDiscountValue("");
+                      }}
+                      className={`px-2 py-0.5 text-[9px] font-bold rounded transition-all ${
+                        discountType === "percent"
+                          ? "bg-primary text-primary-foreground shadow-xs"
+                          : "text-muted-foreground hover:text-foreground"
                       }`}
                     >
-                      {pct}%
+                      % Pourcentage
                     </button>
-                  ))}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setDiscountType("fixed");
+                        setDiscountValue("");
+                      }}
+                      className={`px-2 py-0.5 text-[9px] font-bold rounded transition-all ${
+                        discountType === "fixed"
+                          ? "bg-primary text-primary-foreground shadow-xs"
+                          : "text-muted-foreground hover:text-foreground"
+                      }`}
+                    >
+                      FCFA Montant
+                    </button>
+                  </div>
                 </div>
-              )}
 
-              {discountAmount > 0 && (
-                <p className="text-[10px] font-semibold text-emerald-600 dark:text-emerald-400 flex items-center justify-between pt-0.5">
-                  <span>Déduction calculée :</span>
-                  <span>-{formatPrice(discountAmount)} {discountType === "percent" ? `(-${discountValue}%)` : ""}</span>
-                </p>
-              )}
-            </div>
+                {/* Saisie de la remise et raccourcis */}
+                <div className="flex items-center gap-1.5">
+                  <div className="relative flex-1">
+                    <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs font-bold text-muted-foreground">
+                      {discountType === "percent" ? "%" : state.settings.currency}
+                    </span>
+                    <input
+                      type="number"
+                      placeholder={discountType === "percent" ? "Taux (ex: 10)" : "Montant (ex: 2000)"}
+                      value={discountValue}
+                      onChange={(e) => {
+                        const raw = e.target.value;
+                        if (raw === "") {
+                          setDiscountValue("");
+                        } else {
+                          const num = Number(raw);
+                          if (discountType === "percent") {
+                            setDiscountValue(Math.min(100, Math.max(0, num)));
+                          } else {
+                            setDiscountValue(Math.min(subtotal, Math.max(0, num)));
+                          }
+                        }
+                      }}
+                      className="w-full rounded-lg border border-border/40 bg-background pl-7 pr-2 py-1 text-xs font-medium focus:outline-none focus:ring-2 focus:ring-primary/20"
+                    />
+                  </div>
 
-            {/* Payment method */}
-            <div className="grid grid-cols-3 gap-2">
-              {paymentMethods.map((pm) => {
-                const Icon = pm.icon;
-                return (
+                  {discountType === "percent" && (
+                    <div className="flex items-center gap-1 shrink-0">
+                      {[5, 10, 15, 20].map((pct) => (
+                        <button
+                          key={pct}
+                          type="button"
+                          onClick={() => setDiscountValue(pct)}
+                          className={`px-1.5 py-1 rounded text-[10px] font-bold border transition-colors ${
+                            discountValue === pct
+                              ? "bg-primary text-primary-foreground border-primary"
+                              : "border-border/60 bg-background hover:bg-secondary text-muted-foreground"
+                          }`}
+                        >
+                          {pct}%
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {discountAmount > 0 && (
+                  <p className="text-[10px] font-semibold text-emerald-600 dark:text-emerald-400 flex items-center justify-between pt-0.5">
+                    <span>Déduction calculée :</span>
+                    <span>-{formatPrice(discountAmount)} {discountType === "percent" ? `(-${discountValue}%)` : ""}</span>
+                  </p>
+                )}
+              </div>
+
+              {/* Modes de paiement compacts */}
+              <div className="grid grid-cols-3 gap-1.5">
+                {paymentMethods.map((pm) => {
+                  const Icon = pm.icon;
+                  return (
+                    <button
+                      key={pm.id}
+                      type="button"
+                      onClick={() => setPayMethod(pm.id)}
+                      className={`flex items-center justify-center gap-1.5 rounded-xl border py-2 px-1 text-center transition-all ${
+                        payMethod === pm.id
+                          ? `${pm.color} border-current shadow-xs`
+                          : "border-border/40 text-muted-foreground hover:bg-secondary"
+                      }`}
+                    >
+                      <Icon className="h-3.5 w-3.5 shrink-0" />
+                      <span className="text-[10px] font-semibold truncate">{pm.label}</span>
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* Espèces perçues avec bouton Raccourci 'Montant Exact' */}
+              {payMethod === "cash" && (
+                <div className="flex items-center gap-1.5 animate-fade-in">
+                  <div className="relative flex-1">
+                    <Banknote className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+                    <input
+                      type="number"
+                      placeholder="Espèces reçues..."
+                      value={amountGiven}
+                      onChange={(e) => setAmountGiven(e.target.value === "" ? "" : Number(e.target.value))}
+                      className="w-full rounded-lg border border-border/40 bg-background pl-8 pr-2 py-1.5 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-primary/20"
+                    />
+                  </div>
                   <button
-                    key={pm.id}
-                    onClick={() => setPayMethod(pm.id)}
-                    className={`flex flex-col items-center gap-1.5 rounded-xl border p-2.5 text-center transition-all ${
-                      payMethod === pm.id
-                        ? `${pm.color} border-current shadow-sm`
-                        : "border-border/40 text-muted-foreground hover:bg-secondary"
-                    }`}
+                    type="button"
+                    onClick={() => setAmountGiven(total)}
+                    className="px-2.5 py-1.5 rounded-lg border border-border/60 bg-background hover:bg-secondary text-[10px] font-bold text-primary shrink-0 transition-colors"
+                    title="Remplir directement avec le montant exact à payer"
                   >
-                    <Icon className="h-4 w-4" />
-                    <span className="text-[10px] font-medium leading-tight">{pm.label}</span>
+                    Montant exact
                   </button>
-                );
-              })}
-            </div>
-
-            {/* Amount Given (Espèces) */}
-            {payMethod === "cash" && (
-              <div className="relative animate-fade-in">
-                <Banknote className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
-                <input
-                  type="number"
-                  placeholder="Montant perçu (Espèces)"
-                  value={amountGiven}
-                  onChange={(e) => setAmountGiven(e.target.value === "" ? "" : Number(e.target.value))}
-                  className="w-full rounded-lg border border-border/40 bg-background pl-9 pr-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-primary/20"
-                />
-              </div>
-            )}
-
-            {/* Totals */}
-            <div className="space-y-1.5 pt-2 border-t border-border/30">
-              <div className="flex justify-between text-xs text-muted-foreground">
-                <span>Sous-total</span>
-                <span>{formatPrice(subtotal)}</span>
-              </div>
-              {discountAmount > 0 && (
-                <div className="flex justify-between text-xs text-emerald-600 dark:text-emerald-400 font-semibold">
-                  <span>Remise {discountType === "percent" ? `(${discountValue}%)` : ""}</span>
-                  <span>-{formatPrice(discountAmount)}</span>
                 </div>
               )}
-              <div className="flex justify-between text-lg font-bold pt-1">
-                <span>Total à Payer</span>
-                <span className="text-primary">{formatPrice(total)}</span>
-              </div>
-              
-              {payMethod === "cash" && amountGiven !== "" && Number(amountGiven) > 0 && (
-                <>
-                  <div className="flex justify-between text-xs text-muted-foreground mt-1">
-                    <span>Espèces perçues</span>
-                    <span>{formatPrice(Number(amountGiven))}</span>
-                  </div>
-                  <div className="flex justify-between text-xs font-bold text-accent">
-                    <span>Reliquat (Monnaie)</span>
-                    <span>{formatPrice(Math.max(0, Number(amountGiven) - total))}</span>
-                  </div>
-                </>
-              )}
             </div>
 
-            {/* Complete sale button */}
-            <button
-              onClick={handleCompleteSale}
-              className="w-full flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-primary to-accent py-3.5 text-sm font-bold text-white hover:opacity-90 transition-opacity shadow-lg glow-primary"
-            >
-              <Check className="h-5 w-5" />
-              Valider la vente
-            </button>
+            {/* Pied de Panier Fixe (Totaux & Bouton Valider : Toujours visible sans défilement) */}
+            <div className="border-t border-border/40 px-4 py-3 bg-card space-y-2.5 shadow-sm">
+              <div className="space-y-1 text-xs">
+                <div className="flex justify-between text-muted-foreground text-[11px]">
+                  <span>Sous-total</span>
+                  <span>{formatPrice(subtotal)}</span>
+                </div>
+                {discountAmount > 0 && (
+                  <div className="flex justify-between text-emerald-600 dark:text-emerald-400 font-semibold text-[11px]">
+                    <span>Remise {discountType === "percent" ? `(${discountValue}%)` : ""}</span>
+                    <span>-{formatPrice(discountAmount)}</span>
+                  </div>
+                )}
+                <div className="flex justify-between text-base font-extrabold pt-0.5 text-foreground">
+                  <span>Total à Payer</span>
+                  <span className="text-primary text-lg">{formatPrice(total)}</span>
+                </div>
+
+                {payMethod === "cash" && amountGiven !== "" && Number(amountGiven) > 0 && (
+                  <div className="flex justify-between text-xs font-bold pt-0.5 border-t border-border/20">
+                    <span className="text-muted-foreground">Reliquat (Monnaie à rendre) :</span>
+                    <span className={Number(amountGiven) >= total ? "text-emerald-600 dark:text-emerald-400 font-extrabold" : "text-destructive"}>
+                      {Number(amountGiven) >= total ? formatPrice(Number(amountGiven) - total) : `Manque ${formatPrice(total - Number(amountGiven))}`}
+                    </span>
+                  </div>
+                )}
+              </div>
+
+              {/* Bouton Valider la vente (Encaisser) : Grand, proéminent et toujours accessible */}
+              <button
+                type="button"
+                onClick={handleCompleteSale}
+                className="w-full flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-primary to-accent py-3 text-sm font-bold text-white hover:opacity-95 transition-all shadow-md glow-primary active:scale-[0.99]"
+              >
+                <Check className="h-5 w-5" />
+                <span>Valider la vente — {formatPrice(total)}</span>
+              </button>
+            </div>
           </div>
         )}
       </div>
