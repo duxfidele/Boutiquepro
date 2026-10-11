@@ -35,7 +35,8 @@ export default function POSPage() {
   const { state, dispatch, formatPrice } = useStore();
   const [search, setSearch] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("Tous");
-  const [discount, setDiscount] = useState(0);
+  const [discountType, setDiscountType] = useState<"percent" | "fixed">("percent");
+  const [discountValue, setDiscountValue] = useState<number | "">("");
   const [amountGiven, setAmountGiven] = useState<number | "">("");
   const [payMethod, setPayMethod] = useState<"cash" | "mobile_money" | "card">("cash");
   const [customerName, setCustomerName] = useState("");
@@ -59,7 +60,18 @@ export default function POSPage() {
   const cart = state.cart;
   const subtotal = cart.reduce((sum, c) => sum + c.product.price * c.quantity, 0);
   const taxAmount = 0; // TVA Supprimée
-  const total = subtotal - discount;
+  
+  // Calcul dynamique de la remise (priorité au pourcentage déduit du coût total)
+  const discountAmount = useMemo(() => {
+    if (!discountValue || Number(discountValue) <= 0) return 0;
+    const val = Number(discountValue);
+    if (discountType === "percent") {
+      return Math.round((subtotal * Math.min(100, Math.max(0, val))) / 100);
+    }
+    return Math.min(subtotal, Math.max(0, val));
+  }, [discountValue, discountType, subtotal]);
+
+  const total = Math.max(0, subtotal - discountAmount);
 
   const handleCompleteSale = () => {
     if (cart.length === 0) return;
@@ -78,7 +90,7 @@ export default function POSPage() {
       })),
       subtotal,
       tax: taxAmount,
-      discount,
+      discount: discountAmount,
       total,
       paymentMethod: payMethod,
       amountGiven: finalAmountGiven,
@@ -89,7 +101,8 @@ export default function POSPage() {
 
     dispatch({ type: "COMPLETE_SALE", payload: sale });
     setLastSale(sale);
-    setDiscount(0);
+    setDiscountValue("");
+    setDiscountType("percent");
     setAmountGiven("");
     setCustomerName("");
     setShowSuccess(true);
@@ -334,16 +347,96 @@ export default function POSPage() {
               />
             </div>
 
-            {/* Discount */}
-            <div className="relative">
-              <Percent className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
-              <input
-                type="number"
-                placeholder="Remise (FCFA)"
-                value={discount || ""}
-                onChange={(e) => setDiscount(Number(e.target.value))}
-                className="w-full rounded-lg border border-border/40 bg-background pl-9 pr-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-primary/20"
-              />
+            {/* Discount Section (Gestion en pourcentage déduite du coût total) */}
+            <div className="space-y-2 rounded-xl bg-secondary/30 p-2.5 border border-border/40">
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-semibold text-muted-foreground flex items-center gap-1">
+                  <Percent className="h-3 w-3 text-primary" /> Remise commerciale
+                </span>
+                <div className="flex rounded-lg border border-border/60 bg-background overflow-hidden p-0.5">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setDiscountType("percent");
+                      setDiscountValue("");
+                    }}
+                    className={`px-2 py-0.5 text-[10px] font-bold rounded transition-all ${
+                      discountType === "percent"
+                        ? "bg-primary text-primary-foreground shadow-xs"
+                        : "text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
+                    % Pourcentage
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setDiscountType("fixed");
+                      setDiscountValue("");
+                    }}
+                    className={`px-2 py-0.5 text-[10px] font-bold rounded transition-all ${
+                      discountType === "fixed"
+                        ? "bg-primary text-primary-foreground shadow-xs"
+                        : "text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
+                    FCFA Montant
+                  </button>
+                </div>
+              </div>
+
+              {/* Saisie de la remise */}
+              <div className="relative">
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-bold text-muted-foreground">
+                  {discountType === "percent" ? "%" : state.settings.currency}
+                </span>
+                <input
+                  type="number"
+                  placeholder={discountType === "percent" ? "Taux en % (ex: 10 pour 10%)" : "Montant fixe (ex: 5000)"}
+                  value={discountValue}
+                  onChange={(e) => {
+                    const raw = e.target.value;
+                    if (raw === "") {
+                      setDiscountValue("");
+                    } else {
+                      const num = Number(raw);
+                      if (discountType === "percent") {
+                        setDiscountValue(Math.min(100, Math.max(0, num)));
+                      } else {
+                        setDiscountValue(Math.min(subtotal, Math.max(0, num)));
+                      }
+                    }
+                  }}
+                  className="w-full rounded-lg border border-border/40 bg-background pl-9 pr-3 py-1.5 text-xs font-medium focus:outline-none focus:ring-2 focus:ring-primary/20"
+                />
+              </div>
+
+              {/* Raccourcis de pourcentage */}
+              {discountType === "percent" && (
+                <div className="flex items-center gap-1.5 pt-0.5">
+                  {[5, 10, 15, 20, 25].map((pct) => (
+                    <button
+                      key={pct}
+                      type="button"
+                      onClick={() => setDiscountValue(pct)}
+                      className={`flex-1 py-1 rounded-md text-[10px] font-bold border transition-colors ${
+                        discountValue === pct
+                          ? "bg-primary text-primary-foreground border-primary"
+                          : "border-border/60 bg-background/50 hover:bg-secondary text-muted-foreground"
+                      }`}
+                    >
+                      {pct}%
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              {discountAmount > 0 && (
+                <p className="text-[10px] font-semibold text-emerald-600 dark:text-emerald-400 flex items-center justify-between pt-0.5">
+                  <span>Déduction calculée :</span>
+                  <span>-{formatPrice(discountAmount)} {discountType === "percent" ? `(-${discountValue}%)` : ""}</span>
+                </p>
+              )}
             </div>
 
             {/* Payment method */}
@@ -387,10 +480,10 @@ export default function POSPage() {
                 <span>Sous-total</span>
                 <span>{formatPrice(subtotal)}</span>
               </div>
-              {discount > 0 && (
-                <div className="flex justify-between text-xs text-accent">
-                  <span>Remise</span>
-                  <span>-{formatPrice(discount)}</span>
+              {discountAmount > 0 && (
+                <div className="flex justify-between text-xs text-emerald-600 dark:text-emerald-400 font-semibold">
+                  <span>Remise {discountType === "percent" ? `(${discountValue}%)` : ""}</span>
+                  <span>-{formatPrice(discountAmount)}</span>
                 </div>
               )}
               <div className="flex justify-between text-lg font-bold pt-1">
