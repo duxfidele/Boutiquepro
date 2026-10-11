@@ -55,6 +55,8 @@ export interface Sale {
   change?: number;
   customerName?: string;
   createdAt: string;
+  userId?: string;
+  storeId?: string;
 }
 
 export interface Customer {
@@ -210,6 +212,67 @@ const initialState: StoreState = {
   settings: { name: "BoutiquePro", currency: "FCFA", taxRate: 0, city: "Dakar", country: "Sénégal", email: "contact@boutiquepro.com", phone: "+221 77 000 00 00" },
 };
 
+
+// ─── Fonctions d'agrégation des ventes de caisse ──────────────
+export function isSameCalendarDay(d1: string | Date, d2: string | Date = new Date()): boolean {
+  try {
+    const date1 = new Date(d1);
+    const date2 = new Date(d2);
+    return (
+      date1.getFullYear() === date2.getFullYear() &&
+      date1.getMonth() === date2.getMonth() &&
+      date1.getDate() === date2.getDate()
+    );
+  } catch {
+    return false;
+  }
+}
+
+export function getSalesForSession(
+  session: CashSession | null,
+  allSales: Sale[],
+  allSessions: CashSession[] = []
+): Sale[] {
+  if (!session) return [];
+  const sessionOpenedTime = new Date(session.openedAt).getTime();
+  const sessionClosedTime = session.closedAt ? new Date(session.closedAt).getTime() : Infinity;
+
+  // Si la session est déjà clôturée officiellement
+  if (session.status === "closed" && session.closedAt) {
+    return (allSales || []).filter((s) => {
+      const saleTime = new Date(s.createdAt).getTime();
+      return saleTime >= sessionOpenedTime && saleTime <= sessionClosedTime;
+    });
+  }
+
+  // Session en cours : rechercher la dernière clôture avant cette session
+  const previousClosedSessions = (allSessions || []).filter((cs) =>
+    cs.id !== session.id &&
+    cs.status === "closed" &&
+    cs.closedAt &&
+    new Date(cs.closedAt).getTime() <= sessionOpenedTime
+  );
+
+  let cutoffTime = 0;
+  if (previousClosedSessions.length > 0) {
+    previousClosedSessions.sort((a, b) => new Date(b.closedAt!).getTime() - new Date(a.closedAt!).getTime());
+    cutoffTime = new Date(previousClosedSessions[0].closedAt!).getTime();
+  }
+
+  return (allSales || []).filter((s) => {
+    const saleTime = new Date(s.createdAt).getTime();
+    // 1. Vente après l'ouverture du shift
+    if (saleTime >= sessionOpenedTime) return true;
+
+    // 2. OU vente de la journée avant l'ouverture du shift (sans précédent shift fermé la couvrant)
+    const isToday = isSameCalendarDay(s.createdAt, session.openedAt);
+    if (isToday && (cutoffTime === 0 || saleTime > cutoffTime)) {
+      return true;
+    }
+
+    return false;
+  });
+}
 // ─── Reducer ─────────────────────────────────────────────────
 function storeReducer(state: StoreState, action: Action): StoreState {
   switch (action.type) {
@@ -240,7 +303,39 @@ function storeReducer(state: StoreState, action: Action): StoreState {
         const soldItem = action.payload.items.find((i) => i.productId === p.id);
         return soldItem ? { ...p, stock: Math.max(0, p.stock - soldItem.quantity) } : p;
       });
-      return { ...state, sales: [action.payload, ...state.sales], products: updatedProducts, cart: [] };
+
+      let updatedActiveSession = state.activeCashSession;
+      let updatedCashSessions = state.cashSessions;
+
+      if (updatedActiveSession) {
+        const isCash = action.payload.paymentMethod === "cash";
+        const isMM = action.payload.paymentMethod === "mobile_money";
+        const isCard = action.payload.paymentMethod === "card";
+        const amount = action.payload.total;
+
+        updatedActiveSession = {
+          ...updatedActiveSession,
+          totalCashSales: updatedActiveSession.totalCashSales + (isCash ? amount : 0),
+          totalMobileMoneySales: updatedActiveSession.totalMobileMoneySales + (isMM ? amount : 0),
+          totalCardSales: updatedActiveSession.totalCardSales + (isCard ? amount : 0),
+          totalSalesCount: updatedActiveSession.totalSalesCount + 1,
+          totalSalesAmount: updatedActiveSession.totalSalesAmount + amount,
+          expectedAmount: updatedActiveSession.openingAmount + updatedActiveSession.totalCashSales + (isCash ? amount : 0)
+        };
+
+        updatedCashSessions = updatedCashSessions.map((cs) =>
+          cs.id === updatedActiveSession?.id ? updatedActiveSession : cs
+        );
+      }
+
+      return { 
+        ...state, 
+        sales: [action.payload, ...state.sales], 
+        products: updatedProducts, 
+        cart: [],
+        activeCashSession: updatedActiveSession,
+        cashSessions: updatedCashSessions
+      };
     }
         case "ADD_EXPENSE":
       return { ...state, expenses: [action.payload, ...state.expenses].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()) };
@@ -286,6 +381,20 @@ function storeReducer(state: StoreState, action: Action): StoreState {
       });
       return { ...state, inventorySessions: newSessions, products: updatedProducts };
     }
+    case "OPEN_CASH_SESSION": {
+      return {
+        ...state,
+        activeCashSession: action.payload,
+        cashSessions: [action.payload, ...state.cashSessions.filter((cs) => cs.id !== action.payload.id)]
+      };
+    }
+    case "CLOSE_CASH_SESSION": {
+      return {
+        ...state,
+        activeCashSession: null,
+        cashSessions: state.cashSessions.map((cs) => cs.id === action.payload.id ? action.payload : cs)
+      };
+    }
     case "LOAD_STATE":
       return { 
         ...action.payload, 
@@ -294,7 +403,9 @@ function storeReducer(state: StoreState, action: Action): StoreState {
         orders: action.payload.orders || [],
         cart: action.payload.cart || [],
         inventorySessions: action.payload.inventorySessions || [],
-        expenses: action.payload.expenses || []
+        expenses: action.payload.expenses || [],
+        cashSessions: action.payload.cashSessions || [],
+        activeCashSession: action.payload.activeCashSession || null
       };
     default:
       return state;
@@ -468,6 +579,20 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           }));
           const currentOpen = payload.cashSessions.find((cs: any) => cs.status === "open");
           if (currentOpen) {
+            // Recalcul dynamique des ventes réelles pour la session en cours
+            const sessionSales = getSalesForSession(currentOpen, payload.sales, payload.cashSessions);
+            const cash = sessionSales.filter((s: any) => s.paymentMethod === "cash").reduce((sum: number, s: any) => sum + s.total, 0);
+            const mm = sessionSales.filter((s: any) => s.paymentMethod === "mobile_money").reduce((sum: number, s: any) => sum + s.total, 0);
+            const card = sessionSales.filter((s: any) => s.paymentMethod === "card").reduce((sum: number, s: any) => sum + s.total, 0);
+            const totalAmount = sessionSales.reduce((sum: number, s: any) => sum + s.total, 0);
+
+            currentOpen.totalCashSales = cash;
+            currentOpen.totalMobileMoneySales = mm;
+            currentOpen.totalCardSales = card;
+            currentOpen.totalSalesCount = sessionSales.length;
+            currentOpen.totalSalesAmount = totalAmount;
+            currentOpen.expectedAmount = currentOpen.openingAmount + cash;
+
             payload.activeCashSession = currentOpen;
           }
         }
@@ -558,6 +683,32 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
         if (saleError) {
           console.error("Supabase Sale Error:", saleError);
+        }
+
+        // Mettre à jour en continu les totaux dans Supabase si une session de caisse est active
+        if (state.activeCashSession?.id) {
+          try {
+            const isCash = s.paymentMethod === "cash";
+            const isMM = s.paymentMethod === "mobile_money";
+            const isCard = s.paymentMethod === "card";
+            const newCash = state.activeCashSession.totalCashSales + (isCash ? s.total : 0);
+            const newMM = state.activeCashSession.totalMobileMoneySales + (isMM ? s.total : 0);
+            const newCard = state.activeCashSession.totalCardSales + (isCard ? s.total : 0);
+            const newCount = state.activeCashSession.totalSalesCount + 1;
+            const newTotal = state.activeCashSession.totalSalesAmount + s.total;
+            const newExpected = state.activeCashSession.openingAmount + newCash;
+
+            await supabase.from("cash_sessions").update({
+              total_cash_sales: newCash,
+              total_mobile_money_sales: newMM,
+              total_card_sales: newCard,
+              total_sales_count: newCount,
+              total_sales_amount: newTotal,
+              expected_amount: newExpected
+            }).eq("id", state.activeCashSession.id);
+          } catch (e) {
+            console.warn("Notice mise à jour session caisse:", e);
+          }
         }
       }
       else if (action.type === "ADD_CUSTOMER") {
@@ -690,7 +841,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const categoryNames = state.categories.map((c) => c.name);
 
   const openCashSession = async (openingAmount: number, cashierName?: string): Promise<CashSession> => {
-    const session: CashSession = {
+    const openedAt = new Date().toISOString();
+    const tempSession: CashSession = {
       id: "cs_" + Date.now() + "_" + Math.random().toString(36).substring(2, 7),
       storeId: activeStore?.id || "",
       userId: user?.id || "",
@@ -702,18 +854,41 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       totalCardSales: 0,
       totalSalesCount: 0,
       totalSalesAmount: 0,
-      openedAt: new Date().toISOString(),
+      openedAt,
       status: "open",
+    };
+
+    // Prendre en compte les ventes déjà faites aujourd'hui avant ouverture
+    const priorSales = getSalesForSession(tempSession, state.sales, state.cashSessions);
+    const priorCash = priorSales.filter((s) => s.paymentMethod === "cash").reduce((sum, s) => sum + s.total, 0);
+    const priorMM = priorSales.filter((s) => s.paymentMethod === "mobile_money").reduce((sum, s) => sum + s.total, 0);
+    const priorCard = priorSales.filter((s) => s.paymentMethod === "card").reduce((sum, s) => sum + s.total, 0);
+    const priorTotal = priorSales.reduce((sum, s) => sum + s.total, 0);
+
+    const session: CashSession = {
+      ...tempSession,
+      totalCashSales: priorCash,
+      totalMobileMoneySales: priorMM,
+      totalCardSales: priorCard,
+      totalSalesCount: priorSales.length,
+      totalSalesAmount: priorTotal,
+      expectedAmount: openingAmount + priorCash,
     };
 
     if (activeStore?.id) {
       try {
         await supabase.from("cash_sessions").insert([{
+          id: session.id,
           store_id: activeStore.id,
           user_id: user?.id,
           cashier_name: session.cashierName,
           opening_amount: session.openingAmount,
-          expected_amount: session.openingAmount,
+          expected_amount: session.expectedAmount,
+          total_cash_sales: session.totalCashSales,
+          total_mobile_money_sales: session.totalMobileMoneySales,
+          total_card_sales: session.totalCardSales,
+          total_sales_count: session.totalSalesCount,
+          total_sales_amount: session.totalSalesAmount,
           status: "open",
           opened_at: session.openedAt
         }]);
@@ -729,16 +904,31 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const closeCashSession = async (closingAmount: number, notes?: string): Promise<CashSession | null> => {
     if (!state.activeCashSession) return null;
     const cur = state.activeCashSession;
-    const expected = cur.openingAmount + cur.totalCashSales;
+
+    // Recalculer dynamiquement depuis state.sales pour garantir l'exactitude absolue
+    const sessionSales = getSalesForSession(cur, state.sales, state.cashSessions);
+    const cashSales = sessionSales.filter((s) => s.paymentMethod === "cash").reduce((sum, s) => sum + s.total, 0);
+    const mmSales = sessionSales.filter((s) => s.paymentMethod === "mobile_money").reduce((sum, s) => sum + s.total, 0);
+    const cardSales = sessionSales.filter((s) => s.paymentMethod === "card").reduce((sum, s) => sum + s.total, 0);
+    const totalAmount = sessionSales.reduce((sum, s) => sum + s.total, 0);
+    const count = sessionSales.length;
+
+    const expected = cur.openingAmount + cashSales;
     const diff = closingAmount - expected;
+    const closedAt = new Date().toISOString();
 
     const closedSession: CashSession = {
       ...cur,
       closingAmount,
       expectedAmount: expected,
       difference: diff,
+      totalCashSales: cashSales,
+      totalMobileMoneySales: mmSales,
+      totalCardSales: cardSales,
+      totalSalesCount: count,
+      totalSalesAmount: totalAmount,
       status: "closed",
-      closedAt: new Date().toISOString(),
+      closedAt,
       notes: notes || undefined
     };
 
@@ -748,13 +938,13 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           closing_amount: closingAmount,
           expected_amount: expected,
           difference: diff,
-          total_cash_sales: cur.totalCashSales,
-          total_mobile_money_sales: cur.totalMobileMoneySales,
-          total_card_sales: cur.totalCardSales,
-          total_sales_count: cur.totalSalesCount,
-          total_sales_amount: cur.totalSalesAmount,
+          total_cash_sales: cashSales,
+          total_mobile_money_sales: mmSales,
+          total_card_sales: cardSales,
+          total_sales_count: count,
+          total_sales_amount: totalAmount,
           status: "closed",
-          closed_at: closedSession.closedAt,
+          closed_at: closedAt,
           notes: notes || null
         }).eq("id", cur.id);
       } catch (e) {

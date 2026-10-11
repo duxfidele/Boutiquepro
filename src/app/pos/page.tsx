@@ -129,6 +129,7 @@ export default function POSPage() {
       change: change,
       customerName: customerName || undefined,
       createdAt: new Date().toISOString(),
+      userId: user?.id,
     };
 
     dispatch({ type: "COMPLETE_SALE", payload: sale });
@@ -272,11 +273,27 @@ export default function POSPage() {
     }
   };
 
+  // Calcul dynamique en direct des ventes de la session / journée
+  const currentSessionSales = useMemo(() => {
+    if (!activeCashSession) return [];
+    return getSalesForSession(activeCashSession, state.sales, cashSessions);
+  }, [activeCashSession, state.sales, cashSessions]);
+
+  const currentSessionStats = useMemo(() => {
+    const cash = currentSessionSales.filter((s) => s.paymentMethod === "cash").reduce((sum, s) => sum + s.total, 0);
+    const mm = currentSessionSales.filter((s) => s.paymentMethod === "mobile_money").reduce((sum, s) => sum + s.total, 0);
+    const card = currentSessionSales.filter((s) => s.paymentMethod === "card").reduce((sum, s) => sum + s.total, 0);
+    const total = currentSessionSales.reduce((sum, s) => sum + s.total, 0);
+    const count = currentSessionSales.length;
+    const opening = activeCashSession?.openingAmount || 0;
+    const expectedCashInDrawer = opening + cash;
+    return { cash, mm, card, total, count, opening, expectedCashInDrawer };
+  }, [currentSessionSales, activeCashSession]);
+
   const calculatedDifference = useMemo(() => {
     if (!activeCashSession || closingAmountInput === "") return 0;
-    const expected = activeCashSession.openingAmount + activeCashSession.totalCashSales;
-    return Number(closingAmountInput) - expected;
-  }, [activeCashSession, closingAmountInput]);
+    return Number(closingAmountInput) - currentSessionStats.expectedCashInDrawer;
+  }, [activeCashSession, closingAmountInput, currentSessionStats.expectedCashInDrawer]);
 
   return (
     <div className="flex flex-col gap-4 animate-fade-in">
@@ -294,15 +311,15 @@ export default function POSPage() {
               </span>
               <span className="text-xs text-muted-foreground">•</span>
               <span className="text-xs text-muted-foreground">
-                Fond initial : <strong className="text-foreground font-semibold">{formatPrice(activeCashSession.openingAmount)}</strong>
+                Fond initial : <strong className="text-foreground font-semibold">{formatPrice(currentSessionStats.opening)}</strong>
               </span>
               <span className="text-xs text-muted-foreground">•</span>
               <span className="text-xs text-muted-foreground">
-                Espèces tiroir : <strong className="text-foreground font-semibold">{formatPrice(activeCashSession.openingAmount + activeCashSession.totalCashSales)}</strong>
+                Espèces tiroir : <strong className="text-foreground font-semibold">{formatPrice(currentSessionStats.expectedCashInDrawer)}</strong>
               </span>
               <span className="text-xs text-muted-foreground hidden sm:inline">•</span>
               <span className="text-xs text-muted-foreground hidden sm:inline">
-                Total Ventes : <strong className="text-primary font-semibold">{formatPrice(activeCashSession.totalSalesAmount)} ({activeCashSession.totalSalesCount} v.)</strong>
+                Total Ventes : <strong className="text-primary font-semibold">{formatPrice(currentSessionStats.total)} ({currentSessionStats.count} v.)</strong>
               </span>
             </div>
           ) : (
@@ -1078,24 +1095,24 @@ export default function POSPage() {
             <div className="rounded-2xl bg-secondary/30 border border-border/40 p-4 space-y-2.5 text-xs">
               <div className="flex justify-between text-muted-foreground">
                 <span>Fond de caisse initial</span>
-                <span className="font-semibold text-foreground">{formatPrice(activeCashSession.openingAmount)}</span>
+                <span className="font-semibold text-foreground">{formatPrice(currentSessionStats.opening)}</span>
               </div>
               <div className="flex justify-between text-muted-foreground">
                 <span>Ventes en Espèces</span>
-                <span className="font-semibold text-foreground">{formatPrice(activeCashSession.totalCashSales)}</span>
+                <span className="font-semibold text-foreground">{formatPrice(currentSessionStats.cash)}</span>
               </div>
               <div className="flex justify-between text-muted-foreground">
                 <span>Ventes Mobile Money</span>
-                <span className="font-semibold text-foreground">{formatPrice(activeCashSession.totalMobileMoneySales)}</span>
+                <span className="font-semibold text-foreground">{formatPrice(currentSessionStats.mm)}</span>
               </div>
               <div className="flex justify-between text-muted-foreground">
                 <span>Ventes Carte</span>
-                <span className="font-semibold text-foreground">{formatPrice(activeCashSession.totalCardSales)}</span>
+                <span className="font-semibold text-foreground">{formatPrice(currentSessionStats.card)}</span>
               </div>
               <div className="pt-2 border-t border-border/40 flex justify-between font-bold text-sm">
                 <span>Espèces Théoriques Attendues dans le tiroir</span>
                 <span className="text-primary font-black">
-                  {formatPrice(activeCashSession.openingAmount + activeCashSession.totalCashSales)}
+                  {formatPrice(currentSessionStats.expectedCashInDrawer)}
                 </span>
               </div>
             </div>
@@ -1371,27 +1388,27 @@ export default function POSPage() {
               </div>
               <div className="pt-2 border-t border-border/40 flex justify-between">
                 <span className="text-muted-foreground">Fond initial :</span>
-                <span className="font-semibold text-foreground">{formatPrice(activeCashSession.openingAmount)}</span>
+                <span className="font-semibold text-foreground">{formatPrice(currentSessionStats.opening)}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Ventes Espèces :</span>
-                <span className="font-semibold text-foreground">{formatPrice(activeCashSession.totalCashSales)}</span>
+                <span className="font-semibold text-foreground">{formatPrice(currentSessionStats.cash)}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Ventes Mobile Money :</span>
-                <span className="font-semibold text-foreground">{formatPrice(activeCashSession.totalMobileMoneySales)}</span>
+                <span className="font-semibold text-foreground">{formatPrice(currentSessionStats.mm)}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Ventes Carte :</span>
-                <span className="font-semibold text-foreground">{formatPrice(activeCashSession.totalCardSales)}</span>
+                <span className="font-semibold text-foreground">{formatPrice(currentSessionStats.card)}</span>
               </div>
               <div className="pt-2 border-t border-border/40 flex justify-between font-bold text-sm">
-                <span>Total Encaissé ({activeCashSession.totalSalesCount} ventes) :</span>
-                <span className="text-primary font-black">{formatPrice(activeCashSession.totalSalesAmount)}</span>
+                <span>Total Encaissé ({currentSessionStats.count} ventes) :</span>
+                <span className="text-primary font-black">{formatPrice(currentSessionStats.total)}</span>
               </div>
               <div className="p-3 bg-emerald-500/10 border border-emerald-500/20 rounded-xl flex justify-between items-center text-emerald-600 dark:text-emerald-400 font-bold">
                 <span>Espèces théoriques dans le tiroir :</span>
-                <span className="text-base">{formatPrice(activeCashSession.openingAmount + activeCashSession.totalCashSales)}</span>
+                <span className="text-base">{formatPrice(currentSessionStats.expectedCashInDrawer)}</span>
               </div>
             </div>
 
