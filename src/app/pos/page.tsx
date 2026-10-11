@@ -21,6 +21,7 @@ import {
   ChevronDown,
   FileText,
   Download,
+  Loader2,
   Lock,
   Unlock,
   History,
@@ -37,6 +38,82 @@ import {
 import { useAuth } from "@/context/AuthContext";
 import html2canvas from "html2canvas";
 import jsPDF from "jspdf";
+
+async function exportElementToPdf(
+  element: HTMLElement,
+  options: {
+    filename: string;
+    widthPx: number;
+    pdfFormat: [number, number] | "a4";
+    orientation?: "portrait" | "landscape";
+    scale?: number;
+  }
+) {
+  let clone: HTMLElement | null = null;
+  try {
+    clone = element.cloneNode(true) as HTMLElement;
+    clone.style.position = "fixed";
+    clone.style.top = "0px";
+    clone.style.left = "0px";
+    clone.style.width = `${options.widthPx}px`;
+    clone.style.maxWidth = "none";
+    clone.style.height = "auto";
+    clone.style.overflow = "visible";
+    clone.style.zIndex = "-99999";
+    clone.style.opacity = "0";
+    clone.style.pointerEvents = "none";
+
+    const images = clone.querySelectorAll("img");
+    images.forEach((img) => {
+      img.crossOrigin = "anonymous";
+    });
+
+    document.body.appendChild(clone);
+    await new Promise((resolve) => setTimeout(resolve, 80));
+
+    let canvas: HTMLCanvasElement;
+    try {
+      canvas = await html2canvas(clone, {
+        scale: options.scale ?? 1.5,
+        useCORS: true,
+        allowTaint: false,
+        imageTimeout: 5000,
+        backgroundColor: "#ffffff",
+        windowWidth: options.widthPx,
+        logging: false,
+      });
+    } catch (corsErr) {
+      console.warn("Retrying html2canvas without images due to CORS issue:", corsErr);
+      const imgs = clone.querySelectorAll("img");
+      imgs.forEach((img) => img.remove());
+      canvas = await html2canvas(clone, {
+        scale: options.scale ?? 1.5,
+        useCORS: false,
+        allowTaint: true,
+        backgroundColor: "#ffffff",
+        windowWidth: options.widthPx,
+        logging: false,
+      });
+    }
+
+    const imgData = canvas.toDataURL("image/png");
+    const pdf = new jsPDF({
+      orientation: options.orientation || "portrait",
+      unit: "mm",
+      format: options.pdfFormat,
+    });
+    const imgProps = pdf.getImageProperties(imgData);
+    const pdfWidth = pdf.internal.pageSize.getWidth();
+    const pdfHeight = (imgProps.height * pdfWidth) / imgProps.width;
+
+    pdf.addImage(imgData, "PNG", 0, 0, pdfWidth, pdfHeight);
+    pdf.save(options.filename);
+  } finally {
+    if (clone && clone.parentNode) {
+      clone.parentNode.removeChild(clone);
+    }
+  }
+}
 
 const paymentMethods = [
   { id: "cash" as const, label: "Espèces", icon: Banknote, color: "bg-green-500/10 text-green-600 border-green-500/30" },
@@ -87,6 +164,9 @@ export default function POSPage() {
   const [showSuccess, setShowSuccess] = useState(false);
   const receiptRef = useRef<HTMLDivElement>(null);
   const invoiceRef = useRef<HTMLDivElement>(null);
+  const [isDownloadingReceipt, setIsDownloadingReceipt] = useState(false);
+  const [isDownloadingInvoice, setIsDownloadingInvoice] = useState(false);
+  const [isDownloadingRapportZ, setIsDownloadingRapportZ] = useState(false);
 
   const allCategories = ["Tous", ...state.categories.map(c => c.name)];
 
@@ -155,78 +235,38 @@ export default function POSPage() {
   };
 
   const handleDownloadReceipt = async () => {
-    if (!receiptRef.current || !lastSale) return;
+    if (!receiptRef.current || !lastSale || isDownloadingReceipt) return;
+    setIsDownloadingReceipt(true);
     try {
-      const clone = receiptRef.current.cloneNode(true) as HTMLElement;
-      clone.style.position = 'fixed';
-      clone.style.top = '-9999px';
-      clone.style.left = '-9999px';
-      clone.style.width = '300px';
-      clone.style.height = 'auto';
-      clone.style.maxWidth = 'none';
-      clone.style.overflow = 'visible';
-      document.body.appendChild(clone);
-
-      const canvas = await html2canvas(clone, { 
-        scale: 2, 
-        windowWidth: 300,
-        backgroundColor: "#ffffff",
+      await exportElementToPdf(receiptRef.current, {
+        filename: `recu_${lastSale.id}.pdf`,
+        widthPx: 300,
+        pdfFormat: [80, 200],
+        scale: 1.5,
       });
-      
-      document.body.removeChild(clone);
-
-      const imgData = canvas.toDataURL("image/png");
-      const pdf = new jsPDF({
-        orientation: "portrait",
-        unit: "mm",
-        format: [80, 200]
-      });
-      const imgProps = pdf.getImageProperties(imgData);
-      const pdfWidth = pdf.internal.pageSize.getWidth();
-      const pdfHeight = (imgProps.height * pdfWidth) / imgProps.width;
-      
-      pdf.addImage(imgData, "PNG", 0, 0, pdfWidth, pdfHeight);
-      pdf.save(`recu_${lastSale.id}.pdf`);
     } catch (e) {
-      console.error("Erreur génération PDF:", e);
+      console.error("Erreur génération PDF reçu:", e);
+      alert("La génération du PDF du reçu a échoué. Vous pouvez utiliser le bouton Imprimer.");
+    } finally {
+      setIsDownloadingReceipt(false);
     }
   };
 
   const handleDownloadInvoice = async () => {
-    if (!invoiceRef.current || !lastSale) return;
+    if (!invoiceRef.current || !lastSale || isDownloadingInvoice) return;
+    setIsDownloadingInvoice(true);
     try {
-      const clone = invoiceRef.current.cloneNode(true) as HTMLElement;
-      clone.style.position = 'fixed';
-      clone.style.top = '-9999px';
-      clone.style.left = '-9999px';
-      clone.style.width = '794px';
-      clone.style.height = 'auto';
-      clone.style.maxWidth = 'none';
-      clone.style.overflow = 'visible';
-      document.body.appendChild(clone);
-
-      const canvas = await html2canvas(clone, { 
-        scale: 2,
-        windowWidth: 794,
-        backgroundColor: "#ffffff",
+      await exportElementToPdf(invoiceRef.current, {
+        filename: `facture_${lastSale.id}.pdf`,
+        widthPx: 794,
+        pdfFormat: "a4",
+        scale: 1.5,
       });
-      
-      document.body.removeChild(clone);
-
-      const imgData = canvas.toDataURL("image/png");
-      const pdf = new jsPDF({
-        orientation: "portrait",
-        unit: "mm",
-        format: "a4"
-      });
-      const imgProps = pdf.getImageProperties(imgData);
-      const pdfWidth = pdf.internal.pageSize.getWidth();
-      const pdfHeight = (imgProps.height * pdfWidth) / imgProps.width;
-      
-      pdf.addImage(imgData, "PNG", 0, 0, pdfWidth, pdfHeight);
-      pdf.save(`facture_${lastSale.id}.pdf`);
     } catch (e) {
-      console.error("Erreur génération PDF:", e);
+      console.error("Erreur génération PDF facture:", e);
+      alert("La génération du PDF de la facture a échoué. Vous pouvez utiliser le bouton Imprimer la Facture.");
+    } finally {
+      setIsDownloadingInvoice(false);
     }
   };
 
@@ -254,31 +294,20 @@ export default function POSPage() {
   };
 
   const handleDownloadRapportZ = async () => {
-    if (!rapportZRef.current || !selectedZSession) return;
+    if (!rapportZRef.current || !selectedZSession || isDownloadingRapportZ) return;
+    setIsDownloadingRapportZ(true);
     try {
-      const clone = rapportZRef.current.cloneNode(true) as HTMLElement;
-      clone.style.position = 'fixed';
-      clone.style.top = '-9999px';
-      clone.style.left = '-9999px';
-      clone.style.width = '320px';
-      clone.style.height = 'auto';
-      clone.style.maxWidth = 'none';
-      clone.style.overflow = 'visible';
-      document.body.appendChild(clone);
-
-      const canvas = await html2canvas(clone, { scale: 2, windowWidth: 320, backgroundColor: "#ffffff" });
-      document.body.removeChild(clone);
-
-      const imgData = canvas.toDataURL("image/png");
-      const pdf = new jsPDF({ orientation: "portrait", unit: "mm", format: [80, 260] });
-      const imgProps = pdf.getImageProperties(imgData);
-      const pdfWidth = pdf.internal.pageSize.getWidth();
-      const pdfHeight = (imgProps.height * pdfWidth) / imgProps.width;
-      
-      pdf.addImage(imgData, "PNG", 0, 0, pdfWidth, pdfHeight);
-      pdf.save(`rapport_Z_${selectedZSession.id}.pdf`);
+      await exportElementToPdf(rapportZRef.current, {
+        filename: `rapport_Z_${selectedZSession.id}.pdf`,
+        widthPx: 320,
+        pdfFormat: [80, 260],
+        scale: 1.5,
+      });
     } catch (e) {
       console.error("Erreur PDF Rapport Z:", e);
+      alert("La génération du PDF du rapport a échoué. Vous pouvez utiliser le bouton Imprimer.");
+    } finally {
+      setIsDownloadingRapportZ(false);
     }
   };
 
@@ -841,7 +870,7 @@ export default function POSPage() {
                 {/* Entête Boutique Centrée */}
                 <div className="text-center pb-2">
                   {state.settings.logo && (
-                    <img src={state.settings.logo} alt="Logo" className="w-12 h-12 object-contain mx-auto mb-1.5 rounded" />
+                    <img src={state.settings.logo} alt="Logo" crossOrigin="anonymous" className="w-12 h-12 object-contain mx-auto mb-1.5 rounded" />
                   )}
                   <h2 className="text-sm font-extrabold uppercase tracking-wider text-black">{state.settings.name || "BOUTIQUE"}</h2>
                   {(state.settings.city || state.settings.country) && (
@@ -999,11 +1028,21 @@ export default function POSPage() {
               </button>
               <button
                 type="button"
+                disabled={isDownloadingReceipt}
                 onClick={handleDownloadReceipt}
-                className="flex-1 flex items-center justify-center gap-1.5 rounded-xl bg-gray-100 py-2.5 text-xs font-bold text-gray-800 hover:bg-gray-200 transition-colors"
+                className="flex-1 flex items-center justify-center gap-1.5 rounded-xl bg-gray-100 py-2.5 text-xs font-bold text-gray-800 hover:bg-gray-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                <Download className="h-3.5 w-3.5" />
-                Télécharger PDF
+                {isDownloadingReceipt ? (
+                  <>
+                    <Loader2 className="h-3.5 w-3.5 animate-spin text-gray-700" />
+                    <span>Patientez...</span>
+                  </>
+                ) : (
+                  <>
+                    <Download className="h-3.5 w-3.5" />
+                    <span>Télécharger PDF</span>
+                  </>
+                )}
               </button>
               <button
                 type="button"
@@ -1028,7 +1067,7 @@ export default function POSPage() {
                 <div className="flex flex-col sm:flex-row justify-between items-start border-b-2 border-primary/20 pb-6 mb-8 gap-4">
                   <div className="flex items-start gap-4">
                     {state.settings.logo ? (
-                      <img src={state.settings.logo} alt="Logo" className="w-16 h-16 object-contain rounded-xl border border-gray-100 p-1" />
+                      <img src={state.settings.logo} alt="Logo" crossOrigin="anonymous" className="w-16 h-16 object-contain rounded-xl border border-gray-100 p-1" />
                     ) : (
                       <div className="w-16 h-16 rounded-xl bg-primary text-white font-black text-2xl flex items-center justify-center shrink-0 shadow-sm">
                         {state.settings.name ? state.settings.name.slice(0, 2).toUpperCase() : "BP"}
@@ -1194,11 +1233,21 @@ export default function POSPage() {
               </button>
               <button
                 type="button"
+                disabled={isDownloadingInvoice}
                 onClick={handleDownloadInvoice}
-                className="flex-[1.5] flex items-center justify-center gap-2 rounded-xl bg-gray-200 py-3 text-xs font-bold text-gray-800 hover:bg-gray-300 transition-colors"
+                className="flex-[1.5] flex items-center justify-center gap-2 rounded-xl bg-gray-200 py-3 text-xs font-bold text-gray-800 hover:bg-gray-300 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                <Download className="h-4 w-4" />
-                Télécharger PDF (A4)
+                {isDownloadingInvoice ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin text-gray-800" />
+                    <span>Génération PDF...</span>
+                  </>
+                ) : (
+                  <>
+                    <Download className="h-4 w-4" />
+                    <span>Télécharger PDF (A4)</span>
+                  </>
+                )}
               </button>
               <button
                 type="button"
@@ -1566,11 +1615,21 @@ export default function POSPage() {
             <div className="p-4 border-t border-gray-100 bg-gray-50 flex gap-2 print:hidden">
               <button
                 type="button"
+                disabled={isDownloadingRapportZ}
                 onClick={handleDownloadRapportZ}
-                className="flex-1 py-2.5 rounded-xl border border-gray-300 text-xs font-bold text-gray-700 hover:bg-gray-100 flex items-center justify-center gap-1.5 transition-colors"
+                className="flex-1 py-2.5 rounded-xl border border-gray-300 text-xs font-bold text-gray-700 hover:bg-gray-100 flex items-center justify-center gap-1.5 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                <Download className="h-3.5 w-3.5" />
-                PDF
+                {isDownloadingRapportZ ? (
+                  <>
+                    <Loader2 className="h-3.5 w-3.5 animate-spin text-gray-700" />
+                    <span>PDF...</span>
+                  </>
+                ) : (
+                  <>
+                    <Download className="h-3.5 w-3.5" />
+                    <span>PDF</span>
+                  </>
+                )}
               </button>
               <button
                 type="button"
