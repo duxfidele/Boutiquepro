@@ -21,7 +21,16 @@ import {
   ChevronDown,
   FileText,
   Download,
+  Lock,
+  Unlock,
+  History,
+  AlertTriangle,
+  CheckCircle2,
+  Clock,
+  ShieldCheck,
 } from "lucide-react";
+import { CashSession } from "@/context/StoreContext";
+import { useAuth } from "@/context/AuthContext";
 import html2canvas from "html2canvas";
 import jsPDF from "jspdf";
 
@@ -32,7 +41,30 @@ const paymentMethods = [
 ];
 
 export default function POSPage() {
-  const { state, dispatch, formatPrice } = useStore();
+  const { 
+    state, 
+    dispatch, 
+    formatPrice, 
+    activeCashSession, 
+    cashSessions, 
+    openCashSession, 
+    closeCashSession 
+  } = useStore();
+  const { user, role } = useAuth();
+
+  // Cash Session States
+  const [showOpenModal, setShowOpenModal] = useState(false);
+  const [showCloseModal, setShowCloseModal] = useState(false);
+  const [showRapportXModal, setShowRapportXModal] = useState(false);
+  const [showRapportZModal, setShowRapportZModal] = useState(false);
+  const [showHistoryModal, setShowHistoryModal] = useState(false);
+  const [selectedZSession, setSelectedZSession] = useState<CashSession | null>(null);
+  
+  const [openingAmountInput, setOpeningAmountInput] = useState<number | "">(0);
+  const [closingAmountInput, setClosingAmountInput] = useState<number | "">("");
+  const [closingNotesInput, setClosingNotesInput] = useState("");
+  const [isClosingSubmitting, setIsClosingSubmitting] = useState(false);
+  const rapportZRef = useRef<HTMLDivElement>(null);
   const [search, setSearch] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("Tous");
   const [discountType, setDiscountType] = useState<"percent" | "fixed">("percent");
@@ -188,8 +220,151 @@ export default function POSPage() {
     }
   };
 
+  const handleStartSession = async () => {
+    const val = Number(openingAmountInput) || 0;
+    const name = user?.user_metadata?.full_name || user?.email?.split('@')[0] || "Caissier";
+    await openCashSession(val, name);
+    setShowOpenModal(false);
+  };
+
+  const handleConfirmClose = async () => {
+    if (closingAmountInput === "") return;
+    setIsClosingSubmitting(true);
+    try {
+      const realAmount = Number(closingAmountInput);
+      const closed = await closeCashSession(realAmount, closingNotesInput);
+      if (closed) {
+        setSelectedZSession(closed);
+        setShowCloseModal(false);
+        setShowRapportZModal(true);
+      }
+    } finally {
+      setIsClosingSubmitting(false);
+    }
+  };
+
+  const handleDownloadRapportZ = async () => {
+    if (!rapportZRef.current || !selectedZSession) return;
+    try {
+      const clone = rapportZRef.current.cloneNode(true) as HTMLElement;
+      clone.style.position = 'fixed';
+      clone.style.top = '-9999px';
+      clone.style.left = '-9999px';
+      clone.style.width = '320px';
+      clone.style.height = 'auto';
+      clone.style.maxWidth = 'none';
+      clone.style.overflow = 'visible';
+      document.body.appendChild(clone);
+
+      const canvas = await html2canvas(clone, { scale: 2, windowWidth: 320, backgroundColor: "#ffffff" });
+      document.body.removeChild(clone);
+
+      const imgData = canvas.toDataURL("image/png");
+      const pdf = new jsPDF({ orientation: "portrait", unit: "mm", format: [80, 260] });
+      const imgProps = pdf.getImageProperties(imgData);
+      const pdfWidth = pdf.internal.pageSize.getWidth();
+      const pdfHeight = (imgProps.height * pdfWidth) / imgProps.width;
+      
+      pdf.addImage(imgData, "PNG", 0, 0, pdfWidth, pdfHeight);
+      pdf.save(`rapport_Z_${selectedZSession.id}.pdf`);
+    } catch (e) {
+      console.error("Erreur PDF Rapport Z:", e);
+    }
+  };
+
+  const calculatedDifference = useMemo(() => {
+    if (!activeCashSession || closingAmountInput === "") return 0;
+    const expected = activeCashSession.openingAmount + activeCashSession.totalCashSales;
+    return Number(closingAmountInput) - expected;
+  }, [activeCashSession, closingAmountInput]);
+
   return (
-    <div className="flex flex-col lg:flex-row gap-6 lg:h-[calc(100vh-7rem)] animate-fade-in">
+    <div className="flex flex-col gap-4 animate-fade-in">
+      {/* Cash Session Status Banner */}
+      <div className="w-full flex flex-wrap items-center justify-between gap-3 p-3.5 rounded-2xl border border-border/50 bg-card/90 shadow-xs print:hidden">
+        <div className="flex items-center gap-3">
+          {activeCashSession ? (
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="relative flex h-3 w-3">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-3 w-3 bg-emerald-500"></span>
+              </span>
+              <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400">
+                Caisse Active : {activeCashSession.cashierName || "En cours"}
+              </span>
+              <span className="text-xs text-muted-foreground">•</span>
+              <span className="text-xs text-muted-foreground">
+                Fond initial : <strong className="text-foreground font-semibold">{formatPrice(activeCashSession.openingAmount)}</strong>
+              </span>
+              <span className="text-xs text-muted-foreground">•</span>
+              <span className="text-xs text-muted-foreground">
+                Espèces tiroir : <strong className="text-foreground font-semibold">{formatPrice(activeCashSession.openingAmount + activeCashSession.totalCashSales)}</strong>
+              </span>
+              <span className="text-xs text-muted-foreground hidden sm:inline">•</span>
+              <span className="text-xs text-muted-foreground hidden sm:inline">
+                Total Ventes : <strong className="text-primary font-semibold">{formatPrice(activeCashSession.totalSalesAmount)} ({activeCashSession.totalSalesCount} v.)</strong>
+              </span>
+            </div>
+          ) : (
+            <div className="flex items-center gap-2 text-amber-600 dark:text-amber-400">
+              <Lock className="h-4 w-4" />
+              <span className="text-xs font-bold">Caisse Fermée — Aucun shift en cours</span>
+            </div>
+          )}
+        </div>
+
+        <div className="flex items-center gap-2 flex-wrap">
+          {activeCashSession ? (
+            <>
+              <button
+                type="button"
+                onClick={() => setShowRapportXModal(true)}
+                className="px-3 py-1.5 rounded-xl border border-border/60 hover:bg-secondary text-xs font-semibold flex items-center gap-1.5 transition-colors"
+                title="Consulter le récapitulatif provisoire"
+              >
+                <FileText className="h-3.5 w-3.5 text-primary" />
+                Point d&apos;étape (Rapport X)
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setClosingAmountInput("");
+                  setClosingNotesInput("");
+                  setShowCloseModal(true);
+                }}
+                className="px-3 py-1.5 rounded-xl bg-destructive/10 text-destructive hover:bg-destructive/20 text-xs font-bold flex items-center gap-1.5 transition-colors"
+              >
+                <Lock className="h-3.5 w-3.5" />
+                Clôturer la caisse (Rapport Z)
+              </button>
+            </>
+          ) : (
+            <button
+              type="button"
+              onClick={() => {
+                setOpeningAmountInput(0);
+                setShowOpenModal(true);
+              }}
+              className="px-3.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold flex items-center gap-1.5 transition-all shadow-sm"
+            >
+              <Unlock className="h-3.5 w-3.5" />
+              Ouvrir la caisse
+            </button>
+          )}
+
+          <button
+            type="button"
+            onClick={() => setShowHistoryModal(true)}
+            className="px-3 py-1.5 rounded-xl border border-border/60 hover:bg-secondary text-xs font-medium text-muted-foreground hover:text-foreground flex items-center gap-1.5 transition-colors"
+            title="Consulter les clôtures passées"
+          >
+            <History className="h-3.5 w-3.5" />
+            Historique Z
+          </button>
+        </div>
+      </div>
+
+      <div className="flex flex-col lg:flex-row gap-6 lg:h-[calc(100vh-10.5rem)]">
       {/* Left Panel - Product Selection */}
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden lg:h-full h-[50vh]">
         {/* Search & Filters */}
@@ -786,6 +961,546 @@ export default function POSPage() {
           </div>
         </div>
       )}
+    
+      {/* ───────────────────────────────────────────────────────────── */}
+      {/* MODAL 1 : OUVERTURE DE CAISSE                                */}
+      {/* ───────────────────────────────────────────────────────────── */}
+      {showOpenModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 animate-fade-in">
+          <div className="bg-card border border-border/60 rounded-3xl p-6 w-full max-w-md shadow-2xl space-y-5 animate-scale-in">
+            <div className="flex items-center justify-between pb-3 border-b border-border/40">
+              <div className="flex items-center gap-2.5">
+                <div className="h-10 w-10 rounded-2xl bg-emerald-500/10 text-emerald-600 flex items-center justify-center">
+                  <Unlock className="h-5 w-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-foreground">Ouverture de caisse</h3>
+                  <p className="text-xs text-muted-foreground">Initialisation du fond de tiroir</p>
+                </div>
+              </div>
+              <button 
+                onClick={() => setShowOpenModal(false)}
+                className="h-8 w-8 rounded-full hover:bg-secondary flex items-center justify-center text-muted-foreground"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <label className="text-xs font-semibold text-muted-foreground block mb-1.5">
+                  Caissier en service
+                </label>
+                <div className="p-3 rounded-xl bg-secondary/40 border border-border/40 text-sm font-bold text-foreground flex items-center gap-2">
+                  <User className="h-4 w-4 text-primary" />
+                  {user?.user_metadata?.full_name || user?.email || "Caissier"}
+                </div>
+              </div>
+
+              <div>
+                <label className="text-xs font-semibold text-muted-foreground block mb-1.5">
+                  Fond de caisse initial ({state.settings.currency})
+                </label>
+                <input
+                  type="number"
+                  placeholder="0"
+                  value={openingAmountInput}
+                  onChange={(e) => setOpeningAmountInput(e.target.value === "" ? "" : Number(e.target.value))}
+                  className="w-full text-xl font-bold bg-secondary/50 border border-border/60 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-primary/50 text-foreground"
+                  autoFocus
+                />
+                
+                {/* Raccourcis rapides */}
+                <div className="flex gap-2 mt-2.5 flex-wrap">
+                  {[0, 5000, 10000, 20000, 50000].map((amt) => (
+                    <button
+                      key={amt}
+                      type="button"
+                      onClick={() => setOpeningAmountInput(amt)}
+                      className={`px-2.5 py-1 text-xs rounded-lg border transition-colors ${
+                        openingAmountInput === amt 
+                          ? "bg-primary text-primary-foreground border-primary" 
+                          : "border-border/60 hover:bg-secondary text-muted-foreground"
+                      }`}
+                    >
+                      {amt === 0 ? "0 F" : formatPrice(amt)}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            <div className="flex gap-3 pt-3 border-t border-border/40">
+              <button
+                type="button"
+                onClick={() => setShowOpenModal(false)}
+                className="flex-1 py-2.5 rounded-xl border border-border/60 text-sm font-medium hover:bg-secondary transition-colors"
+              >
+                Annuler
+              </button>
+              <button
+                type="button"
+                onClick={handleStartSession}
+                className="flex-1 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-bold transition-all shadow-md"
+              >
+                Valider l&apos;ouverture
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ───────────────────────────────────────────────────────────── */}
+      {/* MODAL 2 : CLÔTURE DE CAISSE (COMPTAGE & CALCUL D'ÉCART)        */}
+      {/* ───────────────────────────────────────────────────────────── */}
+      {showCloseModal && activeCashSession && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 animate-fade-in overflow-y-auto">
+          <div className="bg-card border border-border/60 rounded-3xl p-6 w-full max-w-lg shadow-2xl space-y-5 animate-scale-in my-8">
+            <div className="flex items-center justify-between pb-3 border-b border-border/40">
+              <div className="flex items-center gap-2.5">
+                <div className="h-10 w-10 rounded-2xl bg-destructive/10 text-destructive flex items-center justify-center">
+                  <Lock className="h-5 w-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-foreground">Clôture de Caisse (Rapport Z)</h3>
+                  <p className="text-xs text-muted-foreground">Comptage physique et certification de fin de shift</p>
+                </div>
+              </div>
+              <button 
+                onClick={() => setShowCloseModal(false)}
+                className="h-8 w-8 rounded-full hover:bg-secondary flex items-center justify-center text-muted-foreground"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            {/* Récapitulatif attendu */}
+            <div className="rounded-2xl bg-secondary/30 border border-border/40 p-4 space-y-2.5 text-xs">
+              <div className="flex justify-between text-muted-foreground">
+                <span>Fond de caisse initial</span>
+                <span className="font-semibold text-foreground">{formatPrice(activeCashSession.openingAmount)}</span>
+              </div>
+              <div className="flex justify-between text-muted-foreground">
+                <span>Ventes en Espèces</span>
+                <span className="font-semibold text-foreground">{formatPrice(activeCashSession.totalCashSales)}</span>
+              </div>
+              <div className="flex justify-between text-muted-foreground">
+                <span>Ventes Mobile Money</span>
+                <span className="font-semibold text-foreground">{formatPrice(activeCashSession.totalMobileMoneySales)}</span>
+              </div>
+              <div className="flex justify-between text-muted-foreground">
+                <span>Ventes Carte</span>
+                <span className="font-semibold text-foreground">{formatPrice(activeCashSession.totalCardSales)}</span>
+              </div>
+              <div className="pt-2 border-t border-border/40 flex justify-between font-bold text-sm">
+                <span>Espèces Théoriques Attendues dans le tiroir</span>
+                <span className="text-primary font-black">
+                  {formatPrice(activeCashSession.openingAmount + activeCashSession.totalCashSales)}
+                </span>
+              </div>
+            </div>
+
+            {/* Saisie montant réel */}
+            <div className="space-y-2">
+              <label className="text-xs font-bold text-foreground flex items-center justify-between">
+                <span>Espèces réelles comptées dans le tiroir ({state.settings.currency})</span>
+                <span className="text-[10px] text-muted-foreground font-normal">Comptez vos billets et pièces</span>
+              </label>
+              <input
+                type="number"
+                placeholder="Ex: 50000"
+                value={closingAmountInput}
+                onChange={(e) => setClosingAmountInput(e.target.value === "" ? "" : Number(e.target.value))}
+                className="w-full text-2xl font-black bg-secondary/50 border border-border/60 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-primary/50 text-foreground"
+                autoFocus
+              />
+
+              {/* Indicateur d'Écart en temps réel */}
+              {closingAmountInput !== "" && (
+                <div className={`p-3.5 rounded-xl border flex items-center justify-between transition-all ${
+                  calculatedDifference === 0 
+                    ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-600 dark:text-emerald-400"
+                    : calculatedDifference > 0
+                    ? "bg-blue-500/10 border-blue-500/30 text-blue-600 dark:text-blue-400"
+                    : "bg-destructive/10 border-destructive/30 text-destructive"
+                }`}>
+                  <div className="flex items-center gap-2">
+                    {calculatedDifference === 0 ? (
+                      <CheckCircle2 className="h-5 w-5" />
+                    ) : calculatedDifference > 0 ? (
+                      <Check className="h-5 w-5" />
+                    ) : (
+                      <AlertTriangle className="h-5 w-5" />
+                    )}
+                    <div>
+                      <p className="text-xs font-bold">
+                        {calculatedDifference === 0 
+                          ? "Caisse Juste (Aucun écart)" 
+                          : calculatedDifference > 0 
+                          ? "Excédent de caisse" 
+                          : "Déficit de caisse (Manquant)"}
+                      </p>
+                      <p className="text-[10px] opacity-80">
+                        {calculatedDifference === 0 
+                          ? "Les montants théorique et réel correspondent exactement."
+                          : calculatedDifference > 0 
+                          ? "Le tiroir contient plus d'argent que prévu."
+                          : "Attention : il manque de l'argent par rapport aux ventes saisies."}
+                      </p>
+                    </div>
+                  </div>
+                  <span className="text-base font-black">
+                    {calculatedDifference > 0 ? "+" : ""}{formatPrice(calculatedDifference)}
+                  </span>
+                </div>
+              )}
+            </div>
+
+            {/* Notes / Remarques */}
+            <div>
+              <label className="text-xs font-semibold text-muted-foreground block mb-1">
+                Remarques / Observations (facultatif)
+              </label>
+              <textarea
+                rows={2}
+                placeholder="Ex: Monnaie manquante de 500 F due à une erreur de rendu..."
+                value={closingNotesInput}
+                onChange={(e) => setClosingNotesInput(e.target.value)}
+                className="w-full bg-secondary/50 border border-border/50 rounded-xl p-3 text-xs focus:outline-none focus:ring-2 focus:ring-primary/50 text-foreground resize-none"
+              />
+            </div>
+
+            <div className="flex gap-3 pt-3 border-t border-border/40">
+              <button
+                type="button"
+                disabled={isClosingSubmitting}
+                onClick={() => setShowCloseModal(false)}
+                className="flex-1 py-2.5 rounded-xl border border-border/60 text-sm font-medium hover:bg-secondary transition-colors"
+              >
+                Annuler
+              </button>
+              <button
+                type="button"
+                disabled={closingAmountInput === "" || isClosingSubmitting}
+                onClick={handleConfirmClose}
+                className="flex-[1.5] py-2.5 rounded-xl bg-destructive text-white hover:opacity-90 disabled:opacity-50 text-sm font-bold transition-all shadow-md flex items-center justify-center gap-2"
+              >
+                <ShieldCheck className="h-4 w-4" />
+                {isClosingSubmitting ? "Clôture en cours..." : "Valider la Clôture & Voir Z"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ───────────────────────────────────────────────────────────── */}
+      {/* MODAL 3 : RAPPORT Z OFFICIEL D'IMPRESSION (TICKET THERMIQUE) */}
+      {/* ───────────────────────────────────────────────────────────── */}
+      {showRapportZModal && selectedZSession && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 animate-fade-in overflow-y-auto">
+          <div className="bg-white text-gray-900 rounded-3xl w-full max-w-sm shadow-2xl overflow-hidden my-8 animate-scale-in">
+            {/* Header d'actions */}
+            <div className="flex items-center justify-between p-4 border-b border-gray-100 bg-gray-50 print:hidden">
+              <h3 className="text-sm font-bold text-gray-800">Rapport Z de Clôture</h3>
+              <button 
+                onClick={() => setShowRapportZModal(false)}
+                className="h-8 w-8 rounded-full hover:bg-gray-200 flex items-center justify-center text-gray-500"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            {/* Document imprimable 80mm */}
+            <div ref={rapportZRef} className="p-6 bg-white font-mono text-xs leading-relaxed">
+              <div className="text-center pb-4 border-b border-dashed border-gray-400">
+                <h2 className="text-base font-black uppercase tracking-wider">{state.settings.name}</h2>
+                {state.settings.city && <p className="text-[11px] text-gray-600">{state.settings.city}, {state.settings.country}</p>}
+                {state.settings.phone && <p className="text-[11px] text-gray-600">Tél: {state.settings.phone}</p>}
+                <div className="mt-3 py-1 bg-gray-100 rounded text-center">
+                  <p className="font-black text-sm uppercase tracking-widest">RAPPORT Z DE CLÔTURE</p>
+                  <p className="text-[10px] text-gray-500">Document Officiel de Caisse</p>
+                </div>
+              </div>
+
+              {/* Infos session */}
+              <div className="py-3 border-b border-dashed border-gray-400 space-y-1 text-[11px]">
+                <div className="flex justify-between">
+                  <span>Caissier :</span>
+                  <span className="font-bold">{selectedZSession.cashierName || "Caissier"}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Ouverture :</span>
+                  <span>{new Date(selectedZSession.openedAt).toLocaleString("fr-FR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Clôture :</span>
+                  <span>{selectedZSession.closedAt ? new Date(selectedZSession.closedAt).toLocaleString("fr-FR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }) : "N/A"}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Nombre Ventes :</span>
+                  <span className="font-bold">{selectedZSession.totalSalesCount} transactions</span>
+                </div>
+              </div>
+
+              {/* Détail financier */}
+              <div className="py-3 border-b border-dashed border-gray-400 space-y-1.5 text-[11px]">
+                <p className="font-bold text-[10px] uppercase text-gray-500">Recettes par Mode :</p>
+                <div className="flex justify-between">
+                  <span>Espèces :</span>
+                  <span className="font-bold">{formatPrice(selectedZSession.totalCashSales)}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Mobile Money :</span>
+                  <span className="font-bold">{formatPrice(selectedZSession.totalMobileMoneySales)}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Carte Bancaire :</span>
+                  <span className="font-bold">{formatPrice(selectedZSession.totalCardSales)}</span>
+                </div>
+                <div className="pt-1.5 border-t border-gray-200 flex justify-between font-black text-sm">
+                  <span>TOTAL VENTES :</span>
+                  <span>{formatPrice(selectedZSession.totalSalesAmount)}</span>
+                </div>
+              </div>
+
+              {/* Rapprochement de caisse */}
+              <div className="py-3 border-b border-dashed border-gray-400 space-y-1.5 text-[11px]">
+                <p className="font-bold text-[10px] uppercase text-gray-500">Contrôle Espèces :</p>
+                <div className="flex justify-between">
+                  <span>Fond initial :</span>
+                  <span>{formatPrice(selectedZSession.openingAmount)}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>+ Ventes espèces :</span>
+                  <span>{formatPrice(selectedZSession.totalCashSales)}</span>
+                </div>
+                <div className="flex justify-between font-bold">
+                  <span>= Espèces attendues :</span>
+                  <span>{formatPrice(selectedZSession.expectedAmount || 0)}</span>
+                </div>
+                <div className="flex justify-between font-black text-sm pt-1 border-t border-gray-200">
+                  <span>Espèces réelles :</span>
+                  <span>{formatPrice(selectedZSession.closingAmount || 0)}</span>
+                </div>
+                <div className="flex justify-between font-black text-xs pt-1">
+                  <span>ÉCART DE CAISSE :</span>
+                  <span className={`${
+                    (selectedZSession.difference || 0) === 0 ? "text-gray-900" : (selectedZSession.difference || 0) > 0 ? "text-green-700" : "text-red-700"
+                  }`}>
+                    {(selectedZSession.difference || 0) > 0 ? "+" : ""}{formatPrice(selectedZSession.difference || 0)}
+                  </span>
+                </div>
+              </div>
+
+              {/* Remarques */}
+              {selectedZSession.notes && (
+                <div className="py-2 border-b border-dashed border-gray-400 text-[10px] text-gray-600">
+                  <p className="font-bold text-gray-700">Observations :</p>
+                  <p className="italic">{selectedZSession.notes}</p>
+                </div>
+              )}
+
+              {/* Signatures */}
+              <div className="pt-6 pb-2 grid grid-cols-2 gap-4 text-[10px] text-center text-gray-600">
+                <div>
+                  <p className="border-t border-gray-400 pt-1 font-bold">Visa Caissier</p>
+                </div>
+                <div>
+                  <p className="border-t border-gray-400 pt-1 font-bold">Visa Gérant</p>
+                </div>
+              </div>
+            </div>
+
+            {/* Boutons d'action */}
+            <div className="p-4 border-t border-gray-100 bg-gray-50 flex gap-2 print:hidden">
+              <button
+                type="button"
+                onClick={handleDownloadRapportZ}
+                className="flex-1 py-2.5 rounded-xl border border-gray-300 text-xs font-bold text-gray-700 hover:bg-gray-100 flex items-center justify-center gap-1.5 transition-colors"
+              >
+                <Download className="h-3.5 w-3.5" />
+                PDF
+              </button>
+              <button
+                type="button"
+                onClick={handlePrint}
+                className="flex-[1.5] py-2.5 rounded-xl bg-primary text-white text-xs font-bold hover:opacity-90 flex items-center justify-center gap-1.5 transition-opacity shadow-md"
+              >
+                <Printer className="h-3.5 w-3.5" />
+                Imprimer Ticket
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ───────────────────────────────────────────────────────────── */}
+      {/* MODAL 4 : RAPPORT X PROVISOIRE (POINT EN COURS DE JOURNÉE)    */}
+      {/* ───────────────────────────────────────────────────────────── */}
+      {showRapportXModal && activeCashSession && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 animate-fade-in overflow-y-auto">
+          <div className="bg-card border border-border/60 rounded-3xl p-6 w-full max-w-md shadow-2xl space-y-5 animate-scale-in my-8">
+            <div className="flex items-center justify-between pb-3 border-b border-border/40">
+              <div className="flex items-center gap-2.5">
+                <div className="h-10 w-10 rounded-2xl bg-primary/10 text-primary flex items-center justify-center">
+                  <FileText className="h-5 w-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-foreground">Rapport X (Point d&apos;étape)</h3>
+                  <p className="text-xs text-muted-foreground">Consultation provisoire sans fermeture de caisse</p>
+                </div>
+              </div>
+              <button 
+                onClick={() => setShowRapportXModal(false)}
+                className="h-8 w-8 rounded-full hover:bg-secondary flex items-center justify-center text-muted-foreground"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <div className="rounded-2xl bg-secondary/30 border border-border/40 p-4 space-y-3 text-xs">
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Caissier :</span>
+                <span className="font-bold text-foreground">{activeCashSession.cashierName}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Ouverture le :</span>
+                <span className="font-medium text-foreground">
+                  {new Date(activeCashSession.openedAt).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })}
+                </span>
+              </div>
+              <div className="pt-2 border-t border-border/40 flex justify-between">
+                <span className="text-muted-foreground">Fond initial :</span>
+                <span className="font-semibold text-foreground">{formatPrice(activeCashSession.openingAmount)}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Ventes Espèces :</span>
+                <span className="font-semibold text-foreground">{formatPrice(activeCashSession.totalCashSales)}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Ventes Mobile Money :</span>
+                <span className="font-semibold text-foreground">{formatPrice(activeCashSession.totalMobileMoneySales)}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Ventes Carte :</span>
+                <span className="font-semibold text-foreground">{formatPrice(activeCashSession.totalCardSales)}</span>
+              </div>
+              <div className="pt-2 border-t border-border/40 flex justify-between font-bold text-sm">
+                <span>Total Encaissé ({activeCashSession.totalSalesCount} ventes) :</span>
+                <span className="text-primary font-black">{formatPrice(activeCashSession.totalSalesAmount)}</span>
+              </div>
+              <div className="p-3 bg-emerald-500/10 border border-emerald-500/20 rounded-xl flex justify-between items-center text-emerald-600 dark:text-emerald-400 font-bold">
+                <span>Espèces théoriques dans le tiroir :</span>
+                <span className="text-base">{formatPrice(activeCashSession.openingAmount + activeCashSession.totalCashSales)}</span>
+              </div>
+            </div>
+
+            <div className="flex gap-3 pt-3 border-t border-border/40">
+              <button
+                type="button"
+                onClick={() => setShowRapportXModal(false)}
+                className="w-full py-2.5 rounded-xl bg-primary text-primary-foreground text-sm font-bold hover:opacity-90 transition-opacity"
+              >
+                Continuer le service
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ───────────────────────────────────────────────────────────── */}
+      {/* MODAL 5 : HISTORIQUE DES RAPPORTS Z                           */}
+      {/* ───────────────────────────────────────────────────────────── */}
+      {showHistoryModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 animate-fade-in overflow-y-auto">
+          <div className="bg-card border border-border/60 rounded-3xl p-6 w-full max-w-2xl shadow-2xl space-y-5 animate-scale-in my-8 max-h-[85vh] flex flex-col">
+            <div className="flex items-center justify-between pb-3 border-b border-border/40 shrink-0">
+              <div className="flex items-center gap-2.5">
+                <div className="h-10 w-10 rounded-2xl bg-primary/10 text-primary flex items-center justify-center">
+                  <History className="h-5 w-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-foreground">Historique des Clôtures (Rapports Z)</h3>
+                  <p className="text-xs text-muted-foreground">Consultez et réimprimez les shifts passés</p>
+                </div>
+              </div>
+              <button 
+                onClick={() => setShowHistoryModal(false)}
+                className="h-8 w-8 rounded-full hover:bg-secondary flex items-center justify-center text-muted-foreground"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto space-y-3 pr-1">
+              {cashSessions.filter(cs => cs.status === "closed").length === 0 ? (
+                <div className="text-center py-12 text-muted-foreground text-xs">
+                  <History className="h-8 w-8 mx-auto mb-2 opacity-30" />
+                  Aucune clôture de caisse enregistrée pour le moment.
+                </div>
+              ) : (
+                cashSessions
+                  .filter(cs => cs.status === "closed")
+                  .map((cs) => (
+                    <div 
+                      key={cs.id}
+                      className="p-4 rounded-2xl border border-border/50 bg-secondary/20 hover:bg-secondary/40 transition-colors flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs"
+                    >
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-2">
+                          <span className="font-bold text-foreground">{cs.cashierName || "Caissier"}</span>
+                          <span className="text-[10px] px-2 py-0.5 rounded-full bg-secondary font-medium text-muted-foreground">
+                            {cs.totalSalesCount} ventes
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-muted-foreground">
+                          {new Date(cs.openedAt).toLocaleDateString("fr-FR", { day: "numeric", month: "short", year: "numeric" })}
+                          {" • "}
+                          {new Date(cs.openedAt).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })}
+                          {" → "}
+                          {cs.closedAt ? new Date(cs.closedAt).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" }) : "N/A"}
+                        </p>
+                      </div>
+
+                      <div className="flex items-center gap-4">
+                        <div className="text-right">
+                          <p className="font-bold text-foreground text-sm">{formatPrice(cs.totalSalesAmount)}</p>
+                          <p className={`text-[10px] font-bold ${
+                            (cs.difference || 0) === 0 ? "text-emerald-600" : (cs.difference || 0) > 0 ? "text-blue-600" : "text-destructive"
+                          }`}>
+                            Écart: {(cs.difference || 0) > 0 ? "+" : ""}{formatPrice(cs.difference || 0)}
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSelectedZSession(cs);
+                            setShowHistoryModal(false);
+                            setShowRapportZModal(true);
+                          }}
+                          className="px-3 py-1.5 rounded-xl bg-primary/10 text-primary hover:bg-primary/20 font-bold transition-colors shrink-0"
+                        >
+                          Voir Z
+                        </button>
+                      </div>
+                    </div>
+                  ))
+              )}
+            </div>
+
+            <div className="pt-3 border-t border-border/40 shrink-0">
+              <button
+                type="button"
+                onClick={() => setShowHistoryModal(false)}
+                className="w-full py-2.5 rounded-xl border border-border/60 text-sm font-medium hover:bg-secondary transition-colors"
+              >
+                Fermer
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      </div>
     </div>
   );
 }

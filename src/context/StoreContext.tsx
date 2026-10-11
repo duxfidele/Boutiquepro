@@ -51,6 +51,8 @@ export interface Sale {
   discount: number;
   total: number;
   paymentMethod: "cash" | "mobile_money" | "card";
+  amountGiven?: number;
+  change?: number;
   customerName?: string;
   createdAt: string;
 }
@@ -99,6 +101,26 @@ export interface InventorySession {
   notes?: string;
 }
 
+export interface CashSession {
+  id: string;
+  storeId: string;
+  userId: string;
+  cashierName?: string;
+  openingAmount: number;
+  closingAmount?: number;
+  expectedAmount?: number;
+  difference?: number;
+  totalCashSales: number;
+  totalMobileMoneySales: number;
+  totalCardSales: number;
+  totalSalesCount: number;
+  totalSalesAmount: number;
+  openedAt: string;
+  closedAt?: string;
+  status: "open" | "closed";
+  notes?: string;
+}
+
 export interface StoreState {
   products: Product[];
   sales: Sale[];
@@ -108,6 +130,8 @@ export interface StoreState {
   cart: CartItem[];
   categories: Category[];
   inventorySessions: InventorySession[];
+  cashSessions: CashSession[];
+  activeCashSession: CashSession | null;
   settings: StoreSettings;
 }
 
@@ -132,6 +156,8 @@ type Action =
   | { type: "UPDATE_ORDER_STATUS"; payload: { orderId: string; status: "received" } }
   | { type: "DELETE_ORDER"; payload: string }
   | { type: "ADD_INVENTORY_SESSION"; payload: InventorySession }
+  | { type: "OPEN_CASH_SESSION"; payload: CashSession }
+  | { type: "CLOSE_CASH_SESSION"; payload: CashSession }
   | { type: "LOAD_STATE"; payload: StoreState };
 
 // ─── Demo seed data ──────────────────────────────────────────
@@ -179,6 +205,8 @@ const initialState: StoreState = {
   cart: [],
   categories: demoCategories,
   inventorySessions: [],
+  cashSessions: [],
+  activeCashSession: null,
   settings: { name: "BoutiquePro", currency: "FCFA", taxRate: 0, city: "Dakar", country: "Sénégal", email: "contact@boutiquepro.com", phone: "+221 77 000 00 00" },
 };
 
@@ -288,12 +316,16 @@ interface StoreContextType {
   categoryNames: string[];
   totalExpenses: number;
   netProfit: number;
+  activeCashSession: CashSession | null;
+  cashSessions: CashSession[];
+  openCashSession: (openingAmount: number, cashierName?: string) => Promise<CashSession>;
+  closeCashSession: (closingAmount: number, notes?: string) => Promise<CashSession | null>;
 }
 
 const StoreContext = createContext<StoreContextType | undefined>(undefined);
 
 export function StoreProvider({ children }: { children: ReactNode }) {
-  const { activeStore } = useAuth();
+  const { activeStore, user } = useAuth();
   const [state, dispatchBase] = useReducer(storeReducer, initialState);
   const [isInitialized, setIsInitialized] = useState(false);
 
@@ -311,7 +343,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           { data: customers },
           { data: orders },
           { data: inventory },
-          { data: expenses }
+          { data: expenses },
+          { data: cashSessionsData }
         ] = await Promise.all([
           supabase.from('settings').select('*').eq('store_id', activeStore.id).maybeSingle(),
           supabase.from('categories').select('*').eq('store_id', activeStore.id),
@@ -320,7 +353,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           supabase.from('customers').select('*').eq('store_id', activeStore.id),
           supabase.from('orders').select('*, items:order_items(*)').eq('store_id', activeStore.id),
           supabase.from('inventory_sessions').select('*, items:inventory_items(*)'),
-          supabase.from('expenses').select('*').eq('store_id', activeStore.id)
+          supabase.from('expenses').select('*').eq('store_id', activeStore.id),
+          supabase.from('cash_sessions').select('*').eq('store_id', activeStore.id).order('opened_at', { ascending: false })
         ]);
 
         const payload: any = {
@@ -409,6 +443,33 @@ export function StoreProvider({ children }: { children: ReactNode }) {
              ...e,
              createdAt: e.created_at
           }));
+        }
+        payload.cashSessions = [];
+        payload.activeCashSession = null;
+        if (cashSessionsData && cashSessionsData.length > 0) {
+          payload.cashSessions = cashSessionsData.map((cs: any) => ({
+            id: cs.id,
+            storeId: cs.store_id,
+            userId: cs.user_id,
+            cashierName: cs.cashier_name,
+            openingAmount: Number(cs.opening_amount) || 0,
+            closingAmount: cs.closing_amount !== null ? Number(cs.closing_amount) : undefined,
+            expectedAmount: cs.expected_amount !== null ? Number(cs.expected_amount) : undefined,
+            difference: cs.difference !== null ? Number(cs.difference) : undefined,
+            totalCashSales: Number(cs.total_cash_sales) || 0,
+            totalMobileMoneySales: Number(cs.total_mobile_money_sales) || 0,
+            totalCardSales: Number(cs.total_card_sales) || 0,
+            totalSalesCount: Number(cs.total_sales_count) || 0,
+            totalSalesAmount: Number(cs.total_sales_amount) || 0,
+            openedAt: cs.opened_at,
+            closedAt: cs.closed_at,
+            status: cs.status || "open",
+            notes: cs.notes
+          }));
+          const currentOpen = payload.cashSessions.find((cs: any) => cs.status === "open");
+          if (currentOpen) {
+            payload.activeCashSession = currentOpen;
+          }
         }
 
         // Restore Cart from localStorage (cart shouldn't be in DB)
@@ -628,8 +689,103 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   const categoryNames = state.categories.map((c) => c.name);
 
+  const openCashSession = async (openingAmount: number, cashierName?: string): Promise<CashSession> => {
+    const session: CashSession = {
+      id: "cs_" + Date.now() + "_" + Math.random().toString(36).substring(2, 7),
+      storeId: activeStore?.id || "",
+      userId: user?.id || "",
+      cashierName: cashierName || user?.user_metadata?.full_name || user?.email?.split('@')[0] || "Caissier",
+      openingAmount: openingAmount,
+      expectedAmount: openingAmount,
+      totalCashSales: 0,
+      totalMobileMoneySales: 0,
+      totalCardSales: 0,
+      totalSalesCount: 0,
+      totalSalesAmount: 0,
+      openedAt: new Date().toISOString(),
+      status: "open",
+    };
+
+    if (activeStore?.id) {
+      try {
+        await supabase.from("cash_sessions").insert([{
+          store_id: activeStore.id,
+          user_id: user?.id,
+          cashier_name: session.cashierName,
+          opening_amount: session.openingAmount,
+          expected_amount: session.openingAmount,
+          status: "open",
+          opened_at: session.openedAt
+        }]);
+      } catch (e) {
+        console.warn("Supabase cash_sessions insert notice:", e);
+      }
+    }
+
+    dispatchBase({ type: "OPEN_CASH_SESSION", payload: session });
+    return session;
+  };
+
+  const closeCashSession = async (closingAmount: number, notes?: string): Promise<CashSession | null> => {
+    if (!state.activeCashSession) return null;
+    const cur = state.activeCashSession;
+    const expected = cur.openingAmount + cur.totalCashSales;
+    const diff = closingAmount - expected;
+
+    const closedSession: CashSession = {
+      ...cur,
+      closingAmount,
+      expectedAmount: expected,
+      difference: diff,
+      status: "closed",
+      closedAt: new Date().toISOString(),
+      notes: notes || undefined
+    };
+
+    if (activeStore?.id) {
+      try {
+        await supabase.from("cash_sessions").update({
+          closing_amount: closingAmount,
+          expected_amount: expected,
+          difference: diff,
+          total_cash_sales: cur.totalCashSales,
+          total_mobile_money_sales: cur.totalMobileMoneySales,
+          total_card_sales: cur.totalCardSales,
+          total_sales_count: cur.totalSalesCount,
+          total_sales_amount: cur.totalSalesAmount,
+          status: "closed",
+          closed_at: closedSession.closedAt,
+          notes: notes || null
+        }).eq("id", cur.id);
+      } catch (e) {
+        console.warn("Supabase cash_sessions update notice:", e);
+      }
+    }
+
+    dispatchBase({ type: "CLOSE_CASH_SESSION", payload: closedSession });
+    return closedSession;
+  };
+
   return (
-    <StoreContext.Provider value={{ state, dispatch, formatPrice, lowStockProducts, totalRevenue, todayRevenue, totalOrders, todayOrders, averageBasket, categorySales, categoryNames, totalExpenses, netProfit }}>
+    <StoreContext.Provider value={{ 
+      state, 
+      dispatch, 
+      formatPrice, 
+      lowStockProducts, 
+      totalRevenue, 
+      todayRevenue, 
+      totalOrders, 
+      todayOrders, 
+      averageBasket, 
+      categorySales, 
+      categoryNames, 
+      totalExpenses, 
+      netProfit,
+      activeCashSession: state.activeCashSession,
+      cashSessions: state.cashSessions,
+      openCashSession,
+      closeCashSession
+    }}>
       {children}
     </StoreContext.Provider>
   );
