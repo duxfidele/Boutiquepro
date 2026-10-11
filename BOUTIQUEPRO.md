@@ -96,6 +96,14 @@ Les données sont strictement cloisonnées grâce aux **Row Level Security (RLS)
    - Autorisation des pages `/support` et `/profile` dans le garde de navigation `AppWrapper.tsx`.
 8. **Script SQL Consolidé** :
    - Création et enrichissement du fichier `saas_team_and_stores_management.sql` contenant toutes les fonctions sécurisées (`admin_create_cashier`, `assign_cashier_by_email`, `get_store_team_members`, `remove_cashier_from_store`, `create_new_store`).
+9. **Clôture de Caisse Journalière (Rapport Z & Rapport X)** :
+   - Table `cash_sessions` avec isolation RLS multi-boutiques (`saas_cash_register_sessions.sql`).
+   - Bandeau dynamique sur la caisse : état d'ouverture, fond initial, cumul des espèces en temps réel.
+   - Modal d'ouverture de caisse avec saisie du fond initial et raccourcis rapides.
+   - Point d'étape provisoire en cours de journée (Rapport X).
+   - Modal de clôture de shift : comptage physique des espèces avec détection et calcul instantané des écarts de caisse (Caisse juste, Excédent, ou Manquant).
+   - Impression certifiée du Ticket Thermique 80mm / PDF du Rapport Z officiel avec visas du caissier et du gérant.
+   - Historique des clôtures passées avec réimpression à la demande.
 
 ---
 
@@ -115,13 +123,13 @@ L'application a été conçue pour pouvoir être exploitée selon deux modèles 
 
 ---
 
-## 📌 Feuille de Route / Améliorations Futures Recommandées
+## 📌 Feuille de Route / Prochaines Étapes Recommandées
 
-1. **Clôture de Caisse Journalière (Rapport Z)** :
-   - Permettre au caissier d'ouvrir et clôturer son shift (fond de caisse initial, saisie des espèces comptées dans le tiroir, détection automatique des écarts de caisse).
+1. ✅ **Clôture de Caisse Journalière (Rapport Z)** : *(TERMINÉ & OPÉRATIONNEL)*
 2. **File d'Attente Hors-Ligne (Offline Sync Queue)** :
    - Sauvegarde des ventes dans IndexedDB en cas de coupure de connexion internet dans la boutique, avec resynchronisation automatique vers Supabase dès le retour du réseau.
 3. **Export Comptable Excel & CSV** :
    - Téléchargement en un clic de l'historique des ventes, des dépenses et de l'état des stocks pour la comptabilité.
 4. **Synchronisation Temps Réel du Stock (Supabase Realtime)** :
    - Décrémentation visuelle instantanée du stock sur tous les terminaux de caisse connectés lorsqu'un article est vendu sur l'une des caisses.
+
