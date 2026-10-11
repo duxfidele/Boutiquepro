@@ -183,8 +183,8 @@ export default function POSPage() {
     });
   }, [state.products, search, categoryFilter]);
 
-  const cart = state.cart;
-  const subtotal = cart.reduce((sum, c) => sum + c.product.price * c.quantity, 0);
+  const cart = (state.cart || []).filter((c) => c && c.product);
+  const subtotal = cart.reduce((sum, c) => sum + (c.product?.price || 0) * (c.quantity || 1), 0);
   const taxAmount = 0; // TVA Supprimée
   
   // Calcul dynamique de la remise (priorité au pourcentage déduit du coût total)

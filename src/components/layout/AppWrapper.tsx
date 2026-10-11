@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState } from 'react';
+import { ErrorBoundary } from '@/components/ErrorBoundary';
 import LandingPage from '@/components/marketing/LandingPage';
 import { useAuth } from '@/context/AuthContext';
 import Login from '@/components/auth/Login';
@@ -39,28 +40,32 @@ export default function AppWrapper({ children }: { children: React.ReactNode }) 
   if (!user) {
     if (!showAuth) {
       return (
-        <LandingPage 
-          onLoginClick={(signup) => {
-            setIsSignUpMode(signup);
-            setShowAuth(true);
-          }} 
-        />
+        <ErrorBoundary>
+          <LandingPage 
+            onLoginClick={(signup) => {
+              setIsSignUpMode(signup);
+              setShowAuth(true);
+            }} 
+          />
+        </ErrorBoundary>
       );
     }
     return <Login initialIsSignUp={isSignUpMode} onBack={() => setShowAuth(false)} />;
   }
 
   return (
-    <StoreProvider>
-      <div className="flex min-h-screen">
-        <Sidebar isOpen={isMobileMenuOpen} onClose={() => setIsMobileMenuOpen(false)} />
-        <div className="flex-1 flex flex-col min-w-0 lg:ml-[260px] ml-0 transition-all duration-300">
-          <Header onMenuClick={() => setIsMobileMenuOpen(true)} />
-          <main className="flex-1 p-6">
-            {children}
-          </main>
+    <ErrorBoundary>
+      <StoreProvider>
+        <div className="flex min-h-screen">
+          <Sidebar isOpen={isMobileMenuOpen} onClose={() => setIsMobileMenuOpen(false)} />
+          <div className="flex-1 flex flex-col min-w-0 lg:ml-[260px] ml-0 transition-all duration-300">
+            <Header onMenuClick={() => setIsMobileMenuOpen(true)} />
+            <main className="flex-1 p-6">
+              {children}
+            </main>
+          </div>
         </div>
-      </div>
-    </StoreProvider>
+      </StoreProvider>
+    </ErrorBoundary>
   );
 }

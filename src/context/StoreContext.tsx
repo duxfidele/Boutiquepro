@@ -993,10 +993,16 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         }
 
         // Restore Cart from localStorage (cart shouldn't be in DB)
-        const saved = localStorage.getItem("boutiquepro-state");
+        const saved = typeof window !== "undefined" ? localStorage.getItem("boutiquepro-state") : null;
         if (saved) {
-          const localData = JSON.parse(saved);
-          if (localData.cart) payload.cart = localData.cart;
+          try {
+            const localData = JSON.parse(saved);
+            if (Array.isArray(localData?.cart)) {
+              payload.cart = localData.cart.filter((c: any) => c && c.product && typeof c.product.price === "number");
+            }
+          } catch {
+            payload.cart = [];
+          }
         }
 
         dispatchBase({ type: "LOAD_STATE", payload });
