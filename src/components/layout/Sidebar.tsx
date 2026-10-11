@@ -26,7 +26,7 @@ import {
 } from "lucide-react";
 
 const navItems = [
-  { href: "/", label: "Tableau de bord", icon: LayoutDashboard, adminOnly: true },
+  { href: "/", label: "Tableau de bord", icon: LayoutDashboard, adminOnly: false },
   { href: "/pos", label: "Point de Vente", icon: ShoppingCart, adminOnly: false },
   { href: "/products", label: "Produits & Stock", icon: Package, adminOnly: false },
   { href: "/inventory", label: "Inventaire", icon: ClipboardList, adminOnly: true },

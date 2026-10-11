@@ -37,22 +37,7 @@ export default function Dashboard() {
   const { role, activeStore, stores } = useAuth();
   const router = useRouter();
 
-  // VERROUILLAGE SÉCURITÉ : Un caissier ne doit JAMAIS voir le tableau de bord du Boss
-  useEffect(() => {
-    if (role === 'cashier') {
-      router.replace('/pos');
-    }
-  }, [role, router]);
 
-  // Si c'est un caissier, afficher un loader de redirection immédiat
-  if (role === 'cashier') {
-    return (
-      <div className="flex flex-col items-center justify-center h-[60vh] gap-3">
-        <ShoppingCart className="h-10 w-10 text-primary animate-bounce" />
-        <p className="text-sm font-semibold text-muted-foreground">Ouverture de votre caisse en cours...</p>
-      </div>
-    );
-  }
   const {
     state,
     formatPrice,
@@ -217,9 +202,14 @@ export default function Dashboard() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold">Tableau de bord</h1>
+          <h1 className="text-2xl font-bold">
+            {role === 'cashier' ? "Mon Tableau de bord" : "Tableau de bord"}
+          </h1>
           <p className="text-sm text-muted-foreground mt-1">
-            Vue d&apos;ensemble de votre boutique — {new Date().toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}
+            {role === 'cashier' 
+              ? "Suivi de vos ventes et performances personnelles — " 
+              : "Vue d&apos;ensemble de votre boutique — "}
+            {new Date().toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}
           </p>
         </div>
         <div className="flex gap-2">
@@ -327,9 +317,15 @@ export default function Dashboard() {
               <h2 className="text-base font-semibold">Transactions récentes</h2>
               <p className="text-xs text-muted-foreground mt-0.5">Dernières ventes enregistrées</p>
             </div>
-            <Link href="/analytics" className="text-xs text-primary hover:underline font-medium">
-              Tout voir →
-            </Link>
+            {role === 'cashier' ? (
+              <Link href="/pos" className="text-xs text-primary hover:underline font-medium">
+                Aller en caisse →
+              </Link>
+            ) : (
+              <Link href="/analytics" className="text-xs text-primary hover:underline font-medium">
+                Tout voir →
+              </Link>
+            )}
           </div>
           <div className="space-y-3">
             {state.sales.slice(0, 5).map((sale) => (
@@ -362,12 +358,17 @@ export default function Dashboard() {
           <div className="rounded-2xl border border-border/40 bg-card p-6">
             <h2 className="text-base font-semibold mb-4">Actions rapides</h2>
             <div className="grid grid-cols-2 gap-3">
-              {[
+              {(role === 'cashier' ? [
+                { href: "/pos", label: "Caisse POS", icon: ShoppingCart, color: "bg-primary/10 text-primary hover:bg-primary/20" },
+                { href: "/products", label: "Catalogue", icon: Package, color: "bg-accent/10 text-accent hover:bg-accent/20" },
+                { href: "/support", label: "Assistance", icon: HelpCircle, color: "bg-chart-3/15 text-chart-3 hover:bg-chart-3/25" },
+                { href: "/products", label: "Alerte Stock", icon: AlertTriangle, color: "bg-chart-4/15 text-chart-4 hover:bg-chart-4/25" },
+              ] : [
                 { href: "/pos", label: "Vente", icon: ShoppingCart, color: "bg-primary/10 text-primary hover:bg-primary/20" },
                 { href: "/products", label: "Produit", icon: Package, color: "bg-accent/10 text-accent hover:bg-accent/20" },
                 { href: "/analytics", label: "Rapports", icon: BarChart3, color: "bg-chart-3/15 text-chart-3 hover:bg-chart-3/25" },
                 { href: "/products", label: "Stock", icon: AlertTriangle, color: "bg-chart-4/15 text-chart-4 hover:bg-chart-4/25" },
-              ].map((action) => {
+              ]).map((action) => {
                 const Icon = action.icon;
                 return (
                   <Link
