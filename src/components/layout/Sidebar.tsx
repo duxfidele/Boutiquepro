@@ -119,8 +119,8 @@ export default function Sidebar({ isOpen, onClose }: { isOpen?: boolean, onClose
       <nav className="flex-1 overflow-y-auto py-4 px-3 no-scrollbar">
         <div className="flex flex-col w-full space-y-1">
           {navItems.filter(item => !item.adminOnly || role === 'admin').map((item) => {
-            // Role based filtering : un caissier n'a accès qu'à la caisse, aux produits et au support
-            if (role === 'cashier' && !['/pos', '/products', '/support'].includes(item.href)) {
+            // Role based filtering : le caissier a accès à son tableau de bord, à la caisse, aux produits et au support
+            if (role === 'cashier' && !['/', '/pos', '/products', '/support'].includes(item.href)) {
               return null;
             }
 
@@ -144,7 +144,9 @@ export default function Sidebar({ isOpen, onClose }: { isOpen?: boolean, onClose
                 )}
                 <Icon className={`h-5 w-5 shrink-0 transition-colors ${isActive ? "text-primary" : ""}`} />
                 {!collapsed && (
-                  <span className="truncate animate-fade-in">{item.label}</span>
+                  <span className="truncate animate-fade-in">
+                    {role === 'cashier' && item.href === '/' ? "Mon Tableau de bord" : item.label}
+                  </span>
                 )}
                 {showBadge && (
                   <span className={`badge-pulse flex h-5 items-center justify-center rounded-full bg-destructive text-[10px] font-bold text-white ${collapsed ? "absolute -right-1 -top-1 w-5" : "ml-auto min-w-[20px] px-1.5"}`}>
