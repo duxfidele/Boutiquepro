@@ -474,7 +474,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         if (s.phone !== undefined) updates.phone = s.phone;
         
         if (Object.keys(updates).length > 0) {
-          const { error } = await supabase.from('settings').update(updates).eq('id', 1);
+          const { error } = await supabase.from('settings').update(updates).eq('store_id', activeStore.id);
           if (error) console.error("Supabase Update Settings Error:", error);
         }
       }
