@@ -22,6 +22,13 @@ import {
   FileText,
   CheckCircle2,
   X,
+  Wallet,
+  Clock,
+  Phone,
+  MessageCircle,
+  AlertTriangle,
+  ArrowRight,
+  UserCheck,
 } from "lucide-react";
 import {
   exportSalesJournal,
@@ -48,7 +55,22 @@ const paymentIcons: Record<string, React.ReactNode> = {
 };
 
 export default function AnalyticsPage() {
-  const { state, formatPrice, totalRevenue, totalOrders, averageBasket, categorySales } = useStore();
+  const { 
+    state, 
+    formatPrice, 
+    totalRevenue, 
+    totalOrders, 
+    averageBasket, 
+    categorySales,
+    unpaidDebts,
+    totalDebtsAmount,
+    totalCreditSales,
+    totalRecoveredAmount,
+    totalCollectedRevenue,
+    recoveryRate,
+    overdueDebtsCount,
+    collectedNetProfit
+  } = useStore();
   const [period, setPeriod] = useState<"all" | "today" | "week">("all");
   
   // Modal Export Comptable
@@ -145,12 +167,47 @@ export default function AnalyticsPage() {
       });
     });
 
-    // BÉNÉFICE BRUT RÉEL : CA net encaissé - Coût d'achat (tient compte de la remise)
+    // BÉNÉFICE BRUT RÉEL : CA net facturé - Coût d'achat
     const grossProfit = revenue - totalCost;
-    // BÉNÉFICE NET : Bénéfice brut - Dépenses (100% concordant avec le tableau de bord)
+    // BÉNÉFICE NET : Bénéfice brut - Dépenses
     const netProfit = grossProfit - totalExpenses;
-    // Taux de marge réel calculé sur le CA net encaissé
+    // Taux de marge réel calculé sur le CA net
     const marginRate = revenue > 0 ? ((grossProfit) / revenue) * 100 : 0;
+
+    // Métriques Crédits & Recouvrement pour la période sélectionnée
+    const creditSalesPeriod = filteredSales.filter(
+      (s) => s.paymentMethod === "credit" || (s.remainingAmount !== undefined && s.remainingAmount > 0)
+    );
+    const periodCreditAmount = creditSalesPeriod.reduce((sum, s) => sum + s.total, 0);
+    const periodRemainingDebts = creditSalesPeriod.reduce((sum, s) => sum + (s.remainingAmount ?? (s.paymentStatus === 'paid' ? 0 : s.total)), 0);
+    const periodRecovered = creditSalesPeriod.reduce((sum, s) => sum + (s.amountPaid ?? (s.paymentStatus === 'paid' ? s.total : 0)), 0);
+    const periodCollectedRevenue = Math.max(0, revenue - periodRemainingDebts);
+    const periodRecoveryRate = periodCreditAmount > 0 ? Math.min(100, Math.round((periodRecovered / periodCreditAmount) * 100)) : 100;
+    const periodCollectedNetProfit = periodCollectedRevenue - totalCost - totalExpenses;
+
+    // Top clients débiteurs
+    const debtorsMap: Record<string, { name: string; phone?: string; remaining: number; totalCredit: number; dueDate?: string }> = {};
+    (state.sales || []).forEach((s) => {
+      const rem = s.remainingAmount ?? (s.paymentMethod === 'credit' && s.paymentStatus !== 'paid' ? s.total : 0);
+      if (rem > 0 && s.customerName) {
+        const key = s.customerName.toLowerCase().trim();
+        if (!debtorsMap[key]) {
+          debtorsMap[key] = {
+            name: s.customerName,
+            phone: s.customerPhone,
+            remaining: 0,
+            totalCredit: 0,
+            dueDate: s.dueDate
+          };
+        }
+        debtorsMap[key].remaining += rem;
+        debtorsMap[key].totalCredit += s.total;
+        if (s.dueDate && (!debtorsMap[key].dueDate || s.dueDate < debtorsMap[key].dueDate!)) {
+          debtorsMap[key].dueDate = s.dueDate;
+        }
+      }
+    });
+    const topDebtors = Object.values(debtorsMap).sort((a, b) => b.remaining - a.remaining).slice(0, 5);
 
     return { 
       revenue, 
@@ -165,7 +222,14 @@ export default function AnalyticsPage() {
       paymentBreakdown, 
       marginRate, 
       grossProfit,
-      netProfit 
+      netProfit,
+      periodCreditAmount,
+      periodRemainingDebts,
+      periodRecovered,
+      periodCollectedRevenue,
+      periodRecoveryRate,
+      periodCollectedNetProfit,
+      topDebtors
     };
   }, [state.sales, state.products, state.expenses, period]);
 
@@ -246,6 +310,213 @@ export default function AnalyticsPage() {
             </div>
           );
         })}
+      </div>
+
+      {/* ================================================================ */}
+      {/* SECTION CONCORDANCE FINANCIÈRE & ÉTAT DE RECOUVREMENT DES CRÉDITS */}
+      {/* ================================================================ */}
+      <div className="rounded-2xl border border-border/60 bg-gradient-to-br from-card via-card to-secondary/30 p-6 shadow-sm space-y-6">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-border/50">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-500 flex items-center justify-center">
+              <BookOpen className="w-5 h-5" />
+            </div>
+            <div>
+              <h2 className="text-lg font-bold text-foreground flex items-center gap-2">
+                Concordance Financière & Déduction Trésorerie / Crédits
+              </h2>
+              <p className="text-xs text-muted-foreground">
+                Distinction comptable entre Chiffre d'Affaires Facturé et Trésorerie Réellement Encaissée
+              </p>
+            </div>
+          </div>
+
+          <a
+            href="/debts"
+            className="px-3.5 py-2 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-500 font-bold text-xs hover:bg-amber-500/20 transition-colors flex items-center gap-1.5 self-start sm:self-auto"
+          >
+            <BookOpen className="w-4 h-4" />
+            Gérer le Carnet de Dettes & Recouvrements →
+          </a>
+        </div>
+
+        {/* 4 Concordance Metric Cards */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="p-4 rounded-xl bg-secondary/30 border border-border/50">
+            <span className="text-xs text-muted-foreground font-semibold uppercase tracking-wider">1. CA Total Facturé</span>
+            <div className="text-2xl font-black text-foreground mt-1">
+              {formatPrice(analytics.revenue)}
+            </div>
+            <p className="text-[11px] text-muted-foreground mt-0.5">Ventes totales enregistrées</p>
+          </div>
+
+          <div className="p-4 rounded-xl bg-emerald-500/10 border border-emerald-500/20">
+            <span className="text-xs text-emerald-500 font-semibold uppercase tracking-wider flex items-center gap-1">
+              <CheckCircle2 className="w-3.5 h-3.5" /> 2. Encaissé Réel (En Caisse)
+            </span>
+            <div className="text-2xl font-black text-emerald-500 mt-1">
+              {formatPrice(analytics.periodCollectedRevenue)}
+            </div>
+            <p className="text-[11px] text-muted-foreground mt-0.5">Comptant + Acomptes reçus</p>
+          </div>
+
+          <div className="p-4 rounded-xl bg-rose-500/10 border border-rose-500/20">
+            <span className="text-xs text-rose-500 font-semibold uppercase tracking-wider flex items-center gap-1">
+              <Clock className="w-3.5 h-3.5" /> 3. Crédits en Attente
+            </span>
+            <div className="text-2xl font-black text-rose-500 mt-1">
+              {formatPrice(analytics.periodRemainingDebts)}
+            </div>
+            <p className="text-[11px] text-muted-foreground mt-0.5">Reste dû à recouvrer</p>
+          </div>
+
+          <div className="p-4 rounded-xl bg-primary/10 border border-primary/20">
+            <span className="text-xs text-primary font-semibold uppercase tracking-wider flex items-center gap-1">
+              <UserCheck className="w-3.5 h-3.5" /> 4. Taux de Recouvrement
+            </span>
+            <div className="text-2xl font-black text-primary mt-1">
+              {analytics.periodRecoveryRate}%
+            </div>
+            <p className="text-[11px] text-muted-foreground mt-0.5">{formatPrice(analytics.periodRecovered)} déjà recouvré</p>
+          </div>
+        </div>
+
+        {/* Detailed Financial Deduction Table & Top Debtors Grid */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 pt-2">
+          {/* Table de déduction et concordance stricte */}
+          <div className="p-5 rounded-xl bg-card border border-border/50 space-y-3">
+            <h3 className="text-sm font-bold text-foreground flex items-center gap-2">
+              <Wallet className="w-4 h-4 text-primary" />
+              Tableau de Concordance de Trésorerie
+            </h3>
+            <p className="text-xs text-muted-foreground">
+              Déduction exacte de l'argent disponible en poche vs le résultat comptable
+            </p>
+
+            <div className="space-y-2 pt-2 text-xs">
+              <div className="flex justify-between py-1.5 border-b border-border/30">
+                <span className="text-muted-foreground">Ventes payées au comptant (Espèces, MM, Carte) :</span>
+                <span className="font-bold text-foreground">
+                  {formatPrice(analytics.revenue - analytics.periodCreditAmount)}
+                </span>
+              </div>
+              <div className="flex justify-between py-1.5 border-b border-border/30">
+                <span className="text-emerald-500 font-medium">(+) Versements & recouvrements encaissés :</span>
+                <span className="font-bold text-emerald-500">
+                  +{formatPrice(analytics.periodRecovered)}
+                </span>
+              </div>
+              <div className="flex justify-between py-2 border-b border-border/50 bg-secondary/30 px-2 rounded-lg font-bold">
+                <span className="text-foreground">(=) TOTAL TRÉSORERIE RÉELLEMENT ENCAISSÉE :</span>
+                <span className="text-emerald-500 font-black">
+                  {formatPrice(analytics.periodCollectedRevenue)}
+                </span>
+              </div>
+              <div className="flex justify-between py-1.5 border-b border-border/30">
+                <span className="text-rose-500 font-medium">(+) Crédits accordés en attente de paiement :</span>
+                <span className="font-bold text-rose-500">
+                  +{formatPrice(analytics.periodRemainingDebts)}
+                </span>
+              </div>
+              <div className="flex justify-between py-1.5 border-b border-border/50 font-bold">
+                <span className="text-foreground">(=) Chiffre d'affaires Global Facturé :</span>
+                <span className="font-bold text-foreground">{formatPrice(analytics.revenue)}</span>
+              </div>
+              <div className="flex justify-between py-1.5 border-b border-border/30">
+                <span className="text-destructive font-medium">(-) Dépenses d'exploitation décaissées :</span>
+                <span className="font-bold text-destructive">-{formatPrice(analytics.totalExpenses)}</span>
+              </div>
+              <div className="flex justify-between py-2 bg-primary/10 border border-primary/20 px-2 rounded-lg font-bold">
+                <span className="text-primary font-bold">BÉNÉFICE NET RÉELLEMENT ENCAISSÉ :</span>
+                <span className="text-primary font-black">
+                  {formatPrice(Math.round(analytics.periodCollectedNetProfit))}
+                </span>
+              </div>
+              <div className="text-[11px] text-muted-foreground/80 italic text-right">
+                (Bénéfice théorique si tout était soldé : {formatPrice(Math.round(analytics.netProfit))})
+              </div>
+            </div>
+          </div>
+
+          {/* Top Débiteurs & Relances WhatsApp */}
+          <div className="p-5 rounded-xl bg-card border border-border/50 space-y-3">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-sm font-bold text-foreground flex items-center gap-2">
+                  <Clock className="w-4 h-4 text-amber-500" />
+                  Créances Prioritaires à Recouvrer
+                </h3>
+                <p className="text-xs text-muted-foreground">Top clients ayant les plus gros arriérés</p>
+              </div>
+              <a href="/debts" className="text-xs text-primary font-bold hover:underline">
+                Voir tout ({unpaidDebts.length}) →
+              </a>
+            </div>
+
+            <div className="space-y-2.5 pt-2">
+              {analytics.topDebtors.length === 0 ? (
+                <div className="py-8 text-center text-muted-foreground text-xs">
+                  <CheckCircle2 className="w-8 h-8 mx-auto text-emerald-500/40 mb-2" />
+                  Aucune créance client en attente. Votre trésorerie est à 100% à jour !
+                </div>
+              ) : (
+                analytics.topDebtors.map((debtor) => {
+                  const isOverdue = debtor.dueDate && new Date(debtor.dueDate) < new Date();
+                  const waClean = debtor.phone ? (debtor.phone.replace(/\D/g, "").length === 8 ? "229" + debtor.phone.replace(/\D/g, "") : debtor.phone.replace(/\D/g, "")) : null;
+                  const waMsg = encodeURIComponent(
+                    `Bonjour ${debtor.name}, sauf erreur de notre part, il reste un solde de ${debtor.remaining.toLocaleString("fr-FR")} FCFA sur votre compte client auprès de ${state.settings.name || "BoutiquePro"}. Merci de nous contacter pour votre règlement.`
+                  );
+                  const waUrl = waClean ? `https://wa.me/${waClean}?text=${waMsg}` : null;
+
+                  return (
+                    <div
+                      key={debtor.name}
+                      className="p-3 rounded-xl bg-secondary/30 border border-border/40 flex items-center justify-between text-xs hover:bg-secondary/50 transition-colors"
+                    >
+                      <div className="min-w-0 flex-1 pr-3">
+                        <div className="font-bold text-foreground truncate flex items-center gap-1.5">
+                          <span>{debtor.name}</span>
+                          {isOverdue && (
+                            <span className="px-1.5 py-0.2 rounded bg-rose-500/10 text-rose-500 text-[10px] font-black">
+                              Échéance dépassée
+                            </span>
+                          )}
+                        </div>
+                        <div className="text-[11px] text-muted-foreground mt-0.5">
+                          {debtor.phone ? debtor.phone : "Pas de numéro"}
+                          {debtor.dueDate ? ` • Échéance: ${new Date(debtor.dueDate).toLocaleDateString("fr-FR")}` : ""}
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        <div className="text-right">
+                          <div className="font-black text-rose-500 text-sm">
+                            {formatPrice(debtor.remaining)}
+                          </div>
+                          <div className="text-[10px] text-muted-foreground">
+                            sur {formatPrice(debtor.totalCredit)}
+                          </div>
+                        </div>
+
+                        {waUrl && (
+                          <a
+                            href={waUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="p-2 rounded-xl bg-emerald-500/10 text-emerald-500 hover:bg-emerald-500/20 border border-emerald-500/20 transition-colors"
+                            title="Relancer sur WhatsApp"
+                          >
+                            <MessageCircle className="w-3.5 h-3.5" />
+                          </a>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          </div>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">

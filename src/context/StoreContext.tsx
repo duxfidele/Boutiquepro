@@ -556,6 +556,12 @@ interface StoreContextType {
   isRealtimeActive: boolean;
   unpaidDebts: Sale[];
   totalDebtsAmount: number;
+  totalCreditSales: number;
+  totalRecoveredAmount: number;
+  totalCollectedRevenue: number;
+  recoveryRate: number;
+  overdueDebtsCount: number;
+  collectedNetProfit: number;
   recordDebtPayment: (
     saleId: string, 
     amount: number, 
@@ -1455,6 +1461,31 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   const netProfit = totalRevenue - totalCOGS - totalExpenses;
 
+  // Dettes, Crédits & Trésorerie Encaissée
+  const creditSales = (state.sales || []).filter(
+    (s) => s && (s.paymentMethod === "credit" || (s.remainingAmount !== undefined && s.remainingAmount > 0))
+  );
+
+  const totalCreditSales = creditSales.reduce((sum, s) => sum + (s?.total || 0), 0);
+
+  const totalRecoveredAmount = creditSales.reduce(
+    (sum, s) => sum + (s?.amountPaid ?? (s?.paymentStatus === "paid" ? s.total : 0)),
+    0
+  );
+
+  const totalCollectedRevenue = Math.max(0, totalRevenue - totalDebtsAmount);
+
+  const recoveryRate = totalCreditSales > 0
+    ? Math.min(100, Math.round((totalRecoveredAmount / totalCreditSales) * 100))
+    : 100;
+
+  const now = new Date();
+  const overdueDebtsCount = (unpaidDebts || []).filter(
+    (s) => s && s.dueDate && new Date(s.dueDate) < now
+  ).length;
+
+  const collectedNetProfit = totalCollectedRevenue - totalCOGS - totalExpenses;
+
   const categorySales: Record<string, number> = {};
   (state.sales || []).forEach((sale) => {
     if (!sale) return;
@@ -1613,6 +1644,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       isRealtimeActive,
       unpaidDebts,
       totalDebtsAmount,
+      totalCreditSales,
+      totalRecoveredAmount,
+      totalCollectedRevenue,
+      recoveryRate,
+      overdueDebtsCount,
+      collectedNetProfit,
       recordDebtPayment,
       createDirectDebt
     }}>
