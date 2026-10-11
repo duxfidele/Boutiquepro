@@ -1,7 +1,7 @@
 "use client";
 import { saveOfflineSale, getOfflineSales, removeOfflineSale, getOfflineSalesCount } from "@/lib/offlineQueue";
 
-import React, { createContext, useContext, useReducer, useEffect, useState, ReactNode } from "react";
+import React, { createContext, useContext, useReducer, useEffect, useState, useMemo, ReactNode } from "react";
 import { useAuth } from '@/context/AuthContext';
 import { supabase } from "@/lib/supabase";
 
