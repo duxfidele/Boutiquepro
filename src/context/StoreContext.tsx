@@ -616,10 +616,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   const categorySales: Record<string, number> = {};
   state.sales.forEach((sale) => {
+    const discountRatio = sale.subtotal > 0 ? (sale.total / sale.subtotal) : 1;
     sale.items.forEach((item) => {
       const product = state.products.find((p) => p.id === item.productId);
       if (product) {
-        categorySales[product.category] = (categorySales[product.category] || 0) + item.total;
+        const netItemTotal = Math.round(item.total * discountRatio);
+        categorySales[product.category] = (categorySales[product.category] || 0) + netItemTotal;
       }
     });
   });

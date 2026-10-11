@@ -35,7 +35,7 @@ export default function AnalyticsPage() {
   const { state, formatPrice, totalRevenue, totalOrders, averageBasket, categorySales } = useStore();
   const [period, setPeriod] = useState<"all" | "today" | "week">("all");
 
-  // Computed analytics
+  // Computed analytics (Concordance stricte avec le tableau de bord et prise en compte des remises)
   const analytics = useMemo(() => {
     const today = new Date().toISOString().split("T")[0];
     const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
@@ -46,27 +46,38 @@ export default function AnalyticsPage() {
       return true;
     });
 
+    const filteredExpenses = (state.expenses || []).filter((e) => {
+      if (period === "today") return e.date?.startsWith(today);
+      if (period === "week") return e.date >= weekAgo;
+      return true;
+    });
+
+    // CA net encaissé
     const revenue = filteredSales.reduce((sum, s) => sum + s.total, 0);
     const orders = filteredSales.length;
     const avgBasket = orders > 0 ? revenue / orders : 0;
-    const totalDiscount = filteredSales.reduce((sum, s) => sum + s.discount, 0);
-    const totalTax = filteredSales.reduce((sum, s) => sum + s.tax, 0);
+    const totalDiscount = filteredSales.reduce((sum, s) => sum + (s.discount || 0), 0);
+    const totalTax = filteredSales.reduce((sum, s) => sum + (s.tax || 0), 0);
+    // CA brut avant remises
+    const grossRevenue = revenue + totalDiscount;
+    const totalExpenses = filteredExpenses.reduce((sum, e) => sum + Number(e.amount || 0), 0);
 
-    // Product sales ranking
+    // Ventes par produit (avec prorata de remise pour concorder avec le montant net)
     const productSales: Record<string, { name: string; qty: number; revenue: number; image: string }> = {};
     filteredSales.forEach((sale) => {
+      const discountRatio = sale.subtotal > 0 ? (sale.total / sale.subtotal) : 1;
       sale.items.forEach((item) => {
         if (!productSales[item.productId]) {
           const product = state.products.find((p) => p.id === item.productId);
           productSales[item.productId] = { name: item.productName, qty: 0, revenue: 0, image: product?.image || "📦" };
         }
         productSales[item.productId].qty += item.quantity;
-        productSales[item.productId].revenue += item.total;
+        productSales[item.productId].revenue += Math.round(item.total * discountRatio);
       });
     });
     const topProducts = Object.values(productSales).sort((a, b) => b.revenue - a.revenue);
 
-    // Payment breakdown
+    // Moyens de paiement
     const paymentBreakdown: Record<string, { count: number; amount: number }> = {};
     filteredSales.forEach((sale) => {
       if (!paymentBreakdown[sale.paymentMethod]) {
@@ -76,23 +87,40 @@ export default function AnalyticsPage() {
       paymentBreakdown[sale.paymentMethod].amount += sale.total;
     });
 
-    // Margin analysis
+    // Coût total des produits vendus (Achats)
     let totalCost = 0;
-    let totalSaleRevenue = 0;
     filteredSales.forEach((sale) => {
       sale.items.forEach((item) => {
         const product = state.products.find((p) => p.id === item.productId);
         if (product) {
-          totalCost += product.cost * item.quantity;
-          totalSaleRevenue += item.total;
+          totalCost += (product.cost || 0) * item.quantity;
         }
       });
     });
-    const marginRate = totalSaleRevenue > 0 ? ((totalSaleRevenue - totalCost) / totalSaleRevenue) * 100 : 0;
-    const grossProfit = totalSaleRevenue - totalCost;
 
-    return { revenue, orders, avgBasket, totalDiscount, totalTax, topProducts, paymentBreakdown, marginRate, grossProfit };
-  }, [state.sales, state.products, period]);
+    // BÉNÉFICE BRUT RÉEL : CA net encaissé - Coût d'achat (tient compte de la remise)
+    const grossProfit = revenue - totalCost;
+    // BÉNÉFICE NET : Bénéfice brut - Dépenses (100% concordant avec le tableau de bord)
+    const netProfit = grossProfit - totalExpenses;
+    // Taux de marge réel calculé sur le CA net encaissé
+    const marginRate = revenue > 0 ? ((grossProfit) / revenue) * 100 : 0;
+
+    return { 
+      revenue, 
+      grossRevenue, 
+      orders, 
+      avgBasket, 
+      totalDiscount, 
+      totalTax, 
+      totalCost,
+      totalExpenses, 
+      topProducts, 
+      paymentBreakdown, 
+      marginRate, 
+      grossProfit,
+      netProfit 
+    };
+  }, [state.sales, state.products, state.expenses, period]);
 
   const categoryEntries = Object.entries(categorySales).sort((a, b) => b[1] - a[1]);
   const maxCategory = categoryEntries.length > 0 ? categoryEntries[0][1] : 1;
@@ -206,7 +234,9 @@ export default function AnalyticsPage() {
                 <div className="flex items-center justify-between mb-2">
                   <span className="text-sm font-medium">{cat}</span>
                   <div className="flex items-center gap-2">
-                    <span className="text-xs text-muted-foreground">{((amount / totalRevenue) * 100).toFixed(0)}%</span>
+                    <span className="text-xs text-muted-foreground">
+                      {totalRevenue > 0 ? Math.min(100, Math.round((amount / totalRevenue) * 100)) : 0}%
+                    </span>
                     <span className="text-sm font-semibold">{formatPrice(amount)}</span>
                   </div>
                 </div>
@@ -261,10 +291,12 @@ export default function AnalyticsPage() {
           <h2 className="text-base font-semibold mb-5">Résumé financier</h2>
           <div className="space-y-3">
             {[
-              { label: "Chiffre d'affaires brut", value: formatPrice(analytics.revenue), color: "text-foreground" },
-              
-              { label: "Remises accordées", value: `-${formatPrice(analytics.totalDiscount)}`, color: "text-accent" },
-              { label: "Bénéfice brut", value: formatPrice(Math.round(analytics.grossProfit)), color: "text-primary font-bold" },
+              { label: "Chiffre d'affaires brut", value: formatPrice(analytics.grossRevenue), color: "text-foreground" },
+              { label: "Remises accordées", value: `-${formatPrice(analytics.totalDiscount)}`, color: "text-amber-500 font-semibold" },
+              { label: "Chiffre d'affaires net", value: formatPrice(analytics.revenue), color: "text-foreground font-semibold" },
+              { label: "Coût des achats (produits)", value: `-${formatPrice(analytics.totalCost)}`, color: "text-muted-foreground" },
+              { label: "Dépenses d'exploitation", value: `-${formatPrice(analytics.totalExpenses)}`, color: "text-destructive" },
+              { label: "Bénéfice net (réel)", value: formatPrice(Math.round(analytics.netProfit)), color: "text-primary font-bold text-base" },
             ].map((row) => (
               <div key={row.label} className="flex items-center justify-between rounded-xl bg-secondary/20 px-4 py-3">
                 <span className="text-sm text-muted-foreground">{row.label}</span>
