@@ -44,6 +44,16 @@ export interface Order {
   expectedAt?: string;
 }
 
+export interface DebtPayment {
+  id: string;
+  saleId: string;
+  amount: number;
+  paymentMethod: "cash" | "mobile_money" | "card";
+  paidAt: string;
+  cashierName?: string;
+  note?: string;
+}
+
 export interface Sale {
   id: string;
   items: { productId: string; productName: string; quantity: number; unitPrice: number; total: number }[];
@@ -63,6 +73,8 @@ export interface Sale {
   amountPaid?: number;
   remainingAmount?: number;
   dueDate?: string;
+  notes?: string;
+  payments?: DebtPayment[];
 }
 
 export interface Customer {
@@ -162,6 +174,7 @@ type Action =
         newRemaining: number; 
         newStatus: "paid" | "partial"; 
         method: "cash" | "mobile_money" | "card"; 
+        payment?: DebtPayment;
       } 
     }
   | { type: "ADD_CUSTOMER"; payload: Customer }
@@ -368,14 +381,16 @@ function storeReducer(state: StoreState, action: Action): StoreState {
       };
     }
     case "RECORD_DEBT_PAYMENT": {
-      const { saleId, paymentAmount, newPaid, newRemaining, newStatus, method } = action.payload;
+      const { saleId, paymentAmount, newPaid, newRemaining, newStatus, method, payment } = action.payload;
       const updatedSales = state.sales.map((s) => {
         if (s.id !== saleId) return s;
+        const prevPayments = s.payments || [];
         return {
           ...s,
           amountPaid: newPaid,
           remainingAmount: newRemaining,
           paymentStatus: newStatus,
+          payments: payment ? [payment, ...prevPayments] : prevPayments,
         };
       });
 
@@ -541,7 +556,23 @@ interface StoreContextType {
   isRealtimeActive: boolean;
   unpaidDebts: Sale[];
   totalDebtsAmount: number;
-  recordDebtPayment: (saleId: string, amount: number, method?: "cash" | "mobile_money" | "card") => Promise<void>;
+  recordDebtPayment: (
+    saleId: string, 
+    amount: number, 
+    method?: "cash" | "mobile_money" | "card",
+    note?: string,
+    cashierName?: string
+  ) => Promise<DebtPayment | null>;
+  createDirectDebt: (data: {
+    customerName: string;
+    customerPhone?: string;
+    description: string;
+    totalAmount: number;
+    initialDeposit?: number;
+    depositPaymentMethod?: "cash" | "mobile_money" | "card";
+    dueDate?: string;
+    notes?: string;
+  }) => Promise<Sale>;
 }
 
 const StoreContext = createContext<StoreContextType | undefined>(undefined);
@@ -568,11 +599,13 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const recordDebtPayment = async (
     saleId: string,
     amount: number,
-    method: "cash" | "mobile_money" | "card" = "cash"
-  ) => {
-    if (amount <= 0) return;
+    method: "cash" | "mobile_money" | "card" = "cash",
+    note?: string,
+    cashierName?: string
+  ): Promise<DebtPayment | null> => {
+    if (amount <= 0) return null;
     const targetSale = state.sales.find((s) => s.id === saleId);
-    if (!targetSale) return;
+    if (!targetSale) return null;
 
     const currentPaid = targetSale.amountPaid || 0;
     const currentRemaining = targetSale.remainingAmount ?? targetSale.total;
@@ -581,11 +614,32 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     const newPaid = currentPaid + paymentAmount;
     const newRemaining = Math.max(0, currentRemaining - paymentAmount);
     const newStatus = newRemaining === 0 ? ("paid" as const) : ("partial" as const);
+    const now = new Date().toISOString();
+
+    const paymentRecord: DebtPayment = {
+      id: `rec-${Date.now()}`,
+      saleId,
+      amount: paymentAmount,
+      paymentMethod: method,
+      paidAt: now,
+      note: note || undefined,
+      cashierName: cashierName || user?.email?.split("@")[0] || "Caissier"
+    };
 
     dispatchBase({
       type: "RECORD_DEBT_PAYMENT",
-      payload: { saleId, paymentAmount, newPaid, newRemaining, newStatus, method },
+      payload: { saleId, paymentAmount, newPaid, newRemaining, newStatus, method, payment: paymentRecord },
     });
+
+    if (typeof window !== "undefined" && activeStore?.id) {
+      try {
+        const storeKey = `boutiquepro_debt_payments_${activeStore.id}`;
+        const existingStored = JSON.parse(localStorage.getItem(storeKey) || "[]");
+        localStorage.setItem(storeKey, JSON.stringify([paymentRecord, ...existingStored]));
+      } catch (e) {
+        console.warn("Erreur stockage paiement local:", e);
+      }
+    }
 
     if (typeof window !== "undefined" && navigator.onLine && activeStore?.id) {
       try {
@@ -620,6 +674,155 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         }
       }
     }
+
+    return paymentRecord;
+  };
+
+  const createDirectDebt = async (data: {
+    customerName: string;
+    customerPhone?: string;
+    description: string;
+    totalAmount: number;
+    initialDeposit?: number;
+    depositPaymentMethod?: "cash" | "mobile_money" | "card";
+    dueDate?: string;
+    notes?: string;
+  }): Promise<Sale> => {
+    const deposit = Math.min(Math.max(0, data.initialDeposit || 0), data.totalAmount);
+    const remaining = Math.max(0, data.totalAmount - deposit);
+    const status = remaining === 0 ? "paid" : deposit > 0 ? "partial" : "unpaid";
+    const saleId = `debt-${Date.now()}`;
+    const now = new Date().toISOString();
+
+    const initialPayment: DebtPayment[] = deposit > 0 ? [{
+      id: `rec-${Date.now()}`,
+      saleId,
+      amount: deposit,
+      paymentMethod: data.depositPaymentMethod || "cash",
+      paidAt: now,
+      note: "Acompte initial versé à la création",
+      cashierName: user?.email?.split("@")[0] || "Caissier"
+    }] : [];
+
+    const sale: Sale = {
+      id: saleId,
+      items: [
+        {
+          productId: "custom-credit",
+          productName: data.description.trim() || "Créance / Vente à crédit",
+          quantity: 1,
+          unitPrice: data.totalAmount,
+          total: data.totalAmount
+        }
+      ],
+      subtotal: data.totalAmount,
+      tax: 0,
+      discount: 0,
+      total: data.totalAmount,
+      paymentMethod: "credit",
+      amountPaid: deposit,
+      remainingAmount: remaining,
+      paymentStatus: status,
+      customerName: data.customerName.trim(),
+      customerPhone: data.customerPhone?.trim() || undefined,
+      dueDate: data.dueDate || undefined,
+      notes: data.notes?.trim() || undefined,
+      createdAt: now,
+      userId: user?.id,
+      storeId: activeStore?.id,
+      payments: initialPayment
+    };
+
+    dispatchBase({ type: "COMPLETE_SALE", payload: sale });
+
+    if (initialPayment.length > 0 && typeof window !== "undefined" && activeStore?.id) {
+      try {
+        const storeKey = `boutiquepro_debt_payments_${activeStore.id}`;
+        const existingStored = JSON.parse(localStorage.getItem(storeKey) || "[]");
+        localStorage.setItem(storeKey, JSON.stringify([initialPayment[0], ...existingStored]));
+      } catch (e) {
+        console.warn("Erreur stockage acompte initial:", e);
+      }
+    }
+
+    if (data.customerName.trim()) {
+      const existing = (state.customers || []).find(
+        (c) => c.name.toLowerCase() === data.customerName.trim().toLowerCase()
+      );
+      if (!existing) {
+        const newCust: Customer = {
+          id: `cust-${Date.now()}`,
+          name: data.customerName.trim(),
+          phone: data.customerPhone?.trim() || "",
+          totalPurchases: data.totalAmount,
+          lastVisit: now
+        };
+        dispatchBase({ type: "ADD_CUSTOMER", payload: newCust });
+        if (typeof window !== "undefined" && navigator.onLine && activeStore?.id) {
+          supabase.from("customers").insert([{
+            id: newCust.id,
+            store_id: activeStore.id,
+            name: newCust.name,
+            phone: newCust.phone,
+            total_purchases: newCust.totalPurchases,
+            last_visit: newCust.lastVisit
+          }]).then();
+        }
+      }
+    }
+
+    if (typeof window !== "undefined" && !navigator.onLine && activeStore?.id) {
+      await saveOfflineSale(activeStore.id, sale);
+      setPendingSyncCount((prev) => prev + 1);
+    } else if (activeStore?.id) {
+      try {
+        const { error: saleError } = await supabase.rpc("create_sale", {
+          p_store_id: activeStore.id,
+          p_sale_id: sale.id,
+          p_subtotal: sale.subtotal,
+          p_tax: sale.tax,
+          p_discount: sale.discount,
+          p_total: sale.total,
+          p_payment_method: sale.paymentMethod,
+          p_customer_name: sale.customerName || null,
+          p_created_at: sale.createdAt,
+          p_items: sale.items
+        });
+
+        if (saleError) {
+          await supabase.from("sales").insert([{
+            id: sale.id,
+            store_id: activeStore.id,
+            subtotal: sale.subtotal,
+            tax: 0,
+            discount: 0,
+            total: sale.total,
+            payment_method: "credit",
+            customer_name: sale.customerName,
+            customer_phone: sale.customerPhone,
+            amount_paid: sale.amountPaid,
+            remaining_amount: sale.remainingAmount,
+            payment_status: sale.paymentStatus,
+            due_date: sale.dueDate,
+            created_at: sale.createdAt
+          }]);
+        } else {
+          await supabase.from("sales").update({
+            customer_phone: sale.customerPhone,
+            amount_paid: sale.amountPaid,
+            remaining_amount: sale.remainingAmount,
+            payment_status: sale.paymentStatus,
+            due_date: sale.dueDate
+          }).eq("id", sale.id).eq("store_id", activeStore.id);
+        }
+      } catch (err) {
+        console.warn("Basculement offline pour créance:", err);
+        await saveOfflineSale(activeStore.id, sale);
+        setPendingSyncCount((prev) => prev + 1);
+      }
+    }
+
+    return sale;
   };
 
   const syncOfflineSales = async (): Promise<{ success: number; failed: number }> => {
@@ -889,6 +1092,13 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             minStock: p.min_stock || 0
           }));
         }
+        let localStoredPayments: DebtPayment[] = [];
+        if (typeof window !== "undefined" && activeStore?.id) {
+          try {
+            localStoredPayments = JSON.parse(localStorage.getItem(`boutiquepro_debt_payments_${activeStore.id}`) || "[]");
+          } catch (e) {}
+        }
+
         if (sales) {
           payload.sales = sales.map((s: any) => ({
             ...s,
@@ -900,6 +1110,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             paymentStatus: s.payment_status || (s.payment_method === 'credit' ? 'unpaid' : 'paid'),
             dueDate: s.due_date,
             createdAt: s.created_at,
+            payments: localStoredPayments.filter((p) => p.saleId === s.id),
             items: s.items ? s.items.map((i: any) => ({
               ...i,
               productId: i.product_id,
@@ -1402,7 +1613,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       isRealtimeActive,
       unpaidDebts,
       totalDebtsAmount,
-      recordDebtPayment
+      recordDebtPayment,
+      createDirectDebt
     }}>
       {children}
     </StoreContext.Provider>
