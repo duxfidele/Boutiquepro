@@ -767,8 +767,12 @@ export default function POSPage() {
                     <span>-{formatPrice(discountAmount)}</span>
                   </div>
                 )}
+                <div className="flex justify-between text-muted-foreground text-[11px]">
+                  <span>TVA (0%)</span>
+                  <span>0 {state.settings.currency}</span>
+                </div>
                 <div className="flex justify-between text-base font-extrabold pt-0.5 text-foreground">
-                  <span>Total à Payer</span>
+                  <span>Total TTC à Payer</span>
                   <span className="text-primary text-lg">{formatPrice(total)}</span>
                 </div>
 
@@ -929,8 +933,15 @@ export default function POSPage() {
                     </>
                   )}
 
+                  <div className="flex justify-between items-center text-gray-700">
+                    <span>TVA (0%)</span>
+                    <span>0 {state.settings.currency}</span>
+                  </div>
+
+                  <div className="border-t border-dashed border-gray-300 my-1"></div>
+
                   <div className="flex justify-between items-baseline text-xs font-black text-black py-0.5">
-                    <span className="tracking-wider">TOTAL</span>
+                    <span className="tracking-wider">TOTAL TTC</span>
                     <span className="text-sm font-extrabold">{new Intl.NumberFormat("fr-FR").format(lastSale.total)} {state.settings.currency}</span>
                   </div>
                 </div>
@@ -1119,8 +1130,13 @@ export default function POSPage() {
                       </div>
                     )}
 
+                    <div className="flex justify-between text-xs text-gray-600 font-medium">
+                      <span>TVA (0%)</span>
+                      <span>0 {state.settings.currency}</span>
+                    </div>
+
                     <div className="border-t-2 border-gray-900 pt-3 flex justify-between items-baseline">
-                      <span className="text-sm font-black text-gray-900 uppercase tracking-wide">Net à Payer</span>
+                      <span className="text-sm font-black text-gray-900 uppercase tracking-wide">Total TTC (Net à Payer)</span>
                       <span className="text-xl font-black text-primary">
                         {new Intl.NumberFormat("fr-FR").format(lastSale.total)} {state.settings.currency}
                       </span>
