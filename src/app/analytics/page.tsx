@@ -12,6 +12,7 @@ import {
   ArrowUpRight,
   Calendar,
   Banknote,
+  BookOpen,
   Smartphone,
   CreditCard,
   Package,
@@ -36,12 +37,14 @@ const paymentLabels: Record<string, string> = {
   cash: "Espèces",
   mobile_money: "Mobile Money",
   card: "Carte",
+  credit: "Crédit Client",
 };
 
 const paymentIcons: Record<string, React.ReactNode> = {
   cash: <Banknote className="h-4 w-4" />,
   mobile_money: <Smartphone className="h-4 w-4" />,
   card: <CreditCard className="h-4 w-4" />,
+  credit: <BookOpen className="h-4 w-4" />,
 };
 
 export default function AnalyticsPage() {
@@ -110,7 +113,7 @@ export default function AnalyticsPage() {
     const productSales: Record<string, { name: string; qty: number; revenue: number; image: string }> = {};
     filteredSales.forEach((sale) => {
       const discountRatio = sale.subtotal > 0 ? (sale.total / sale.subtotal) : 1;
-      sale.items.forEach((item) => {
+      (sale.items || []).forEach((item) => {
         if (!productSales[item.productId]) {
           const product = state.products.find((p) => p.id === item.productId);
           productSales[item.productId] = { name: item.productName, qty: 0, revenue: 0, image: product?.image || "📦" };
@@ -134,7 +137,7 @@ export default function AnalyticsPage() {
     // Coût total des produits vendus (Achats)
     let totalCost = 0;
     filteredSales.forEach((sale) => {
-      sale.items.forEach((item) => {
+      (sale.items || []).forEach((item) => {
         const product = state.products.find((p) => p.id === item.productId);
         if (product) {
           totalCost += (product.cost || 0) * item.quantity;

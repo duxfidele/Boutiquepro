@@ -18,6 +18,7 @@ import {
   CreditCard,
   Smartphone,
   Banknote,
+  BookOpen,
   HelpCircle,
 } from "lucide-react";
 import { ProductAvatar } from "@/components/ui/ProductAvatar";
@@ -26,12 +27,14 @@ const paymentIcons: Record<string, React.ReactNode> = {
   cash: <Banknote className="h-3.5 w-3.5" />,
   mobile_money: <Smartphone className="h-3.5 w-3.5" />,
   card: <CreditCard className="h-3.5 w-3.5" />,
+  credit: <BookOpen className="h-3.5 w-3.5" />,
 };
 
 const paymentLabels: Record<string, string> = {
   cash: "Espèces",
   mobile_money: "Mobile Money",
   card: "Carte",
+  credit: "Crédit Client",
 };
 
 export default function Dashboard() {
@@ -147,7 +150,8 @@ export default function Dashboard() {
   const now = new Date();
   const oneWeekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
   
-  state.sales.forEach(sale => {
+  (state.sales || []).forEach(sale => {
+    if (!sale || !sale.createdAt) return;
     const saleDate = new Date(sale.createdAt);
     if (saleDate >= oneWeekAgo) {
       let dayIndex = saleDate.getDay() - 1;
@@ -335,16 +339,16 @@ export default function Dashboard() {
                 className="flex items-center gap-4 rounded-xl bg-secondary/30 p-3.5 hover:bg-secondary/50 transition-colors"
               >
                 <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-secondary text-muted-foreground">
-                  {paymentIcons[sale.paymentMethod]}
+                  {paymentIcons[sale.paymentMethod] || <Receipt className="h-3.5 w-3.5" />}
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium truncate">
-                    {sale.items.map((i) => i.productName).join(", ")}
+                    {(sale.items || []).map((i) => i?.productName || "").join(", ") || "Vente"}
                   </p>
                   <p className="text-[10px] text-muted-foreground">
                     {new Date(sale.createdAt).toLocaleString("fr-FR", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })}
                     {" • "}
-                    {paymentLabels[sale.paymentMethod]}
+                    {paymentLabels[sale.paymentMethod] || "Paiement"}
                   </p>
                 </div>
                 <p className="text-sm font-semibold whitespace-nowrap">{formatPrice(sale.total)}</p>

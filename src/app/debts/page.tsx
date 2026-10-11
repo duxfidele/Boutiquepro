@@ -24,7 +24,8 @@ import {
 } from "lucide-react";
 
 export default function DebtsPage() {
-  const { sales, recordDebtPayment, activeStore, activeCashSession } = useStore();
+  const { state, recordDebtPayment, activeStore, activeCashSession } = useStore();
+  const sales = useMemo(() => state?.sales || [], [state?.sales]);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<"all" | "unpaid" | "partial" | "paid">("all");
   
@@ -50,7 +51,8 @@ export default function DebtsPage() {
     let activeDebtsCount = 0;
     const debtorNames = new Set<string>();
 
-    debtSales.forEach((s) => {
+    (debtSales || []).forEach((s) => {
+      if (!s) return;
       const remaining = s.remainingAmount ?? (s.paymentStatus === "paid" ? 0 : s.total);
       const paid = s.amountPaid ?? (s.paymentStatus === "paid" ? s.total : 0);
       
@@ -348,8 +350,8 @@ export default function DebtsPage() {
                         </div>
                       </td>
                       <td className="py-3.5 px-4 max-w-[200px]">
-                        <div className="truncate text-xs text-muted-foreground" title={debt.items.map((i) => `${i.quantity}x ${i.productName}`).join(", ")}>
-                          {debt.items.map((i) => `${i.quantity}x ${i.productName}`).join(", ")}
+                        <div className="truncate text-xs text-muted-foreground" title={(debt.items || []).map((i) => `${i.quantity}x ${i.productName}`).join(", ")}>
+                          {(debt.items || []).map((i) => `${i.quantity}x ${i.productName}`).join(", ")}
                         </div>
                       </td>
                       <td className="py-3.5 px-4 text-right font-medium text-foreground whitespace-nowrap">

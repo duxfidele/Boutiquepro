@@ -513,6 +513,11 @@ function storeReducer(state: StoreState, action: Action): StoreState {
 // ─── Context ─────────────────────────────────────────────────
 interface StoreContextType {
   state: StoreState;
+  sales: Sale[];
+  products: Product[];
+  customers: Customer[];
+  expenses: Expense[];
+  orders: Order[];
   dispatch: (action: Action) => void;
   formatPrice: (amount: number) => string;
   lowStockProducts: Product[];
@@ -551,13 +556,13 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   // Synchronisation des ventes hors-ligne
   const unpaidDebts = useMemo(() => {
-    return state.sales.filter(
-      (s) => s.paymentMethod === "credit" && (s.remainingAmount === undefined || s.remainingAmount > 0)
+    return (state.sales || []).filter(
+      (s) => s && s.paymentMethod === "credit" && (s.remainingAmount === undefined || s.remainingAmount > 0)
     );
   }, [state.sales]);
 
   const totalDebtsAmount = useMemo(() => {
-    return unpaidDebts.reduce((sum, s) => sum + (s.remainingAmount ?? s.total), 0);
+    return (unpaidDebts || []).reduce((sum, s) => sum + (s ? (s.remainingAmount ?? s.total ?? 0) : 0), 0);
   }, [unpaidDebts]);
 
   const recordDebtPayment = async (
@@ -1206,23 +1211,25 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     return new Intl.NumberFormat("fr-FR").format(amount) + " " + state.settings.currency;
   };
 
-  const lowStockProducts = state.products.filter((p) => p.stock <= p.minStock);
+  const lowStockProducts = (state.products || []).filter((p) => p && p.stock <= p.minStock);
 
-  const totalRevenue = state.sales.reduce((sum, s) => sum + s.total, 0);
+  const totalRevenue = (state.sales || []).reduce((sum, s) => sum + (s?.total || 0), 0);
 
   const today = new Date().toISOString().split("T")[0];
-  const todaySales = state.sales.filter((s) => s.createdAt.startsWith(today));
-  const todayRevenue = todaySales.reduce((sum, s) => sum + s.total, 0);
-  const totalOrders = state.sales.length;
+  const todaySales = (state.sales || []).filter((s) => s?.createdAt && s.createdAt.startsWith(today));
+  const todayRevenue = todaySales.reduce((sum, s) => sum + (s?.total || 0), 0);
+  const totalOrders = (state.sales || []).length;
   const todayOrders = todaySales.length;
   const averageBasket = totalOrders > 0 ? totalRevenue / totalOrders : 0;
 
   const totalExpenses = state.expenses ? state.expenses.reduce((sum, e) => sum + Number(e.amount), 0) : 0;
   
   let totalCOGS = 0;
-  state.sales.forEach(sale => {
-    sale.items.forEach(item => {
-      const product = state.products.find(p => p.id === item.productId);
+  (state.sales || []).forEach(sale => {
+    if (!sale) return;
+    (sale.items || []).forEach(item => {
+      if (!item) return;
+      const product = (state.products || []).find(p => p.id === item.productId);
       if (product) {
         totalCOGS += (product.cost * item.quantity);
       }
@@ -1232,10 +1239,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const netProfit = totalRevenue - totalCOGS - totalExpenses;
 
   const categorySales: Record<string, number> = {};
-  state.sales.forEach((sale) => {
+  (state.sales || []).forEach((sale) => {
+    if (!sale) return;
     const discountRatio = sale.subtotal > 0 ? (sale.total / sale.subtotal) : 1;
-    sale.items.forEach((item) => {
-      const product = state.products.find((p) => p.id === item.productId);
+    (sale.items || []).forEach((item) => {
+      if (!item) return;
+      const product = (state.products || []).find((p) => p.id === item.productId);
       if (product) {
         const netItemTotal = Math.round(item.total * discountRatio);
         categorySales[product.category] = (categorySales[product.category] || 0) + netItemTotal;

@@ -128,10 +128,10 @@ export default function Sidebar({ isOpen, onClose }: { isOpen?: boolean, onClose
 
             const isActive = pathname === item.href;
             const Icon = item.icon;
-            const isProductsBadge = item.href === "/products" && lowStockProducts.length > 0;
-            const isDebtsBadge = item.href === "/debts" && unpaidDebts && unpaidDebts.length > 0;
+            const isProductsBadge = item.href === "/products" && Boolean(lowStockProducts && lowStockProducts.length > 0);
+            const isDebtsBadge = item.href === "/debts" && Boolean(unpaidDebts && unpaidDebts.length > 0);
             const showBadge = isProductsBadge || isDebtsBadge;
-            const badgeCount = isProductsBadge ? lowStockProducts.length : (isDebtsBadge ? unpaidDebts.length : 0);
+            const badgeCount = isProductsBadge ? (lowStockProducts?.length || 0) : (isDebtsBadge ? (unpaidDebts?.length || 0) : 0);
             const badgeColor = isDebtsBadge ? "bg-amber-500" : "bg-destructive";
 
             return (
