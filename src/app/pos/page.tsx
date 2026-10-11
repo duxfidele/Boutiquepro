@@ -1047,8 +1047,13 @@ export default function POSPage() {
 
                   {/* Bloc Numéro et Date de Facture */}
                   <div className="text-left sm:text-right">
-                    <div className="inline-block px-3 py-1 rounded-full bg-primary/10 text-primary text-xs font-black tracking-wider uppercase mb-2">
-                      FACTURE ACQUITTÉE
+                    <div className="flex flex-col sm:items-end gap-1 mb-2">
+                      <div className="inline-block px-3 py-1 rounded-full bg-gray-900 text-white text-[11px] font-black tracking-wider uppercase">
+                        FACTURE ACQUITTÉE
+                      </div>
+                      <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-md">
+                        RÉGIME : TVA 0% (FRANCHISE EN BASE)
+                      </span>
                     </div>
                     <p className="text-lg font-black text-gray-900">N° FAC-{lastSale.id.slice(0, 8).toUpperCase()}</p>
                     <p className="text-xs text-gray-600 mt-0.5">
@@ -1078,28 +1083,30 @@ export default function POSPage() {
                   </div>
                 </div>
 
-                {/* Tableau Pro des Articles */}
-                <div className="border border-gray-200 rounded-xl overflow-hidden mb-8 shadow-xs">
+                {/* Tableau Pro des Articles avec colonnes explicites HT, TVA et TTC */}
+                <div className="border border-gray-300 rounded-xl overflow-hidden mb-8 shadow-xs">
                   <table className="w-full text-left text-xs">
-                    <thead className="bg-gray-100 text-gray-700 font-bold border-b border-gray-200 uppercase tracking-wider text-[11px]">
+                    <thead className="bg-gray-100 text-gray-800 font-extrabold border-b border-gray-300 uppercase tracking-wider text-[11px]">
                       <tr>
-                        <th className="py-3 px-4 w-12 text-center">#</th>
+                        <th className="py-3 px-3 w-10 text-center">#</th>
                         <th className="py-3 px-4">Désignation de l'article</th>
-                        <th className="py-3 px-4 text-center w-20">Qté</th>
-                        <th className="py-3 px-4 text-right w-32">Prix Unitaire</th>
-                        <th className="py-3 px-4 text-right w-36">Total Net</th>
+                        <th className="py-3 px-3 text-center w-16">Qté</th>
+                        <th className="py-3 px-4 text-right w-28">P.U. (HT)</th>
+                        <th className="py-3 px-3 text-center w-20">TVA</th>
+                        <th className="py-3 px-4 text-right w-32">Total TTC</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-gray-100 text-gray-800">
+                    <tbody className="divide-y divide-gray-200 text-gray-900">
                       {lastSale.items.map((item, i) => (
                         <tr key={i} className="hover:bg-gray-50/50 transition-colors">
-                          <td className="py-3.5 px-4 text-center font-bold text-gray-400">{i + 1}</td>
-                          <td className="py-3.5 px-4 font-semibold text-gray-900">{item.productName}</td>
-                          <td className="py-3.5 px-4 text-center font-bold text-gray-800">{item.quantity}</td>
-                          <td className="py-3.5 px-4 text-right text-gray-600 font-medium">
+                          <td className="py-3 px-3 text-center font-bold text-gray-400">{i + 1}</td>
+                          <td className="py-3 px-4 font-semibold text-gray-900">{item.productName}</td>
+                          <td className="py-3 px-3 text-center font-bold text-gray-900">{item.quantity}</td>
+                          <td className="py-3 px-4 text-right text-gray-700 font-medium">
                             {new Intl.NumberFormat("fr-FR").format(item.unitPrice)} {state.settings.currency}
                           </td>
-                          <td className="py-3.5 px-4 text-right font-extrabold text-gray-900">
+                          <td className="py-3 px-3 text-center font-bold text-emerald-700">0%</td>
+                          <td className="py-3 px-4 text-right font-black text-gray-900">
                             {new Intl.NumberFormat("fr-FR").format(item.total)} {state.settings.currency}
                           </td>
                         </tr>
@@ -1111,35 +1118,46 @@ export default function POSPage() {
                 {/* Bloc Totaux & Signature */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-8 items-start mb-8">
                   {/* Cadre Cachet & Signature */}
-                  <div className="border border-dashed border-gray-300 rounded-xl p-4 text-center text-xs text-gray-500 h-36 flex flex-col justify-between">
-                    <p className="font-bold text-gray-700">Cachet & Signature de la boutique</p>
-                    <p className="text-[10px] text-gray-400">Pour acquit et bonne réception des articles</p>
+                  <div className="border-2 border-dashed border-gray-300 rounded-xl p-5 text-center text-xs text-gray-600 h-44 flex flex-col justify-between bg-gray-50/40">
+                    <p className="font-extrabold text-gray-800 uppercase tracking-wide">Cachet & Signature de la boutique</p>
+                    <div className="py-2 text-[11px] text-gray-400 italic">Mention : Pour acquit et conformité</div>
+                    <p className="text-[10px] text-gray-500 font-medium border-t border-gray-200 pt-2">Vente certifiée • BoutiquePro SaaS</p>
                   </div>
 
-                  {/* Totaux financiers */}
-                  <div className="bg-gray-50 rounded-xl p-5 border border-gray-200 space-y-2.5">
-                    <div className="flex justify-between text-xs text-gray-600 font-medium">
-                      <span>Total Brut (HT)</span>
-                      <span>{new Intl.NumberFormat("fr-FR").format(lastSale.subtotal)} {state.settings.currency}</span>
+                  {/* Totaux financiers avec TVA 0 F et Total TTC ultra visibles */}
+                  <div className="bg-gray-50 rounded-xl p-5 border-2 border-gray-200 space-y-3">
+                    <div className="flex justify-between text-xs text-gray-700 font-semibold">
+                      <span>Montant Total Brut (HT) :</span>
+                      <span className="font-bold text-gray-900">{new Intl.NumberFormat("fr-FR").format(lastSale.subtotal)} {state.settings.currency}</span>
                     </div>
 
                     {lastSale.discount > 0 && (
                       <div className="flex justify-between text-xs text-emerald-700 font-bold">
-                        <span>Remise commerciale accordée</span>
+                        <span>Remise commerciale accordée :</span>
                         <span>-{new Intl.NumberFormat("fr-FR").format(lastSale.discount)} {state.settings.currency}</span>
                       </div>
                     )}
 
-                    <div className="flex justify-between text-xs text-gray-600 font-medium">
-                      <span>TVA (0%)</span>
-                      <span>0 {state.settings.currency}</span>
+                    {/* LIGNE TVA (0%) : 0 FCFA TRÈS CLAIRE ET ENCADRÉE */}
+                    <div className="flex justify-between items-center text-xs font-bold text-gray-800 bg-white p-2.5 rounded-lg border border-gray-300 shadow-xs">
+                      <span className="flex items-center gap-1.5 text-gray-700">
+                        <span className="h-2 w-2 rounded-full bg-emerald-500 inline-block"></span>
+                        TVA (0%) :
+                      </span>
+                      <span className="font-black text-gray-900">0 {state.settings.currency}</span>
                     </div>
 
-                    <div className="border-t-2 border-gray-900 pt-3 flex justify-between items-baseline">
-                      <span className="text-sm font-black text-gray-900 uppercase tracking-wide">Total TTC (Net à Payer)</span>
-                      <span className="text-xl font-black text-primary">
-                        {new Intl.NumberFormat("fr-FR").format(lastSale.total)} {state.settings.currency}
-                      </span>
+                    {/* LIGNE TOTAL TTC EN GRAND ET ENCADRÉ NOIR CONTRASTÉ */}
+                    <div className="pt-2">
+                      <div className="bg-gray-900 text-white rounded-xl p-3.5 flex justify-between items-center shadow-sm">
+                        <div>
+                          <span className="text-[11px] font-black uppercase tracking-wider block text-gray-200">TOTAL TTC À PAYER</span>
+                          <span className="text-[9px] text-gray-400">Toutes Taxes Comprises</span>
+                        </div>
+                        <span className="text-xl sm:text-2xl font-black text-white">
+                          {new Intl.NumberFormat("fr-FR").format(lastSale.total)} {state.settings.currency}
+                        </span>
+                      </div>
                     </div>
 
                     {lastSale.paymentMethod === "cash" && lastSale.amountGiven !== undefined && lastSale.amountGiven > 0 && (
