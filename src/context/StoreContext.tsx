@@ -1,4 +1,5 @@
 "use client";
+import { saveOfflineSale, getOfflineSales, removeOfflineSale, getOfflineSalesCount } from "@/lib/offlineQueue";
 
 import React, { createContext, useContext, useReducer, useEffect, useState, ReactNode } from "react";
 import { useAuth } from '@/context/AuthContext';
@@ -437,6 +438,10 @@ interface StoreContextType {
   cashSessions: CashSession[];
   openCashSession: (openingAmount: number, cashierName?: string) => Promise<CashSession>;
   closeCashSession: (closingAmount: number, notes?: string) => Promise<CashSession | null>;
+  isOnline: boolean;
+  pendingSyncCount: number;
+  isSyncing: boolean;
+  syncOfflineSales: () => Promise<{ success: number; failed: number }>;
 }
 
 const StoreContext = createContext<StoreContextType | undefined>(undefined);
@@ -445,6 +450,96 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const { activeStore, user } = useAuth();
   const [state, dispatchBase] = useReducer(storeReducer, initialState);
   const [isInitialized, setIsInitialized] = useState(false);
+  const [isOnline, setIsOnline] = useState<boolean>(true);
+  const [pendingSyncCount, setPendingSyncCount] = useState<number>(0);
+  const [isSyncing, setIsSyncing] = useState<boolean>(false);
+
+  // Synchronisation des ventes hors-ligne
+  const syncOfflineSales = async (): Promise<{ success: number; failed: number }> => {
+    if (!activeStore?.id || !navigator.onLine || isSyncing) return { success: 0, failed: 0 };
+    setIsSyncing(true);
+    let success = 0;
+    let failed = 0;
+
+    try {
+      const pendingItems = await getOfflineSales(activeStore.id);
+      for (const item of pendingItems) {
+        const s = item.sale;
+        try {
+          const { error: saleError } = await supabase.rpc("create_sale", {
+            p_store_id: activeStore.id,
+            p_sale_id: s.id,
+            p_subtotal: s.subtotal,
+            p_tax: s.tax,
+            p_discount: s.discount,
+            p_total: s.total,
+            p_payment_method: s.paymentMethod,
+            p_customer_name: s.customerName || null,
+            p_created_at: s.createdAt,
+            p_items: s.items,
+          });
+
+          // Succès ou vente déjà présente (idempotent code 23505)
+          if (!saleError || saleError.code === "23505") {
+            await removeOfflineSale(s.id);
+            success++;
+          } else {
+            console.error("Erreur sync vente:", saleError);
+            failed++;
+          }
+        } catch (err) {
+          console.error("Exception sync vente:", err);
+          failed++;
+        }
+      }
+    } finally {
+      const remaining = await getOfflineSalesCount(activeStore.id);
+      setPendingSyncCount(remaining);
+      setIsSyncing(false);
+    }
+
+    return { success, failed };
+  };
+
+  // Écoute de l'état réseau (en ligne / hors-ligne) et synchronisation automatique
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    setIsOnline(navigator.onLine);
+
+    const refreshPendingCount = async () => {
+      if (activeStore?.id) {
+        const count = await getOfflineSalesCount(activeStore.id);
+        setPendingSyncCount(count);
+      }
+    };
+    refreshPendingCount();
+
+    const handleOnline = () => {
+      setIsOnline(true);
+      syncOfflineSales();
+    };
+
+    const handleOffline = () => {
+      setIsOnline(false);
+    };
+
+    window.addEventListener("online", handleOnline);
+    window.addEventListener("offline", handleOffline);
+
+    const interval = setInterval(() => {
+      refreshPendingCount();
+      if (navigator.onLine && pendingSyncCount > 0 && !isSyncing) {
+        syncOfflineSales();
+      }
+    }, 25000);
+
+    return () => {
+      window.removeEventListener("online", handleOnline);
+      window.removeEventListener("offline", handleOffline);
+      clearInterval(interval);
+    };
+  }, [activeStore?.id, pendingSyncCount, isSyncing]);
 
   // Load from Supabase
   useEffect(() => {
@@ -672,27 +767,42 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       }
       else if (action.type === "COMPLETE_SALE") {
         const s = action.payload;
-        
-        // RPC call for atomic sale
-        const { error: saleError } = await supabase.rpc('create_sale', {
-          p_store_id: activeStore.id,
-          p_sale_id: s.id,
-          p_subtotal: s.subtotal,
-          p_tax: s.tax,
-          p_discount: s.discount,
-          p_total: s.total,
-          p_payment_method: s.paymentMethod,
-          p_customer_name: s.customerName || null,
-          p_created_at: s.createdAt,
-          p_items: s.items
-        });
 
-        if (saleError) {
-          console.error("Supabase Sale Error:", saleError);
+        // 1. Si le navigateur est hors-ligne, basculer directement dans la file d'attente locale
+        if (typeof window !== "undefined" && !navigator.onLine) {
+          await saveOfflineSale(activeStore.id, s);
+          setPendingSyncCount((prev) => prev + 1);
+          console.info("Vente enregistrée en file d'attente hors-ligne (mode sans connexion):", s.id);
+        } else {
+          try {
+            // 2. Tentative en ligne via RPC atomique
+            const { error: saleError } = await supabase.rpc('create_sale', {
+              p_store_id: activeStore.id,
+              p_sale_id: s.id,
+              p_subtotal: s.subtotal,
+              p_tax: s.tax,
+              p_discount: s.discount,
+              p_total: s.total,
+              p_payment_method: s.paymentMethod,
+              p_customer_name: s.customerName || null,
+              p_created_at: s.createdAt,
+              p_items: s.items
+            });
+
+            if (saleError) {
+              console.warn("Erreur serveur Supabase, basculement en sauvegarde hors-ligne sécurisée:", saleError);
+              await saveOfflineSale(activeStore.id, s);
+              setPendingSyncCount((prev) => prev + 1);
+            }
+          } catch (netErr) {
+            console.warn("Réseau indisponible, basculement en file d'attente hors-ligne:", netErr);
+            await saveOfflineSale(activeStore.id, s);
+            setPendingSyncCount((prev) => prev + 1);
+          }
         }
 
-        // Mettre à jour en continu les totaux dans Supabase si une session de caisse est active
-        if (state.activeCashSession?.id) {
+        // Mettre à jour en continu les totaux dans Supabase si connecté et session active
+        if (typeof window !== "undefined" && navigator.onLine && state.activeCashSession?.id) {
           try {
             const isCash = s.paymentMethod === "cash";
             const isMM = s.paymentMethod === "mobile_money";
@@ -980,7 +1090,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       activeCashSession: state.activeCashSession,
       cashSessions: state.cashSessions,
       openCashSession,
-      closeCashSession
+      closeCashSession,
+      isOnline,
+      pendingSyncCount,
+      isSyncing,
+      syncOfflineSales
     }}>
       {children}
     </StoreContext.Provider>

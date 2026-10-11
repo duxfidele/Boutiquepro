@@ -128,8 +128,10 @@ L'application a été conçue pour pouvoir être exploitée selon deux modèles 
 ## 📌 Feuille de Route / Prochaines Étapes Recommandées
 
 1. ✅ **Clôture de Caisse Journalière (Rapport Z)** : *(TERMINÉ & OPÉRATIONNEL)*
-2. **File d'Attente Hors-Ligne (Offline Sync Queue)** :
-   - Sauvegarde des ventes dans IndexedDB en cas de coupure de connexion internet dans la boutique, avec resynchronisation automatique vers Supabase dès le retour du réseau.
+2. ✅ **File d'Attente Hors-Ligne (Offline Sync Queue)** : *(TERMINÉ & OPÉRATIONNEL)*
+   - Sauvegarde instantanée des ventes dans IndexedDB/LocalStorage en cas de coupure de connexion internet ou d'indisponibilité serveur.
+   - Impression des tickets et mise à jour des stocks sans interruption de caisse.
+   - Resynchronisation automatique en arrière-plan vers Supabase dès le retour du réseau avec prévention des doublons (idempotence) et bouton de synchronisation manuelle.
 3. **Export Comptable Excel & CSV** :
    - Téléchargement en un clic de l'historique des ventes, des dépenses et de l'état des stocks pour la comptabilité.
 4. **Synchronisation Temps Réel du Stock (Supabase Realtime)** :

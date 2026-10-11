@@ -28,6 +28,10 @@ import {
   CheckCircle2,
   Clock,
   ShieldCheck,
+  Wifi,
+  WifiOff,
+  RefreshCw,
+  CloudOff,
 } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import html2canvas from "html2canvas";
@@ -47,7 +51,11 @@ export default function POSPage() {
     activeCashSession, 
     cashSessions, 
     openCashSession, 
-    closeCashSession 
+    closeCashSession,
+    isOnline,
+    pendingSyncCount,
+    isSyncing,
+    syncOfflineSales
   } = useStore();
   const { user, role } = useAuth();
 
@@ -331,6 +339,35 @@ export default function POSPage() {
         </div>
 
         <div className="flex items-center gap-2 flex-wrap">
+          {/* Indicateur Réseau & File d'attente Hors-Ligne */}
+          {!isOnline ? (
+            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-600 dark:text-amber-400 text-xs font-bold animate-pulse">
+              <WifiOff className="h-3.5 w-3.5 shrink-0" />
+              <span>Hors-Ligne</span>
+              {pendingSyncCount > 0 && (
+                <span className="px-1.5 py-0.2 rounded-full bg-amber-500 text-white text-[10px] ml-1">
+                  {pendingSyncCount} attente
+                </span>
+              )}
+            </div>
+          ) : pendingSyncCount > 0 ? (
+            <button
+              type="button"
+              onClick={() => syncOfflineSales()}
+              disabled={isSyncing}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/30 text-blue-600 dark:text-blue-400 text-xs font-bold transition-all shadow-xs"
+              title="Cliquer pour synchroniser les ventes enregistrées hors-ligne"
+            >
+              <RefreshCw className={`h-3.5 w-3.5 ${isSyncing ? "animate-spin" : ""}`} />
+              <span>{isSyncing ? "Synchronisation..." : `${pendingSyncCount} en attente • Sync`}</span>
+            </button>
+          ) : (
+            <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 text-[11px] font-medium border border-emerald-500/20">
+              <Wifi className="h-3 w-3" />
+              <span>En ligne (Cloud)</span>
+            </div>
+          )}
+
           {activeCashSession ? (
             <>
               <button
