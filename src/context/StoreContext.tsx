@@ -161,6 +161,10 @@ type Action =
   | { type: "ADD_INVENTORY_SESSION"; payload: InventorySession }
   | { type: "OPEN_CASH_SESSION"; payload: CashSession }
   | { type: "CLOSE_CASH_SESSION"; payload: CashSession }
+  | { type: "REALTIME_PRODUCT_UPDATE"; payload: Product }
+  | { type: "REALTIME_PRODUCT_INSERT"; payload: Product }
+  | { type: "REALTIME_PRODUCT_DELETE"; payload: string }
+  | { type: "REALTIME_SALE_INSERT"; payload: Sale }
   | { type: "LOAD_STATE"; payload: StoreState };
 
 // ─── Demo seed data ──────────────────────────────────────────
@@ -402,6 +406,40 @@ function storeReducer(state: StoreState, action: Action): StoreState {
         cashSessions: state.cashSessions.map((cs) => cs.id === action.payload.id ? action.payload : cs)
       };
     }
+    case "REALTIME_PRODUCT_UPDATE": {
+      const updated = action.payload;
+      return {
+        ...state,
+        products: state.products.map((p) => (p.id === updated.id ? { ...p, ...updated } : p)),
+      };
+    }
+    case "REALTIME_PRODUCT_INSERT": {
+      const newProd = action.payload;
+      if (state.products.some((p) => p.id === newProd.id)) {
+        return {
+          ...state,
+          products: state.products.map((p) => (p.id === newProd.id ? { ...p, ...newProd } : p)),
+        };
+      }
+      return {
+        ...state,
+        products: [...state.products, newProd].sort((a, b) => a.name.localeCompare(b.name)),
+      };
+    }
+    case "REALTIME_PRODUCT_DELETE": {
+      return {
+        ...state,
+        products: state.products.filter((p) => p.id !== action.payload),
+      };
+    }
+    case "REALTIME_SALE_INSERT": {
+      const sale = action.payload;
+      if (state.sales.some((s) => s.id === sale.id)) return state;
+      return {
+        ...state,
+        sales: [sale, ...state.sales],
+      };
+    }
     case "LOAD_STATE":
       return { 
         ...action.payload, 
@@ -442,6 +480,7 @@ interface StoreContextType {
   pendingSyncCount: number;
   isSyncing: boolean;
   syncOfflineSales: () => Promise<{ success: number; failed: number }>;
+  isRealtimeActive: boolean;
 }
 
 const StoreContext = createContext<StoreContextType | undefined>(undefined);
@@ -540,6 +579,128 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       clearInterval(interval);
     };
   }, [activeStore?.id, pendingSyncCount, isSyncing]);
+
+  // ─── Synchronisation Temps Réel (Supabase Realtime) ───────────
+  // Écoute strictement isolée sur filter store_id = activeStore.id
+  const [isRealtimeActive, setIsRealtimeActive] = useState<boolean>(false);
+
+  useEffect(() => {
+    if (!activeStore?.id) return;
+
+    const channelName = `store_${activeStore.id}_realtime`;
+    const channel = supabase
+      .channel(channelName)
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "products",
+          filter: `store_id=eq.${activeStore.id}`,
+        },
+        (payload: any) => {
+          if (payload.eventType === "UPDATE") {
+            const p = payload.new;
+            dispatchBase({
+              type: "REALTIME_PRODUCT_UPDATE",
+              payload: {
+                id: p.id,
+                name: p.name,
+                sku: p.sku,
+                category: p.category,
+                price: Number(p.price) || 0,
+                cost: Number(p.cost) || 0,
+                stock: Number(p.stock) || 0,
+                minStock: Number(p.min_stock || 0),
+                image: p.image || "📦",
+                createdAt: p.created_at || new Date().toISOString(),
+              },
+            });
+          } else if (payload.eventType === "INSERT") {
+            const p = payload.new;
+            dispatchBase({
+              type: "REALTIME_PRODUCT_INSERT",
+              payload: {
+                id: p.id,
+                name: p.name,
+                sku: p.sku,
+                category: p.category,
+                price: Number(p.price) || 0,
+                cost: Number(p.cost) || 0,
+                stock: Number(p.stock) || 0,
+                minStock: Number(p.min_stock || 0),
+                image: p.image || "📦",
+                createdAt: p.created_at || new Date().toISOString(),
+              },
+            });
+          } else if (payload.eventType === "DELETE") {
+            if (payload.old?.id) {
+              dispatchBase({
+                type: "REALTIME_PRODUCT_DELETE",
+                payload: payload.old.id,
+              });
+            }
+          }
+        }
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "INSERT",
+          schema: "public",
+          table: "sales",
+          filter: `store_id=eq.${activeStore.id}`,
+        },
+        async (payload: any) => {
+          const s = payload.new;
+          if (!s?.id) return;
+
+          try {
+            const { data: items } = await supabase
+              .from("sale_items")
+              .select("*")
+              .eq("sale_id", s.id);
+
+            const sale: Sale = {
+              id: s.id,
+              items: (items || []).map((i: any) => ({
+                productId: i.product_id,
+                productName: i.product_name,
+                quantity: Number(i.quantity) || 1,
+                unitPrice: Number(i.unit_price) || 0,
+                total: Number(i.total) || 0,
+              })),
+              subtotal: Number(s.subtotal) || 0,
+              tax: Number(s.tax) || 0,
+              discount: Number(s.discount) || 0,
+              total: Number(s.total) || 0,
+              paymentMethod: s.payment_method || "cash",
+              amountGiven: s.amount_given ? Number(s.amount_given) : undefined,
+              change: s.change ? Number(s.change) : undefined,
+              customerName: s.customer_name || undefined,
+              createdAt: s.created_at || new Date().toISOString(),
+              userId: s.user_id,
+              storeId: s.store_id,
+            };
+
+            dispatchBase({
+              type: "REALTIME_SALE_INSERT",
+              payload: sale,
+            });
+          } catch (e) {
+            console.warn("Notice Realtime sale items:", e);
+          }
+        }
+      )
+      .subscribe((status) => {
+        setIsRealtimeActive(status === "SUBSCRIBED");
+      });
+
+    return () => {
+      supabase.removeChannel(channel);
+      setIsRealtimeActive(false);
+    };
+  }, [activeStore?.id]);
 
   // Load from Supabase
   useEffect(() => {
@@ -1094,7 +1255,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       isOnline,
       pendingSyncCount,
       isSyncing,
-      syncOfflineSales
+      syncOfflineSales,
+      isRealtimeActive
     }}>
       {children}
     </StoreContext.Provider>

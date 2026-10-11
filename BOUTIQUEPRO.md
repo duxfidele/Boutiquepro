@@ -136,6 +136,8 @@ L'application a été conçue pour pouvoir être exploitée selon deux modèles 
    - Module d'export universel zéro-dépendance (`accountingExport.ts`) avec support natif Excel (`.xls`) et CSV UTF-8 BOM (`.csv`).
    - Centre d'exportation complet dans **Rapports & Analytique** : Journal des Ventes, Journal des Dépenses, Valorisation des Stocks et Compte de Résultat / Grand Livre.
    - Boutons d'export rapide en 1 clic dans **Dépenses** et **Produits & Stock**.
-4. **Synchronisation Temps Réel du Stock (Supabase Realtime)** :
-   - Décrémentation visuelle instantanée du stock sur tous les terminaux de caisse connectés lorsqu'un article est vendu sur l'une des caisses.
+4. ✅ **Synchronisation Temps Réel du Stock & Ventes (Supabase Realtime)** : *(TERMINÉ & OPÉRATIONNEL)*
+   - Canaux WebSockets Supabase Realtime strictement cloisonnés par `store_id = activeStore.id` (garantie d'étanchéité multi-boutiques).
+   - Décrémentation instantanée des stocks sur tous les écrans dès qu'un article est vendu sur une caisse.
+   - Actualisation en direct du chiffre d'affaires, des commandes et des bénéfices sur le tableau de bord du gérant sans rechargement de page.
 
