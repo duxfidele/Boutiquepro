@@ -828,114 +828,178 @@ export default function POSPage() {
         </div>
       )}
 
-      {/* Receipt Modal (Ticket de Caisse 80mm) */}
+      {/* Receipt Modal (Ticket de Caisse 80mm — Modèle Professionnel Identique à la capture) */}
       {showReceipt && lastSale && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 backdrop-blur-sm animate-fade-in" onClick={() => setShowReceipt(false)}>
-          <div className="w-full max-w-sm rounded-2xl bg-white text-black p-6 shadow-2xl animate-scale-in" onClick={(e) => e.stopPropagation()}>
-            <div ref={receiptRef} className="receipt-printable">
-              {/* Receipt header */}
-              <div className="text-center border-b-2 border-dashed border-gray-300 pb-4 mb-4 flex flex-col items-center">
-                {state.settings.logo && (
-                  <img src={state.settings.logo} alt="Logo" className="w-10 h-10 object-cover rounded-xl mb-2" />
-                )}
-                <h2 className="text-xl font-bold">{state.settings.name}</h2>
-                {(state.settings.city || state.settings.country) && (
-                  <p className="text-[10px] text-gray-500 mt-1">{state.settings.city} {state.settings.country ? `- ${state.settings.country}` : ""}</p>
-                )}
-                {state.settings.phone && (
-                  <p className="text-[10px] text-gray-500">{state.settings.phone}</p>
-                )}
-                <p className="text-xs text-gray-500 mt-3 font-medium border-t border-gray-200 pt-2 inline-block w-full">Reçu de caisse</p>
-                <p className="text-xs text-gray-500">
-                  {new Date(lastSale.createdAt).toLocaleString("fr-FR", {
-                    day: "2-digit", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit",
-                  })}
-                </p>
-                <p className="text-xs text-gray-400 mt-1">N° {lastSale.id.toUpperCase()}</p>
-              </div>
-
-              {/* Items */}
-              <div className="space-y-2 mb-4">
-                {lastSale.items.map((item, i) => (
-                  <div key={i} className="flex justify-between text-sm">
-                    <div>
-                      <span>{item.productName}</span>
-                      <span className="text-gray-400 ml-1">x{item.quantity}</span>
-                    </div>
-                    <span className="font-medium">{new Intl.NumberFormat("fr-FR").format(item.total)} {state.settings.currency}</span>
-                  </div>
-                ))}
-              </div>
-
-              {/* Totals */}
-              <div className="border-t-2 border-dashed border-gray-300 pt-3 space-y-1.5">
-                <div className="flex justify-between text-sm text-gray-500">
-                  <span>Sous-total</span>
-                  <span>{new Intl.NumberFormat("fr-FR").format(lastSale.subtotal)} {state.settings.currency}</span>
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fade-in p-4" onClick={() => setShowReceipt(false)}>
+          <div className="w-full max-w-sm rounded-2xl bg-white text-black p-5 shadow-2xl animate-scale-in max-h-[95vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
+            <div className="flex-1 overflow-y-auto pr-1">
+              <div ref={receiptRef} className="receipt-printable bg-white text-black font-mono text-[11px] leading-relaxed p-4 border border-gray-200 rounded-xl shadow-xs">
+                {/* Entête Boutique Centrée */}
+                <div className="text-center pb-2">
+                  {state.settings.logo && (
+                    <img src={state.settings.logo} alt="Logo" className="w-12 h-12 object-contain mx-auto mb-1.5 rounded" />
+                  )}
+                  <h2 className="text-sm font-extrabold uppercase tracking-wider text-black">{state.settings.name || "BOUTIQUE"}</h2>
+                  {(state.settings.city || state.settings.country) && (
+                    <p className="text-[10px] text-gray-700 font-medium">
+                      {state.settings.city}{state.settings.country ? `, ${state.settings.country}` : ""}
+                    </p>
+                  )}
+                  {state.settings.phone && (
+                    <p className="text-[10px] text-gray-700 font-medium">Tél : {state.settings.phone}</p>
+                  )}
+                  {state.settings.email && (
+                    <p className="text-[9px] text-gray-600">{state.settings.email}</p>
+                  )}
                 </div>
-                {lastSale.discount > 0 && (
-                  <div className="flex justify-between text-sm text-green-600">
-                    <span>Remise</span>
-                    <span>-{new Intl.NumberFormat("fr-FR").format(lastSale.discount)} {state.settings.currency}</span>
-                  </div>
-                )}
-                <div className="flex justify-between text-lg font-bold pt-2 border-t border-gray-200">
-                  <span>TOTAL</span>
-                  <span>{new Intl.NumberFormat("fr-FR").format(lastSale.total)} {state.settings.currency}</span>
-                </div>
-                <div className="flex justify-between text-xs text-gray-400 pt-1">
-                  <span>Paiement</span>
-                  <span>{paymentMethods.find(p => p.id === lastSale.paymentMethod)?.label}</span>
-                </div>
-                
-                {lastSale.amountGiven !== undefined && lastSale.amountGiven > 0 && (
-                  <>
-                    <div className="flex justify-between text-xs text-gray-400 mt-1">
-                      <span>Espèces perçues</span>
-                      <span>{new Intl.NumberFormat("fr-FR").format(lastSale.amountGiven)} {state.settings.currency}</span>
-                    </div>
-                    <div className="flex justify-between text-xs font-bold text-gray-800">
-                      <span>Reliquat (Monnaie)</span>
-                      <span>{new Intl.NumberFormat("fr-FR").format(lastSale.change || 0)} {state.settings.currency}</span>
-                    </div>
-                  </>
-                )}
 
-                {lastSale.customerName && (
-                  <div className="flex justify-between text-xs text-gray-400 mt-1">
-                    <span>Patient/Client</span>
-                    <span>{lastSale.customerName}</span>
-                  </div>
-                )}
-              </div>
+                {/* Séparateur pointillé */}
+                <div className="border-t border-dashed border-gray-400 my-2"></div>
 
-              {/* Footer */}
-              <div className="text-center mt-6 pt-4 border-t-2 border-dashed border-gray-300">
-                <p className="text-xs text-gray-400">Merci de votre visite ! 🙏</p>
-                <p className="text-[10px] text-gray-300 mt-1">{state.settings.name} — Propulsé par BoutiquePro</p>
+                {/* Métadonnées du Ticket (Ticket n°, Date, Caissier, Client) */}
+                <div className="space-y-1 text-[10px]">
+                  <div className="flex justify-between items-center">
+                    <span className="text-gray-700">Ticket n°</span>
+                    <span className="font-bold text-black">BTQ-{lastSale.id.slice(0, 8).toUpperCase()}</span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-gray-700">Date</span>
+                    <span className="font-medium text-black">
+                      {new Date(lastSale.createdAt).toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit", year: "numeric" })}{" "}
+                      {new Date(lastSale.createdAt).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })}
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-gray-700">Caissier</span>
+                    <span className="font-medium text-black">
+                      {activeCashSession?.cashierName || user?.user_metadata?.full_name || user?.email?.split('@')[0] || "Caissier"}
+                    </span>
+                  </div>
+                  {lastSale.customerName && (
+                    <div className="flex justify-between items-center">
+                      <span className="text-gray-700">Client</span>
+                      <span className="font-semibold text-black">{lastSale.customerName}</span>
+                    </div>
+                  )}
+                </div>
+
+                {/* Séparateur pointillé */}
+                <div className="border-t border-dashed border-gray-400 my-2"></div>
+
+                {/* Tableau des Articles (Article, Qté, P.U., Total) */}
+                <table className="w-full text-[10px] my-1">
+                  <thead>
+                    <tr className="border-b border-dashed border-gray-400 text-gray-800 font-bold">
+                      <th className="text-left py-1 w-5/12 font-bold">Article</th>
+                      <th className="text-center py-1 w-2/12 font-bold">Qté</th>
+                      <th className="text-right py-1 w-2/12 font-bold">P.U.</th>
+                      <th className="text-right py-1 w-3/12 font-bold">Total</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {lastSale.items.map((item, i) => (
+                      <tr key={i} className="border-b border-dotted border-gray-200">
+                        <td className="text-left py-1.5 font-medium text-black truncate max-w-[110px]" title={item.productName}>
+                          {item.productName}
+                        </td>
+                        <td className="text-center py-1.5 text-black font-semibold">{item.quantity}</td>
+                        <td className="text-right py-1.5 text-gray-700">{new Intl.NumberFormat("fr-FR").format(item.unitPrice)}</td>
+                        <td className="text-right py-1.5 font-bold text-black">{new Intl.NumberFormat("fr-FR").format(item.total)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+
+                {/* Séparateur pointillé */}
+                <div className="border-t border-dashed border-gray-400 my-2"></div>
+
+                {/* Totaux & Remise */}
+                <div className="space-y-1 text-[10px]">
+                  {lastSale.discount > 0 && (
+                    <>
+                      <div className="flex justify-between items-center text-gray-700">
+                        <span>Sous-total</span>
+                        <span>{new Intl.NumberFormat("fr-FR").format(lastSale.subtotal)} {state.settings.currency}</span>
+                      </div>
+                      <div className="flex justify-between items-center text-emerald-700 font-semibold">
+                        <span>Remise</span>
+                        <span>-{new Intl.NumberFormat("fr-FR").format(lastSale.discount)} {state.settings.currency}</span>
+                      </div>
+                      <div className="border-t border-dashed border-gray-300 my-1"></div>
+                    </>
+                  )}
+
+                  <div className="flex justify-between items-baseline text-xs font-black text-black py-0.5">
+                    <span className="tracking-wider">TOTAL</span>
+                    <span className="text-sm font-extrabold">{new Intl.NumberFormat("fr-FR").format(lastSale.total)} {state.settings.currency}</span>
+                  </div>
+                </div>
+
+                {/* Séparateur pointillé */}
+                <div className="border-t border-dashed border-gray-400 my-2"></div>
+
+                {/* Détails Paiement (Paiement, Reçu, Monnaie rendue) */}
+                <div className="space-y-1 text-[10px]">
+                  <div className="flex justify-between items-center">
+                    <span className="text-gray-700">Paiement</span>
+                    <span className="font-semibold text-black">
+                      {paymentMethods.find(p => p.id === lastSale.paymentMethod)?.label || "Espèces"}
+                    </span>
+                  </div>
+
+                  {lastSale.paymentMethod === "cash" && (
+                    <>
+                      <div className="flex justify-between items-center">
+                        <span className="text-gray-700">Reçu</span>
+                        <span className="font-semibold text-black">
+                          {new Intl.NumberFormat("fr-FR").format(lastSale.amountGiven && lastSale.amountGiven > 0 ? lastSale.amountGiven : lastSale.total)}
+                        </span>
+                      </div>
+                      <div className="flex justify-between items-center font-bold text-black">
+                        <span>Monnaie rendue</span>
+                        <span>
+                          {new Intl.NumberFormat("fr-FR").format(lastSale.amountGiven && lastSale.amountGiven > lastSale.total ? lastSale.amountGiven - lastSale.total : 0)}
+                        </span>
+                      </div>
+                    </>
+                  )}
+                </div>
+
+                {/* Séparateur pointillé */}
+                <div className="border-t border-dashed border-gray-400 my-2"></div>
+
+                {/* Message de fin centré */}
+                <div className="text-center pt-2 space-y-1">
+                  <p className="text-[11px] font-bold text-black">Merci de votre visite</p>
+                  <p className="text-[9px] text-gray-500">À bientôt !</p>
+                  <p className="text-[8px] text-gray-400 pt-1 border-t border-gray-100">BoutiquePro POS • Logiciel Certifié</p>
+                </div>
               </div>
             </div>
 
-            {/* Actions */}
-            <div className="flex gap-2 mt-6 print:hidden">
+            {/* Actions du Modal */}
+            <div className="flex gap-2 mt-4 pt-3 border-t border-gray-200 print:hidden shrink-0">
               <button
+                type="button"
                 onClick={() => setShowReceipt(false)}
-                className="flex-[0.5] rounded-xl border border-gray-200 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
+                className="flex-1 rounded-xl border border-gray-300 py-2.5 text-xs font-semibold text-gray-700 hover:bg-gray-100 transition-colors"
               >
                 Fermer
               </button>
               <button
+                type="button"
                 onClick={handleDownloadReceipt}
-                className="flex-[1.25] flex items-center justify-center gap-2 rounded-xl bg-gray-100 py-2.5 text-sm font-medium text-gray-900 hover:bg-gray-200 transition-colors"
+                className="flex-1 flex items-center justify-center gap-1.5 rounded-xl bg-gray-100 py-2.5 text-xs font-bold text-gray-800 hover:bg-gray-200 transition-colors"
               >
-                <Download className="h-4 w-4" />
-                PDF
+                <Download className="h-3.5 w-3.5" />
+                Télécharger PDF
               </button>
               <button
+                type="button"
                 onClick={handlePrint}
-                className="flex-[1.25] flex items-center justify-center gap-2 rounded-xl bg-black py-2.5 text-sm font-medium text-white hover:bg-gray-800 transition-colors"
+                className="flex-1 flex items-center justify-center gap-1.5 rounded-xl bg-primary text-white py-2.5 text-xs font-bold hover:opacity-90 transition-opacity shadow-md"
               >
-                <Printer className="h-4 w-4" />
+                <Printer className="h-3.5 w-3.5" />
                 Imprimer
               </button>
             </div>
@@ -943,129 +1007,178 @@ export default function POSPage() {
         </div>
       )}
 
-      {/* Invoice Modal (Facture A4) */}
+      {/* Invoice Modal (Facture A4 — Modèle Corporate & Professionnel) */}
       {showInvoice && lastSale && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 backdrop-blur-sm animate-fade-in py-10" onClick={() => setShowInvoice(false)}>
-          <div className="w-full max-w-3xl max-h-full overflow-y-auto rounded-2xl bg-white text-black shadow-2xl animate-scale-in" onClick={(e) => e.stopPropagation()}>
-            <div ref={invoiceRef} className="invoice-printable bg-white p-10 sm:p-14">
-              {/* Facture Header */}
-              <div className="flex flex-col sm:flex-row justify-between items-start border-b-2 border-gray-200 pb-8 mb-8">
-                <div className="flex items-start gap-4">
-                  {state.settings.logo && (
-                    <img src={state.settings.logo} alt="Logo" className="w-16 h-16 object-cover rounded-xl mt-1" />
-                  )}
-                  <div>
-                    <h2 className="text-3xl font-bold text-gray-800">{state.settings.name}</h2>
-                    <p className="text-gray-500 mt-2 text-sm">
-                      {state.settings.city && state.settings.country ? `${state.settings.city}, ${state.settings.country}` : ""}
-                    </p>
-                    <p className="text-gray-500 text-sm">
-                      {state.settings.email} {state.settings.phone ? ` • ${state.settings.phone}` : ""}
-                    </p>
-                  </div>
-                </div>
-                <div className="text-left sm:text-right mt-6 sm:mt-0">
-                  <h1 className="text-4xl font-black text-gray-200 uppercase tracking-widest mb-3">Facture</h1>
-                  <p className="text-sm font-bold text-gray-700">FA-{lastSale.id.toUpperCase()}</p>
-                  <p className="text-sm text-gray-500">Date: {new Date(lastSale.createdAt).toLocaleDateString("fr-FR")}</p>
-                </div>
-              </div>
-
-              {/* Client Info */}
-              <div className="mb-10">
-                <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Facturé à</h3>
-                <p className="text-lg font-bold text-gray-800">{lastSale.customerName || "Patient/Client Standard"}</p>
-              </div>
-
-              {/* Table */}
-              <table className="w-full mb-10">
-                <thead>
-                  <tr className="border-b-2 border-gray-800">
-                    <th className="py-3 text-left text-sm font-bold text-gray-700">Désignation</th>
-                    <th className="py-3 text-center text-sm font-bold text-gray-700">Qté</th>
-                    <th className="py-3 text-right text-sm font-bold text-gray-700">Prix unitaire</th>
-                    <th className="py-3 text-right text-sm font-bold text-gray-700">Total</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {lastSale.items.map((item, i) => (
-                    <tr key={i} className="border-b border-gray-200">
-                      <td className="py-4 text-sm font-medium text-gray-800">{item.productName}</td>
-                      <td className="py-4 text-center text-sm text-gray-600">{item.quantity}</td>
-                      <td className="py-4 text-right text-sm text-gray-600">{new Intl.NumberFormat("fr-FR").format(item.unitPrice)} {state.settings.currency}</td>
-                      <td className="py-4 text-right text-sm font-bold text-gray-800">{new Intl.NumberFormat("fr-FR").format(item.total)} {state.settings.currency}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-
-              {/* Totals Box */}
-              <div className="flex justify-end">
-                <div className="w-72 space-y-3">
-                  <div className="flex justify-between text-sm text-gray-600">
-                    <span>Sous-total HT</span>
-                    <span>{new Intl.NumberFormat("fr-FR").format(lastSale.subtotal)} {state.settings.currency}</span>
-                  </div>
-                  {lastSale.discount > 0 && (
-                    <div className="flex justify-between text-sm text-green-600">
-                      <span>Remise</span>
-                      <span>-{new Intl.NumberFormat("fr-FR").format(lastSale.discount)} {state.settings.currency}</span>
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fade-in p-4 sm:p-8" onClick={() => setShowInvoice(false)}>
+          <div className="w-full max-w-4xl max-h-[95vh] overflow-y-auto rounded-2xl bg-white text-black shadow-2xl animate-scale-in flex flex-col" onClick={(e) => e.stopPropagation()}>
+            <div className="flex-1 overflow-y-auto p-8 sm:p-12">
+              <div ref={invoiceRef} className="invoice-printable bg-white text-gray-900 font-sans">
+                {/* Entête Facture A4 avec badge et coordonnées */}
+                <div className="flex flex-col sm:flex-row justify-between items-start border-b-2 border-primary/20 pb-6 mb-8 gap-4">
+                  <div className="flex items-start gap-4">
+                    {state.settings.logo ? (
+                      <img src={state.settings.logo} alt="Logo" className="w-16 h-16 object-contain rounded-xl border border-gray-100 p-1" />
+                    ) : (
+                      <div className="w-16 h-16 rounded-xl bg-primary text-white font-black text-2xl flex items-center justify-center shrink-0 shadow-sm">
+                        {state.settings.name ? state.settings.name.slice(0, 2).toUpperCase() : "BP"}
+                      </div>
+                    )}
+                    <div>
+                      <h2 className="text-2xl font-black text-gray-900 tracking-tight">{state.settings.name || "BOUTIQUEPRO"}</h2>
+                      <p className="text-xs text-gray-600 mt-1 font-medium">
+                        {state.settings.city}{state.settings.country ? `, ${state.settings.country}` : ""}
+                      </p>
+                      <p className="text-xs text-gray-600 font-medium">
+                        Tél : {state.settings.phone || "—"} {state.settings.email ? `• ${state.settings.email}` : ""}
+                      </p>
                     </div>
-                  )}
-                  <div className="flex justify-between text-xl font-bold text-gray-800 pt-4 border-t-2 border-gray-800">
-                    <span>Net à Payer</span>
-                    <span className="text-primary">{new Intl.NumberFormat("fr-FR").format(lastSale.total)} {state.settings.currency}</span>
                   </div>
 
-                  {lastSale.amountGiven !== undefined && lastSale.amountGiven > 0 && (
-                    <>
-                      <div className="flex justify-between text-sm text-gray-600 pt-2 border-t border-gray-200 mt-2">
-                        <span>Montant perçu</span>
-                        <span>{new Intl.NumberFormat("fr-FR").format(lastSale.amountGiven)} {state.settings.currency}</span>
-                      </div>
-                      <div className="flex justify-between text-sm font-bold text-gray-800">
-                        <span>Reliquat (Monnaie)</span>
-                        <span>{new Intl.NumberFormat("fr-FR").format(lastSale.change || 0)} {state.settings.currency}</span>
-                      </div>
-                    </>
-                  )}
+                  {/* Bloc Numéro et Date de Facture */}
+                  <div className="text-left sm:text-right">
+                    <div className="inline-block px-3 py-1 rounded-full bg-primary/10 text-primary text-xs font-black tracking-wider uppercase mb-2">
+                      FACTURE ACQUITTÉE
+                    </div>
+                    <p className="text-lg font-black text-gray-900">N° FAC-{lastSale.id.slice(0, 8).toUpperCase()}</p>
+                    <p className="text-xs text-gray-600 mt-0.5">
+                      Date : <span className="font-semibold text-gray-900">{new Date(lastSale.createdAt).toLocaleDateString("fr-FR", { day: "2-digit", month: "long", year: "numeric" })}</span>
+                    </p>
+                    <p className="text-xs text-gray-500">
+                      Heure : {new Date(lastSale.createdAt).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })}
+                    </p>
+                  </div>
                 </div>
-              </div>
 
-              {/* Footer */}
-              <div className="mt-16 pt-6 border-t border-gray-200 text-center text-sm text-gray-500">
-                <p className="font-medium">Moyen de paiement : {paymentMethods.find(p => p.id === lastSale.paymentMethod)?.label}</p>
-                <p className="mt-2 text-xs">Merci de votre confiance et à très bientôt ! En cas de question, n'hésitez pas à nous contacter.</p>
+                {/* Informations Client & Vendeur */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 p-4 rounded-xl bg-gray-50/80 border border-gray-200/80 mb-8">
+                  <div>
+                    <h3 className="text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-1">Client / Destinataire</h3>
+                    <p className="text-sm font-extrabold text-gray-900">{lastSale.customerName || "Client au comptoir (Particulier)"}</p>
+                    <p className="text-xs text-gray-500 mt-0.5">Vente directe au comptoir</p>
+                  </div>
+                  <div className="sm:text-right">
+                    <h3 className="text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-1">Règlement & Émission</h3>
+                    <p className="text-sm font-bold text-gray-900">
+                      Mode : <span className="text-primary font-extrabold">{paymentMethods.find(p => p.id === lastSale.paymentMethod)?.label || "Espèces"}</span>
+                    </p>
+                    <p className="text-xs text-gray-500 mt-0.5">
+                      Caissier : {activeCashSession?.cashierName || user?.user_metadata?.full_name || "Agent de caisse"}
+                    </p>
+                  </div>
+                </div>
+
+                {/* Tableau Pro des Articles */}
+                <div className="border border-gray-200 rounded-xl overflow-hidden mb-8 shadow-xs">
+                  <table className="w-full text-left text-xs">
+                    <thead className="bg-gray-100 text-gray-700 font-bold border-b border-gray-200 uppercase tracking-wider text-[11px]">
+                      <tr>
+                        <th className="py-3 px-4 w-12 text-center">#</th>
+                        <th className="py-3 px-4">Désignation de l'article</th>
+                        <th className="py-3 px-4 text-center w-20">Qté</th>
+                        <th className="py-3 px-4 text-right w-32">Prix Unitaire</th>
+                        <th className="py-3 px-4 text-right w-36">Total Net</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100 text-gray-800">
+                      {lastSale.items.map((item, i) => (
+                        <tr key={i} className="hover:bg-gray-50/50 transition-colors">
+                          <td className="py-3.5 px-4 text-center font-bold text-gray-400">{i + 1}</td>
+                          <td className="py-3.5 px-4 font-semibold text-gray-900">{item.productName}</td>
+                          <td className="py-3.5 px-4 text-center font-bold text-gray-800">{item.quantity}</td>
+                          <td className="py-3.5 px-4 text-right text-gray-600 font-medium">
+                            {new Intl.NumberFormat("fr-FR").format(item.unitPrice)} {state.settings.currency}
+                          </td>
+                          <td className="py-3.5 px-4 text-right font-extrabold text-gray-900">
+                            {new Intl.NumberFormat("fr-FR").format(item.total)} {state.settings.currency}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* Bloc Totaux & Signature */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-8 items-start mb-8">
+                  {/* Cadre Cachet & Signature */}
+                  <div className="border border-dashed border-gray-300 rounded-xl p-4 text-center text-xs text-gray-500 h-36 flex flex-col justify-between">
+                    <p className="font-bold text-gray-700">Cachet & Signature de la boutique</p>
+                    <p className="text-[10px] text-gray-400">Pour acquit et bonne réception des articles</p>
+                  </div>
+
+                  {/* Totaux financiers */}
+                  <div className="bg-gray-50 rounded-xl p-5 border border-gray-200 space-y-2.5">
+                    <div className="flex justify-between text-xs text-gray-600 font-medium">
+                      <span>Total Brut (HT)</span>
+                      <span>{new Intl.NumberFormat("fr-FR").format(lastSale.subtotal)} {state.settings.currency}</span>
+                    </div>
+
+                    {lastSale.discount > 0 && (
+                      <div className="flex justify-between text-xs text-emerald-700 font-bold">
+                        <span>Remise commerciale accordée</span>
+                        <span>-{new Intl.NumberFormat("fr-FR").format(lastSale.discount)} {state.settings.currency}</span>
+                      </div>
+                    )}
+
+                    <div className="border-t-2 border-gray-900 pt-3 flex justify-between items-baseline">
+                      <span className="text-sm font-black text-gray-900 uppercase tracking-wide">Net à Payer</span>
+                      <span className="text-xl font-black text-primary">
+                        {new Intl.NumberFormat("fr-FR").format(lastSale.total)} {state.settings.currency}
+                      </span>
+                    </div>
+
+                    {lastSale.paymentMethod === "cash" && lastSale.amountGiven !== undefined && lastSale.amountGiven > 0 && (
+                      <div className="pt-2 border-t border-gray-200 text-[11px] text-gray-600 space-y-1">
+                        <div className="flex justify-between">
+                          <span>Espèces reçues :</span>
+                          <span className="font-semibold">{new Intl.NumberFormat("fr-FR").format(lastSale.amountGiven)} {state.settings.currency}</span>
+                        </div>
+                        <div className="flex justify-between font-bold text-gray-900">
+                          <span>Monnaie rendue :</span>
+                          <span className="text-emerald-700">{new Intl.NumberFormat("fr-FR").format(Math.max(0, lastSale.amountGiven - lastSale.total))} {state.settings.currency}</span>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Bas de page légal */}
+                <div className="border-t border-gray-200 pt-4 text-center text-xs text-gray-500 space-y-1">
+                  <p className="font-semibold text-gray-700">Merci de votre confiance ! Les marchandises vendues ne sont ni reprises ni échangées.</p>
+                  <p className="text-[10px] text-gray-400">Document généré par BoutiquePro — SaaS de Gestion Commerciale</p>
+                </div>
               </div>
             </div>
 
-            {/* Actions */}
-            <div className="flex gap-3 px-10 pb-10 pt-4 print:hidden border-t border-gray-100 bg-gray-50/50">
+            {/* Actions du Modal Facture */}
+            <div className="flex gap-3 px-8 py-4 print:hidden border-t border-gray-200 bg-gray-50 shrink-0">
               <button
+                type="button"
                 onClick={() => setShowInvoice(false)}
-                className="flex-1 rounded-xl border border-gray-200 py-3 text-sm font-medium text-gray-700 hover:bg-white transition-colors shadow-sm"
+                className="flex-1 rounded-xl border border-gray-300 py-3 text-xs font-semibold text-gray-700 hover:bg-gray-100 transition-colors"
               >
                 Fermer
               </button>
               <button
+                type="button"
                 onClick={handleDownloadInvoice}
-                className="flex-[1.5] flex items-center justify-center gap-2 rounded-xl bg-gray-100 py-3 text-sm font-bold text-gray-900 hover:bg-gray-200 transition-colors shadow-sm"
+                className="flex-[1.5] flex items-center justify-center gap-2 rounded-xl bg-gray-200 py-3 text-xs font-bold text-gray-800 hover:bg-gray-300 transition-colors"
               >
                 <Download className="h-4 w-4" />
-                Télécharger PDF
+                Télécharger PDF (A4)
               </button>
               <button
+                type="button"
                 onClick={handlePrint}
-                className="flex-[1.5] flex items-center justify-center gap-2 rounded-xl bg-primary py-3 text-sm font-bold text-white hover:opacity-90 transition-opacity shadow-lg glow-primary"
+                className="flex-[1.5] flex items-center justify-center gap-2 rounded-xl bg-primary text-white py-3 text-xs font-bold hover:opacity-90 transition-opacity shadow-lg glow-primary"
               >
                 <Printer className="h-4 w-4" />
-                Imprimer (A4)
+                Imprimer la Facture
               </button>
             </div>
           </div>
         </div>
       )}
-    
+
       {/* ───────────────────────────────────────────────────────────── */}
       {/* MODAL 1 : OUVERTURE DE CAISSE                                */}
       {/* ───────────────────────────────────────────────────────────── */}
