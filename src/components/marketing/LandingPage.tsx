@@ -582,14 +582,14 @@ export default function LandingPage({ onLoginClick }: LandingPageProps) {
       </div>
 
       <ul className="space-y-3.5 text-sm text-on-surface mb-8 font-medium">
-        <li className="flex items-center gap-2.5 font-bold"><span className="material-symbols-outlined text-primary text-lg">check_circle</span> 1 Boutique &amp; 1 Gérant unique</li>
-        <li className="flex items-center gap-2.5 font-semibold"><span className="material-symbols-outlined text-primary text-lg">check_circle</span> Produits et ventes illimités</li>
+        <li className="flex items-center gap-2.5 font-bold"><span className="material-symbols-outlined text-primary text-lg">check_circle</span> 1 Boutique &amp; Gestion complète</li>
+        <li className="flex items-center gap-2.5 font-semibold"><span className="material-symbols-outlined text-primary text-lg">check_circle</span> <b>Sessions de Caisse (Ouverture, Espèces &amp; Rapport Z)</b></li>
+        <li className="flex items-center gap-2.5 font-semibold"><span className="material-symbols-outlined text-primary text-lg">check_circle</span> <b>Carnet de Crédit &amp; Dettes clients (Relances WhatsApp)</b></li>
+        <li className="flex items-center gap-2.5"><span className="material-symbols-outlined text-primary text-lg">check_circle</span> Produits et ventes illimités</li>
         <li className="flex items-center gap-2.5"><span className="material-symbols-outlined text-primary text-lg">check_circle</span> <b>Mode Hors-ligne (PWA)</b> même sans internet</li>
-        <li className="flex items-center gap-2.5"><span className="material-symbols-outlined text-primary text-lg">check_circle</span> Reçus thermiques 80mm &amp; Factures A4 (TVA 0%)</li>
+        <li className="flex items-center gap-2.5"><span className="material-symbols-outlined text-primary text-lg">check_circle</span> Reçus thermiques 80mm &amp; Factures A4 (TVA 0% &amp; TTC)</li>
         <li className="flex items-center gap-2.5"><span className="material-symbols-outlined text-primary text-lg">check_circle</span> Suivi des charges &amp; Bénéfice Net réel</li>
-        <li className="flex items-center gap-2.5"><span className="material-symbols-outlined text-primary text-lg">check_circle</span> Carnet de crédit &amp; Dettes clients</li>
-        <li className="flex items-center gap-2.5"><span className="material-symbols-outlined text-primary text-lg">check_circle</span> Alertes de stock automatiques</li>
-        <li className="flex items-center gap-2.5"><span className="material-symbols-outlined text-primary text-lg">check_circle</span> Exports Excel &amp; Support WhatsApp</li>
+        <li className="flex items-center gap-2.5"><span className="material-symbols-outlined text-primary text-lg">check_circle</span> Alertes stock automatiques &amp; Support WhatsApp</li>
       </ul>
     </div>
 
@@ -627,12 +627,12 @@ export default function LandingPage({ onLoginClick }: LandingPageProps) {
 
       <ul className="space-y-3.5 text-sm text-on-surface mb-8 font-medium">
         <li className="flex items-center gap-2.5 font-bold text-primary"><span className="material-symbols-outlined text-primary text-lg">verified</span> Toutes les fonctionnalités Pro incluses</li>
-        <li className="flex items-center gap-2.5 font-bold"><span className="material-symbols-outlined text-secondary text-lg">check_circle</span> <b>Comptes Caissiers avec accès restreints</b></li>
-        <li className="flex items-center gap-2.5 font-bold"><span className="material-symbols-outlined text-secondary text-lg">check_circle</span> <b>Clôtures de Caisse certifiées (Rapports X &amp; Z)</b></li>
-        <li className="flex items-center gap-2.5"><span className="material-symbols-outlined text-secondary text-lg">check_circle</span> Décompte d&apos;espèces &amp; Détection des écarts</li>
-        <li className="flex items-center gap-2.5"><span className="material-symbols-outlined text-secondary text-lg">check_circle</span> <b>Gestion Multi-Boutiques</b> (jusqu&apos;à 3 magasins)</li>
+        <li className="flex items-center gap-2.5 font-bold"><span className="material-symbols-outlined text-secondary text-lg">check_circle</span> <b>Multi-Caissiers illimités avec accès restreints</b></li>
+        <li className="flex items-center gap-2.5 font-bold"><span className="material-symbols-outlined text-secondary text-lg">check_circle</span> <b>Multi-Boutiques (jusqu&apos;à 3 magasins indépendants)</b></li>
+        <li className="flex items-center gap-2.5"><span className="material-symbols-outlined text-secondary text-lg">check_circle</span> Écran caissier sécurisé (bénéfices et marges masqués)</li>
+        <li className="flex items-center gap-2.5"><span className="material-symbols-outlined text-secondary text-lg">check_circle</span> Clôtures de caisse certifiées &amp; Détection des écarts</li>
         <li className="flex items-center gap-2.5"><span className="material-symbols-outlined text-secondary text-lg">check_circle</span> Supervision à distance en temps réel sur mobile</li>
-        <li className="flex items-center gap-2.5"><span className="material-symbols-outlined text-secondary text-lg">check_circle</span> Support VIP dédié WhatsApp 7j/7</li>
+        <li className="flex items-center gap-2.5"><span className="material-symbols-outlined text-secondary text-lg">check_circle</span> Support VIP prioritaire WhatsApp 7j/7</li>
       </ul>
     </div>
 
@@ -695,6 +695,15 @@ export default function LandingPage({ onLoginClick }: LandingPageProps) {
         </summary>
         <div className="p-6 pt-0 text-on-surface-variant font-medium">
           <b>Oui, absolument !</b> Avec la formule Business, vous pouvez créer des accès sécurisés pour chacun de vos caissiers. Chaque caissier ne peut accéder qu&apos;à la caisse de sa propre boutique et ne peut en aucun cas voir vos prix d&apos;achat, vos marges bénéficiaires ou les autres boutiques. Vous disposez aussi des clôtures de caisse (Rapports X et Z) avec décompte d&apos;espèces.
+        </div>
+      </details>
+      <details className="group bg-surface-container-lowest rounded-xl border border-outline-variant/30 shadow-sm overflow-hidden open:ring-2 open:ring-primary/20">
+        <summary className="flex items-center justify-between p-6 cursor-pointer list-none font-bold text-on-surface hover:text-primary transition-colors">
+          <span>Comment fonctionne le carnet de crédit et dettes clients ?</span>
+          <span className="material-symbols-outlined text-outline group-open:rotate-180 transition-transform">expand_more</span>
+        </summary>
+        <div className="p-6 pt-0 text-on-surface-variant font-medium">
+          Vous pouvez autoriser des ventes à crédit en 1 clic au moment de l&apos;encaissement, avec ou sans acompte initial. Le <b>Carnet de Dettes</b> suit en temps réel le solde dû pour chaque client, enregistre les remboursements partiels ou totaux, et vous permet d&apos;envoyer une relance courtoise <b>directement sur WhatsApp en 1 clic</b> avec le détail du montant restant dû.
         </div>
       </details>
       <details className="group bg-surface-container-lowest rounded-xl border border-outline-variant/30 shadow-sm overflow-hidden open:ring-2 open:ring-primary/20">

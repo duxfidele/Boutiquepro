@@ -51,13 +51,18 @@ export interface Sale {
   tax: number;
   discount: number;
   total: number;
-  paymentMethod: "cash" | "mobile_money" | "card";
+  paymentMethod: "cash" | "mobile_money" | "card" | "credit";
   amountGiven?: number;
   change?: number;
   customerName?: string;
+  customerPhone?: string;
   createdAt: string;
   userId?: string;
   storeId?: string;
+  paymentStatus?: "paid" | "partial" | "unpaid";
+  amountPaid?: number;
+  remainingAmount?: number;
+  dueDate?: string;
 }
 
 export interface Customer {
@@ -148,6 +153,17 @@ type Action =
   | { type: "UPDATE_CART_QTY"; payload: { productId: string; quantity: number } }
   | { type: "CLEAR_CART" }
   | { type: "COMPLETE_SALE"; payload: Sale }
+  | { 
+      type: "RECORD_DEBT_PAYMENT"; 
+      payload: { 
+        saleId: string; 
+        paymentAmount: number; 
+        newPaid: number; 
+        newRemaining: number; 
+        newStatus: "paid" | "partial"; 
+        method: "cash" | "mobile_money" | "card"; 
+      } 
+    }
   | { type: "ADD_CUSTOMER"; payload: Customer }
   | { type: "ADD_CATEGORY"; payload: Category }
   | { type: "DELETE_CATEGORY"; payload: string }
@@ -322,16 +338,19 @@ function storeReducer(state: StoreState, action: Action): StoreState {
         const isCash = action.payload.paymentMethod === "cash";
         const isMM = action.payload.paymentMethod === "mobile_money";
         const isCard = action.payload.paymentMethod === "card";
-        const amount = action.payload.total;
+        const isCredit = action.payload.paymentMethod === "credit";
+        const downPayment = isCredit ? (action.payload.amountPaid || 0) : 0;
+        const cashEntry = isCredit ? downPayment : (isCash ? action.payload.total : 0);
+        const effectiveAmount = isCredit ? downPayment : action.payload.total;
 
         updatedActiveSession = {
           ...updatedActiveSession,
-          totalCashSales: updatedActiveSession.totalCashSales + (isCash ? amount : 0),
-          totalMobileMoneySales: updatedActiveSession.totalMobileMoneySales + (isMM ? amount : 0),
-          totalCardSales: updatedActiveSession.totalCardSales + (isCard ? amount : 0),
+          totalCashSales: updatedActiveSession.totalCashSales + cashEntry,
+          totalMobileMoneySales: updatedActiveSession.totalMobileMoneySales + (isMM ? action.payload.total : 0),
+          totalCardSales: updatedActiveSession.totalCardSales + (isCard ? action.payload.total : 0),
           totalSalesCount: updatedActiveSession.totalSalesCount + 1,
-          totalSalesAmount: updatedActiveSession.totalSalesAmount + amount,
-          expectedAmount: updatedActiveSession.openingAmount + updatedActiveSession.totalCashSales + (isCash ? amount : 0)
+          totalSalesAmount: updatedActiveSession.totalSalesAmount + effectiveAmount,
+          expectedAmount: updatedActiveSession.openingAmount + updatedActiveSession.totalCashSales + cashEntry
         };
 
         updatedCashSessions = updatedCashSessions.map((cs) =>
@@ -346,6 +365,40 @@ function storeReducer(state: StoreState, action: Action): StoreState {
         cart: [],
         activeCashSession: updatedActiveSession,
         cashSessions: updatedCashSessions
+      };
+    }
+    case "RECORD_DEBT_PAYMENT": {
+      const { saleId, paymentAmount, newPaid, newRemaining, newStatus, method } = action.payload;
+      const updatedSales = state.sales.map((s) => {
+        if (s.id !== saleId) return s;
+        return {
+          ...s,
+          amountPaid: newPaid,
+          remainingAmount: newRemaining,
+          paymentStatus: newStatus,
+        };
+      });
+
+      let updatedActiveSession = state.activeCashSession;
+      let updatedCashSessions = state.cashSessions;
+
+      if (updatedActiveSession && method === "cash") {
+        updatedActiveSession = {
+          ...updatedActiveSession,
+          totalCashSales: updatedActiveSession.totalCashSales + paymentAmount,
+          totalSalesAmount: updatedActiveSession.totalSalesAmount + paymentAmount,
+          expectedAmount: updatedActiveSession.expectedAmount + paymentAmount,
+        };
+        updatedCashSessions = updatedCashSessions.map((cs) =>
+          cs.id === updatedActiveSession?.id ? updatedActiveSession : cs
+        );
+      }
+
+      return {
+        ...state,
+        sales: updatedSales,
+        activeCashSession: updatedActiveSession,
+        cashSessions: updatedCashSessions,
       };
     }
         case "ADD_EXPENSE":
@@ -481,6 +534,9 @@ interface StoreContextType {
   isSyncing: boolean;
   syncOfflineSales: () => Promise<{ success: number; failed: number }>;
   isRealtimeActive: boolean;
+  unpaidDebts: Sale[];
+  totalDebtsAmount: number;
+  recordDebtPayment: (saleId: string, amount: number, method?: "cash" | "mobile_money" | "card") => Promise<void>;
 }
 
 const StoreContext = createContext<StoreContextType | undefined>(undefined);
@@ -494,6 +550,73 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [isSyncing, setIsSyncing] = useState<boolean>(false);
 
   // Synchronisation des ventes hors-ligne
+  const unpaidDebts = useMemo(() => {
+    return state.sales.filter(
+      (s) => s.paymentMethod === "credit" && (s.remainingAmount === undefined || s.remainingAmount > 0)
+    );
+  }, [state.sales]);
+
+  const totalDebtsAmount = useMemo(() => {
+    return unpaidDebts.reduce((sum, s) => sum + (s.remainingAmount ?? s.total), 0);
+  }, [unpaidDebts]);
+
+  const recordDebtPayment = async (
+    saleId: string,
+    amount: number,
+    method: "cash" | "mobile_money" | "card" = "cash"
+  ) => {
+    if (amount <= 0) return;
+    const targetSale = state.sales.find((s) => s.id === saleId);
+    if (!targetSale) return;
+
+    const currentPaid = targetSale.amountPaid || 0;
+    const currentRemaining = targetSale.remainingAmount ?? targetSale.total;
+    const paymentAmount = Math.min(amount, currentRemaining);
+
+    const newPaid = currentPaid + paymentAmount;
+    const newRemaining = Math.max(0, currentRemaining - paymentAmount);
+    const newStatus = newRemaining === 0 ? ("paid" as const) : ("partial" as const);
+
+    dispatchBase({
+      type: "RECORD_DEBT_PAYMENT",
+      payload: { saleId, paymentAmount, newPaid, newRemaining, newStatus, method },
+    });
+
+    if (typeof window !== "undefined" && navigator.onLine && activeStore?.id) {
+      try {
+        await supabase
+          .from("sales")
+          .update({
+            amount_paid: newPaid,
+            remaining_amount: newRemaining,
+            payment_status: newStatus,
+          })
+          .eq("id", saleId)
+          .eq("store_id", activeStore.id);
+      } catch (err) {
+        console.warn("Erreur mise à jour Supabase dette:", err);
+      }
+
+      if (method === "cash" && state.activeCashSession?.id) {
+        try {
+          const newCash = state.activeCashSession.totalCashSales + paymentAmount;
+          const newTotal = state.activeCashSession.totalSalesAmount + paymentAmount;
+          const newExpected = state.activeCashSession.openingAmount + newCash;
+          await supabase
+            .from("cash_sessions")
+            .update({
+              total_cash_sales: newCash,
+              total_sales_amount: newTotal,
+              expected_amount: newExpected,
+            })
+            .eq("id", state.activeCashSession.id);
+        } catch (err) {
+          console.warn("Erreur crédit session caisse dette:", err);
+        }
+      }
+    }
+  };
+
   const syncOfflineSales = async (): Promise<{ success: number; failed: number }> => {
     if (!activeStore?.id || !navigator.onLine || isSyncing) return { success: 0, failed: 0 };
     setIsSyncing(true);
@@ -764,8 +887,13 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         if (sales) {
           payload.sales = sales.map((s: any) => ({
             ...s,
-            paymentMethod: s.payment_method,
+            paymentMethod: s.payment_method || "cash",
             customerName: s.customer_name,
+            customerPhone: s.customer_phone,
+            amountPaid: Number(s.amount_paid) || (s.payment_method === 'credit' ? 0 : s.total),
+            remainingAmount: Number(s.remaining_amount) ?? (s.payment_method === 'credit' ? s.total : 0),
+            paymentStatus: s.payment_status || (s.payment_method === 'credit' ? 'unpaid' : 'paid'),
+            dueDate: s.due_date,
             createdAt: s.created_at,
             items: s.items ? s.items.map((i: any) => ({
               ...i,
@@ -1256,7 +1384,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       pendingSyncCount,
       isSyncing,
       syncOfflineSales,
-      isRealtimeActive
+      isRealtimeActive,
+      unpaidDebts,
+      totalDebtsAmount,
+      recordDebtPayment
     }}>
       {children}
     </StoreContext.Provider>

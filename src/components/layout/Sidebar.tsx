@@ -11,6 +11,7 @@ import {
 import { supabase } from "@/lib/supabase";
 import {
   LogOut,
+  BookOpen,
   LayoutDashboard, ClipboardList, Receipt,
   Package,
   ShoppingCart,
@@ -28,6 +29,7 @@ import {
 const navItems = [
   { href: "/", label: "Tableau de bord", icon: LayoutDashboard, adminOnly: false },
   { href: "/pos", label: "Point de Vente", icon: ShoppingCart, adminOnly: false },
+  { href: "/debts", label: "Carnet de Dettes", icon: BookOpen, adminOnly: false },
   { href: "/products", label: "Produits & Stock", icon: Package, adminOnly: false },
   { href: "/inventory", label: "Inventaire", icon: ClipboardList, adminOnly: true },
   { href: "/expenses", label: "Dépenses", icon: Receipt, adminOnly: true },
@@ -41,7 +43,7 @@ const navItems = [
 export default function Sidebar({ isOpen, onClose }: { isOpen?: boolean, onClose?: () => void }) {
   const [collapsed, setCollapsed] = useState(false);
   const pathname = usePathname();
-  const { lowStockProducts, state } = useStore();
+  const { lowStockProducts, state, unpaidDebts } = useStore();
   const { user, role, signOut, stores, activeStore, setActiveStore } = useAuth();
   const [cashierName, setCashierName] = useState<string | null>(null);
 
@@ -120,13 +122,17 @@ export default function Sidebar({ isOpen, onClose }: { isOpen?: boolean, onClose
         <div className="flex flex-col w-full space-y-1">
           {navItems.filter(item => !item.adminOnly || role === 'admin').map((item) => {
             // Role based filtering : le caissier a accès à son tableau de bord, à la caisse, aux produits et au support
-            if (role === 'cashier' && !['/', '/pos', '/products', '/support'].includes(item.href)) {
+            if (role === 'cashier' && !['/', '/pos', '/products', '/debts', '/support'].includes(item.href)) {
               return null;
             }
 
             const isActive = pathname === item.href;
             const Icon = item.icon;
-            const showBadge = item.href === "/products" && lowStockProducts.length > 0;
+            const isProductsBadge = item.href === "/products" && lowStockProducts.length > 0;
+            const isDebtsBadge = item.href === "/debts" && unpaidDebts && unpaidDebts.length > 0;
+            const showBadge = isProductsBadge || isDebtsBadge;
+            const badgeCount = isProductsBadge ? lowStockProducts.length : (isDebtsBadge ? unpaidDebts.length : 0);
+            const badgeColor = isDebtsBadge ? "bg-amber-500" : "bg-destructive";
 
             return (
               <Link
@@ -149,8 +155,8 @@ export default function Sidebar({ isOpen, onClose }: { isOpen?: boolean, onClose
                   </span>
                 )}
                 {showBadge && (
-                  <span className={`badge-pulse flex h-5 items-center justify-center rounded-full bg-destructive text-[10px] font-bold text-white ${collapsed ? "absolute -right-1 -top-1 w-5" : "ml-auto min-w-[20px] px-1.5"}`}>
-                    {lowStockProducts.length}
+                  <span className={`badge-pulse flex h-5 items-center justify-center rounded-full ${badgeColor} text-[10px] font-bold text-white ${collapsed ? "absolute -right-1 -top-1 w-5" : "ml-auto min-w-[20px] px-1.5"}`}>
+                    {badgeCount}
                   </span>
                 )}
               </Link>
