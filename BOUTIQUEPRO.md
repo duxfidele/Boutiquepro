@@ -1,39 +1,44 @@
 # BoutiquePro - Documentation Complète & Référence Technique
 
 ## 📋 Présentation Générale
-**BoutiquePro** est une application web moderne (SaaS) conçue pour la gestion commerciale et le point de vente (POS) adaptée aux réalités du marché africain (monnaie FCFA, Mobile Money, utilisation mobile & tablette). 
+**BoutiquePro** est une application web moderne (SaaS) conçue pour la gestion commerciale et le point de vente (POS) adaptée aux réalités du marché africain (monnaie FCFA, Mobile Money, relances WhatsApp, utilisation mobile & tablette).
 
-Elle permet à de multiples commerçants de gérer leurs boutiques, leurs stocks, leurs ventes et leurs employés depuis une interface unique et ultra-rapide. L'application est installable (PWA) et fonctionne de manière fluide sur ordinateur, tablette ou smartphone.
+Elle permet à de multiples commerçants de gérer leurs boutiques, leurs stocks, leurs ventes au comptant ou à crédit, et leurs employés depuis une interface unique, moderne et ultra-rapide. L'application est installable (PWA) et déployée sous le domaine officiel **[maboutiquepro.app](https://maboutiquepro.app)**.
 
 ---
 
 ## 🛠️ Stack Technique
-- **Frontend :** Next.js 14 (App Router), React, Tailwind CSS, Lucide React (Icônes).
-- **Backend & Base de données :** Supabase (PostgreSQL, Authentification, Row Level Security, RPC en PL/pgSQL).
-- **Format monétaire :** Franc CFA (XOF/XAF - FCFA).
-- **PWA :** `@ducanh2912/next-pwa` (Gère la mise en cache, l'icône sur écran d'accueil et le fonctionnement applicatif).
-- **Export & Impression :** Impression thermique directe (80mm/58mm via CSS `@media print`), factures A4 PDF (`jspdf`, `html2canvas`).
-- **Gestionnaire de versions :** Git & GitHub (dépôt : `https://github.com/duxfidele/Boutiquepro.git`).
+- **Frontend :** Next.js 14 (App Router), React 18, Tailwind CSS, Lucide React (Icônes), `@base-ui/react`.
+- **Backend & Base de données :** Supabase (PostgreSQL, Authentification, Row Level Security, Triggers & Fonctions RPC en PL/pgSQL).
+- **Format monétaire :** Franc CFA (XOF/XAF - FCFA) avec gestion anti-NaN garantie sur tous les calculs.
+- **Domaine officiel :** `https://maboutiquepro.app` (associé à Vercel & Supabase Auth).
+- **Import / Export Tableurs :** Bibliothèque `xlsx` pour l'import de catalogue et l'export d'inventaire/analytique.
+- **PWA :** `@ducanh2912/next-pwa` (Mise en cache locale, mode installable sur écran d'accueil smartphone/tablette).
+- **Impression & Documents :** Impression thermique directe (80mm/58mm via CSS `@media print`), factures et quittances PDF (`jspdf`, `html2canvas`, `jspdf-autotable`).
+- **Messagerie & Relances :** Intégration WhatsApp Business / Web avec indicatif international Togo (+228 / 00228) et formatage automatique des téléphones à 8 chiffres.
+- **Gestionnaire de versions :** Git & GitHub (Dépôt : `https://github.com/duxfidele/Boutiquepro.git`).
 
 ---
 
 ## 🔐 Architecture SaaS Multi-Tenant & Sécurité
-L'application fonctionne selon le modèle **SaaS Multi-Tenant**. Chaque propriétaire peut posséder une ou plusieurs boutiques distinctes.
+L'application fonctionne selon le modèle **SaaS Multi-Tenant**. Chaque commerçant peut posséder une ou plusieurs boutiques distinctes.
 
 Les données sont strictement cloisonnées grâce aux **Row Level Security (RLS)** de PostgreSQL :
 - Chaque requête vérifie que l'utilisateur connecté appartient bien à l'équipe de la boutique (`store_id`) avant de renvoyer la moindre donnée.
 - Un caissier ou un propriétaire d'une boutique A ne peut **jamais** lire ni manipuler les données d'une boutique B.
 
 ### Tables clés (cloisonnées par `store_id`) :
-- `stores` : Boutiques créées (avec `id`, `name`, `owner_id`, `created_at`).
-- `store_members` : Table de liaison entre les utilisateurs (`user_id`), la boutique (`store_id`) et leur rôle (`role`).
-- `profiles` : Profils publics (nom, email, rôle par défaut).
-- `products` & `categories` : Catalogue des articles et catégories de la boutique.
-- `sales` & `sale_items` : Historique des ventes et détail des lignes d'articles vendus.
-- `customers` : Base clients et fidélité.
-- `expenses` : Charges et dépenses opérationnelles (loyer, factures, salaires).
+- `stores` : Boutiques créées (`id`, `name`, `owner_id`, `created_at`).
+- `store_members` : Liaison entre les utilisateurs (`user_id`), la boutique (`store_id`) et leur rôle (`role` : admin / cashier).
+- `profiles` : Profils publics (nom, email, téléphone, rôle par défaut).
+- `products` & `categories` : Catalogue des articles (nom, SKU/code-barres, prix de vente, prix d'achat, stock, stock minimum, image/emoji).
+- `sales` & `sale_items` : Historique des ventes comptant et à crédit (`payment_method`, `payment_status`, `amount_paid`, `remaining_amount`, `due_date`).
+- `debt_payments` (ou journal de recouvrement) : Historique des remboursements partiels ou totaux des créances (`sale_id`, `amount`, `payment_method`, `paid_at`, `cashier_name`).
+- `customers` : Base clients (nom, téléphone, total des achats, solde débiteur).
+- `cash_sessions` : Sessions et clôtures de caisse (fonds de caisse initial, ventes encaissées, écarts réels, rapports X & Z).
+- `expenses` : Charges opérationnelles (loyer, salaires, factures).
 - `orders` & `order_items` : Commandes et réapprovisionnements fournisseurs.
-- `inventory_sessions` & `inventory_items` : Sessions d'inventaire physique.
+- `inventory_sessions` & `inventory_items` : Sessions d'inventaire physique et régularisation des écarts.
 - `settings` : Paramètres personnalisés de chaque boutique (nom, logo, devise, TVA, ville, pays, téléphone, email).
 
 ---
@@ -41,103 +46,111 @@ Les données sont strictement cloisonnées grâce aux **Row Level Security (RLS)
 ## 👥 Rôles et Permissions (RBAC)
 
 ### 1. Administrateur / Gérant (`admin`)
-- **Création de la boutique :** Automatique lors de l'inscription via trigger PostgreSQL (`handle_new_saas_user`).
-- **Multi-Boutiques :** Peut créer de nouvelles boutiques (`+ Créer une boutique`) et basculer instantanément d'une boutique à l'autre depuis le menu.
-- **Accès complet :** 
-  - Tableau de bord complet (Chiffre d'affaires, Bénéfice Net, Total des Dépenses, Stock critique).
-  - Point de Vente (POS) et Catalogue Produits (création, modification, prix d'achat, marges, suppression).
-  - Inventaire physique, Dépenses, Analytique complète, Commandes fournisseurs.
-  - Paramètres de la boutique (nom, logo, coordonnées).
+- **Multi-Boutiques :** Création de nouvelles boutiques (`+ Créer une boutique`) et bascule instantanée d'un établissement à un autre.
+- **Accès complet :**
+  - Tableau de bord global (CA Réalisé, CA Encaissé, Dettes en attente, Bénéfice Net, Total des Dépenses, Alertes de stock).
+  - Gestion du catalogue : Création manuelle ou **Importation massive par fichier Excel/CSV** avec détection de doublons.
+  - Carnet de crédits & recouvrement (`/debts`) : Suivi des impayés, enregistrement des versements, émission des quittances et relances WhatsApp.
+  - Inventaire physique, Dépenses, Analytique complète, Commandes fournisseurs, Paramètres.
 - **Gestion d'Équipe (`/team`) :**
-  - **Création directe de compte caissier :** Définition immédiate de l'email et du mot de passe (sans dépendre des quotas d'envoi d'emails Supabase).
-  - **Attribution par email :** Rattachement d'un compte déjà existant à la boutique choisie.
-  - **Révocation :** Retrait d'un caissier d'une boutique en 1 clic.
+  - Création directe de comptes caissiers avec email et mot de passe immédiats (via RPC `admin_create_cashier`).
+  - Affectation et révocation d'accès en 1 clic.
 
 ### 2. Caissier (`cashier`)
-- **Tableau de bord personnalisé (`/`) :**
-  - Le caissier a accès à son propre tableau de bord pour évaluer ses performances de la journée.
-  - Il y consulte **exclusivement ses propres ventes** : CA personnel du jour, nombre de tickets encaissés, panier moyen et ses transactions récentes.
-  - **Protection des données sensibles du patron :** Le bénéfice net, les prix d'achat, les marges, les dépenses du gérant et les ventes des autres collègues sont **totalement masqués**.
-- **Isolation stricte de l'interface d'administration :**
-  - L'analytique globale (`/analytics`), les dépenses (`/expenses`), les commandes fournisseurs (`/orders`), l'équipe (`/team`) et les paramètres (`/settings`) lui sont **totalement inaccessibles**.
-  - Il ne peut **pas changer de boutique** ni créer de boutique : son interface est verrouillée sur la boutique qui lui a été affectée.
-- **Catalogue Produits (`/products`) sécurisé :**
-  - Consultation du stock et des prix de vente uniquement.
-  - Les prix d'achat (`cost`) et les marges bénéficiaires sont **masqués**.
-  - Les boutons de création, modification et suppression de produits sont désactivés pour son profil.
-- **Point de Vente (POS) :**
-  - Enregistrement des ventes, choix du mode de paiement (Espèces, Mobile Money, Carte).
-  - Gestion de session de caisse : fond initial, point d'étape (Rapport X), clôture journalière et Rapport Z.
+- **Tableau de bord personnel (`/`) :**
+  - Consulter uniquement ses propres performances de shift (son CA du jour, ses encaissements, son nombre de tickets).
+  - **Confidentialité totale du patron :** Les prix d'achat (`cost`), les marges bénéficiaires, le bénéfice net de la boutique, les dépenses et les ventes des collègues sont masqués.
+- **Point de Vente (POS) & Caisse :**
+  - Vente au comptant (Espèces, Mobile Money, Carte) et vente à crédit avec acompte et date d'échéance.
+  - Gestion du tiroir-caisse : Ouverture avec fond initial, point d'étape (Rapport X), clôture journalière et Rapport Z avec détection d'écarts.
+- **Accès restreint & Sécurisé :**
+  - Redirection automatique si tentative d'accès à `/analytics`, `/expenses`, `/team`, `/settings` ou `/orders`.
+  - Pas de modification possible du catalogue ni de suppression d'articles.
 
 ---
 
-## ⚙️ Logique Frontend Spécifique
-- **`AuthContext.tsx` :** Gère la session Supabase Auth, charge les boutiques accessibles, isole la boutique active (`activeStore`) et le rôle (`role`).
-- **`StoreContext.tsx` :** Moteur central de l'application. Gère le cache local réactif (`boutiquepro-state`), la synchronisation Supabase, le calcul du CA, des bénéfices, des dépenses et l'exécution atomique des ventes via la fonction RPC `create_sale`.
-- **`AppWrapper.tsx` :** Filtre de routage global qui bloque les accès non autorisés en fonction du rôle utilisateur et gère la page d'accueil marketing (`LandingPage.tsx`) pour les visiteurs non connectés.
-- **`Sidebar.tsx` :** Barre de navigation responsive avec adaptation dynamique des liens selon le rôle (`adminOnly: true/false`), sélecteur de boutiques et affichage du caissier actif.
+## 💡 Modules Clés & Fonctionnalités Récentes
+
+### 1. Importation de Produits via Fichier Excel / CSV (`/products`)
+- **Bouton vert émeraude « Importer Excel »** placé en tête de page (et bouton d'invitation au centre si le catalogue est vide).
+- **Téléchargement d'un Modèle Excel** (`modele_import_produits_boutiquepro.xlsx`) configuré avec les colonnes recommandées (*Nom, Catégorie, Code-barres, Prix de vente, Prix d'achat, Quantité en stock, Stock minimum*).
+- **Algorithme d'analyse intelligent et tolérant** :
+  - Détection automatique des colonnes même avec des intitulés variés (*Produit, Désignation, Libellé, PV, PA, Qté, etc.*).
+  - Nettoyage automatique des montants (anti-NaN garanti).
+  - Génération automatique de code SKU s'il est omis.
+  - Détection de la catégorie ou création automatique des nouvelles catégories.
+  - Attribution d'un emoji/icône adapté selon la dénomination de l'article.
+- **Tableau de prévisualisation avant validation** :
+  - Statistiques immédiates : nombre de nouveaux articles, articles existants, valeur globale du stock importé.
+  - Gestion des doublons : option de mettre à jour le produit existant (en remplaçant le stock ou en l'additionnant) ou d'ignorer les doublons.
+- **Enregistrement en masse ultra-rapide (`BATCH_ADD_PRODUCTS`)** :
+  - Insertion / mise à jour par lot dans Supabase via `upsert` pour injecter des centaines de produits en quelques secondes.
+
+### 2. Nom de Domaine Personnalisé & Récupération de Mot de Passe
+- **Domaine officiel connecté :** `https://maboutiquepro.app`.
+- **Lien « Mot de passe oublié ? »** directement intégré dans la fenêtre de connexion (`Login.tsx`).
+- Envoi d'un e-mail contenant le lien de réinitialisation sécurisé via `supabase.auth.resetPasswordForEmail` ciblant `https://maboutiquepro.app/reset-password`.
+- **Page dédiée `/reset-password`** :
+  - Détection automatique des tokens de récupération (aussi bien les liens directs que les flux PKCE `?code=...`).
+  - Saisie et confirmation du nouveau mot de passe avec bouton pour afficher/masquer les caractères.
+  - Mise à jour sécurisée dans Supabase via `supabase.auth.updateUser`.
+  - Redirection automatique vers le tableau de bord une fois validé.
+- **Contournement dans `AppWrapper.tsx`** :
+  - L'accès à `/reset-password` est garanti sans être bloqué par la page de garde ou les restrictions caissiers.
+
+### 3. Carnet de Crédits & Recouvrement (`/debts` et Point de Vente)
+- **Vente à crédit intégrée au panier :**
+  - Choix du mode de paiement « À crédit » avec saisie de l'acompte initial, sélection du client et date d'échéance.
+- **Journal et suivi des créances :**
+  - Statuts dynamiques : *Non payé*, *Partiel*, *Soldé*, *En retard*.
+  - Enregistrement des paiements échelonnés avec sélection du moyen de versement (Espèces, Mobile Money, Carte) et traçabilité du caissier.
+- **Quittance de recouvrement certifiée :**
+  - Ticket thermique et téléchargement PDF officiel récapitulant la dette initiale, les versements antérieurs, le versement du jour et le reste dû.
+- **Relances WhatsApp Togo (+228) :**
+  - Boutons de relance et d'envoi de quittance avec message pré-formaté et redirection automatique vers WhatsApp.
+  - Détection automatique et conversion des numéros de téléphone togolais à 8 chiffres vers l'indicatif international standardisé `+228`.
+- **Indicateurs financiers réconciliés :**
+  - CA théorique vs CA encaissé réel, taux de recouvrement, montant total des dettes en cours et bénéfice net encaissé.
+
+### 4. Clôture de Caisse Journalière (Rapport Z & Rapport X)
+- Bandeau dynamique sur la caisse : état d'ouverture, fond initial, cumul des espèces en temps réel.
+- Point d'étape provisoire en cours de journée (Rapport X).
+- Modal de clôture de shift : comptage physique des espèces avec détection et calcul instantané des écarts de caisse (Caisse juste, Excédent, ou Manquant).
+- Impression thermique 80mm et PDF certifié du Rapport Z officiel avec visas du caissier et du gérant.
+- Historique complet des clôtures antérieures.
+
+### 5. Mode Hors-Ligne (Offline Queue) & Supabase Realtime
+- Sauvegarde instantanée des ventes en cache local (LocalStorage / IndexedDB) en cas d'interruption du réseau internet.
+- Aucune interruption de caisse lors des coupures de connexion.
+- Resynchronisation automatique dès le rétablissement de la connexion.
+- Canaux WebSockets Supabase Realtime pour la décrémentation instantanée du stock sur tous les terminaux de caisse connectés.
 
 ---
 
-## 🚀 Évolutions & Améliorations Réalisées Récemment
+## 💼 Modèles d'Exploitation Commerciale
 
-1. **Résolution définitive de l'erreur 400 (PGRST200)** :
-   - Mise en place de la fonction RPC `get_store_team_members` pour l'affichage de l'équipe sans dépendre de jointures PostgREST défaillantes.
-2. **Attribution fluide Caissier-Boutique** :
-   - Ajout d'un sélecteur de boutique dans l'onglet équipe et création directe des comptes caissiers via `admin_create_cashier`.
-3. **Nettoyage automatique des boutiques parasites** :
-   - Élimination des fausses boutiques "Ma Boutique" créées par défaut lors de la connexion d'un caissier.
-4. **Concordance Financière & Réconciliation Comptable** :
-   - Harmonisation du calcul du bénéfice net entre le Tableau de bord et la page Analytique : la remise est désormais déduite de façon rigoureuse (`Bénéfice Net = Total Ventes Net - Coût d'achat - Dépenses`).
-   - Correction de la jauge de pourcentage par catégorie (qui ne dépasse plus 100%).
-5. **Remise POS en Pourcentage (%)** :
-   - Remplacement de la remise brute par un mode pourcentage `%` par défaut avec raccourcis rapides `[5%] [10%] [15%] [20%] [25%]`, calcul automatique de la déduction en FCFA et bascule optionnelle en FCFA fixe.
-6. **Persistance Multi-Boutiques des Paramètres (`StoreContext.tsx`)** :
-   - Modification de la sauvegarde des paramètres pour cibler strictement `store_id = activeStore.id` plutôt qu'un identifiant fixe `id = 1`.
-7. **Déblocage des accès légitimes du Caissier** :
-   - Autorisation des pages `/support` et `/profile` dans le garde de navigation `AppWrapper.tsx`.
-8. **Script SQL Consolidé** :
-   - Création et enrichissement du fichier `saas_team_and_stores_management.sql` contenant toutes les fonctions sécurisées (`admin_create_cashier`, `assign_cashier_by_email`, `get_store_team_members`, `remove_cashier_from_store`, `create_new_store`).
-9. **Clôture de Caisse Journalière (Rapport Z & Rapport X)** :
-   - Table `cash_sessions` avec isolation RLS multi-boutiques (`saas_cash_register_sessions.sql`).
-   - Bandeau dynamique sur la caisse : état d'ouverture, fond initial, cumul des espèces en temps réel.
-   - Modal d'ouverture de caisse avec saisie du fond initial et raccourcis rapides.
-   - Point d'étape provisoire en cours de journée (Rapport X).
-   - Modal de clôture de shift : comptage physique des espèces avec détection et calcul instantané des écarts de caisse (Caisse juste, Excédent, ou Manquant).
-   - Impression certifiée du Ticket Thermique 80mm / PDF du Rapport Z officiel avec visas du caissier et du gérant.
-   - Historique des clôtures passées avec réimpression à la demande.
+1. **SaaS B2B par Abonnement sur `maboutiquepro.app` (Principal) :**
+   - Inscription libre des commerçants avec période d'essai gratuit.
+   - Forfaits mensuels ou annuels (ex: **5 000 à 15 000 FCFA / mois**) payables par Mobile Money (Wave, TMoney, Flooz, MTN Moov, Orange Money).
+   - Maintenance et améliorations centralisées sur le cloud.
+
+2. **Déploiement Dédié / Marque Blanche :**
+   - Vente clé en main pour grandes surfaces, grossistes ou pharmacies avec domaine sur mesure et branding personnalisé.
+   - Facturation forfaitaire (**200 000 à 600 000 FCFA**) + contrat d'assistance annuel.
 
 ---
 
-## 💼 Perspectives Commerciales & Vente en SaaS
+## 📁 Principaux Fichiers et Composants
 
-L'application a été conçue pour pouvoir être exploitée selon deux modèles commerciaux très rentables :
-
-### Modèle 1 : SaaS B2B par Abonnement (Recommandé)
-- Hébergement unique sur Vercel avec nom de domaine propre (ex: `app.boutiquepro.africa`).
-- Chaque commerçant s'inscrit en ligne et gère sa boutique en toute autonomie grâce au cloisonnement RLS.
-- Tarification récurrente mensuelle ou annuelle (ex: **5 000 à 15 000 FCFA / mois**) encaissée automatiquement via Mobile Money (Wave, Orange Money, MTN, Moov) avec des passerelles comme **FedaPay, KKiaPay, CinetPay ou Paystack**.
-- Mises à jour centralisées : toute amélioration apportée au code profite instantanément à l'ensemble des clients.
-
-### Modèle 2 : Vente de Licence Dédiée / Marque Blanche
-- Déploiement d'une instance exclusive pour de grands commerces souhaitant leur propre logo, nom de domaine et base de données privée.
-- Vente forfaitaire clé en main (**150 000 à 500 000 FCFA**) assortie d'un contrat de maintenance annuel.
-
----
-
-## 📌 Feuille de Route / Prochaines Étapes Recommandées
-
-1. ✅ **Clôture de Caisse Journalière (Rapport Z)** : *(TERMINÉ & OPÉRATIONNEL)*
-2. ✅ **File d'Attente Hors-Ligne (Offline Sync Queue)** : *(TERMINÉ & OPÉRATIONNEL)*
-   - Sauvegarde instantanée des ventes dans IndexedDB/LocalStorage en cas de coupure de connexion internet ou d'indisponibilité serveur.
-   - Impression des tickets et mise à jour des stocks sans interruption de caisse.
-   - Resynchronisation automatique en arrière-plan vers Supabase dès le retour du réseau avec prévention des doublons (idempotence) et bouton de synchronisation manuelle.
-3. ✅ **Export Comptable Excel & CSV** : *(TERMINÉ & OPÉRATIONNEL)*
-   - Module d'export universel zéro-dépendance (`accountingExport.ts`) avec support natif Excel (`.xls`) et CSV UTF-8 BOM (`.csv`).
-   - Centre d'exportation complet dans **Rapports & Analytique** : Journal des Ventes, Journal des Dépenses, Valorisation des Stocks et Compte de Résultat / Grand Livre.
-   - Boutons d'export rapide en 1 clic dans **Dépenses** et **Produits & Stock**.
-4. ✅ **Synchronisation Temps Réel du Stock & Ventes (Supabase Realtime)** : *(TERMINÉ & OPÉRATIONNEL)*
-   - Canaux WebSockets Supabase Realtime strictement cloisonnés par `store_id = activeStore.id` (garantie d'étanchéité multi-boutiques).
-   - Décrémentation instantanée des stocks sur tous les écrans dès qu'un article est vendu sur une caisse.
-   - Actualisation en direct du chiffre d'affaires, des commandes et des bénéfices sur le tableau de bord du gérant sans rechargement de page.
-
+| Fichier / Dossier | Rôle principal |
+|---|---|
+| `src/app/products/page.tsx` | Gestion du catalogue, filtres, stock bas, bouton « Importer Excel » et export |
+| `src/components/products/ProductExcelImportModal.tsx` | Modal d'importation Excel/CSV, téléchargement modèle, aperçu et validation |
+| `src/app/reset-password/page.tsx` | Page de réinitialisation sécurisée du mot de passe |
+| `src/components/auth/Login.tsx` | Connexion, inscription et demande de réinitialisation par e-mail |
+| `src/app/debts/page.tsx` | Carnet de crédits, historique des versements, quittances PDF et relances WhatsApp Togo |
+| `src/components/pos/CashRegisterSessionModal.tsx` | Gestion des ouvertures et clôtures de caisse (Rapports X et Z) |
+| `src/components/layout/AppWrapper.tsx` | Routage, protection d'accès selon les rôles et exception pour `/reset-password` |
+| `src/context/StoreContext.tsx` | État global réactif, calculs financiers anti-NaN, synchronisation Supabase et actions par lot |
+| `src/lib/pdf.ts` | Moteur d'export PDF haute fidélité pour factures et quittances sans page blanche |
+| `src/lib/accountingExport.ts` | Générateur universel des exports comptables Excel et CSV |
