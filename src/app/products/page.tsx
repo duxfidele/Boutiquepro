@@ -5,7 +5,8 @@ import { useStore, Product } from "@/context/StoreContext";
 import { useAuth } from "@/context/AuthContext";
 import { ProductAvatar } from "@/components/ui/ProductAvatar";
 import { exportInventoryValuation } from "@/lib/accountingExport";
-import { FileSpreadsheet, Download } from "lucide-react";
+import { FileSpreadsheet, Download, Upload } from "lucide-react";
+import ProductExcelImportModal from "@/components/products/ProductExcelImportModal";
 import {
   Package,
   Plus,
@@ -29,6 +30,9 @@ export default function ProductsPage() {
   const [stockFilter, setStockFilter] = useState<"all" | "low" | "ok">("all");
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
   
+  // Product Import Modal
+  const [showImportModal, setShowImportModal] = useState(false);
+
   // Product Modal
   const [showModal, setShowModal] = useState(false);
   const [editProduct, setEditProduct] = useState<Product | null>(null);
@@ -131,6 +135,18 @@ export default function ProductsPage() {
             <FileSpreadsheet className="h-3.5 w-3.5 text-emerald-600" />
             <span>Export Stock (Excel)</span>
           </button>
+
+          {role === "admin" && (
+            <button
+              type="button"
+              onClick={() => setShowImportModal(true)}
+              className="flex items-center gap-1.5 rounded-xl border border-emerald-500/30 bg-emerald-500/10 hover:bg-emerald-500/20 px-3.5 py-2 text-xs font-bold text-emerald-600 dark:text-emerald-400 transition-all shadow-xs"
+              title="Importer des produits depuis un fichier Excel ou CSV"
+            >
+              <Upload className="h-3.5 w-3.5" />
+              <span>Importer Excel</span>
+            </button>
+          )}
 
           {role === "admin" && (
             <button
@@ -471,6 +487,12 @@ export default function ProductsPage() {
           </div>
         </div>
       )}
+
+      {/* Excel Import Modal */}
+      <ProductExcelImportModal
+        isOpen={showImportModal}
+        onClose={() => setShowImportModal(false)}
+      />
 
       {/* Category Modal */}
       {showCategoryModal && (

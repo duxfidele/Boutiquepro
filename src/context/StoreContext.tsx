@@ -158,6 +158,7 @@ export interface StoreState {
 // ─── Actions ─────────────────────────────────────────────────
 type Action =
   | { type: "ADD_PRODUCT"; payload: Product }
+  | { type: "BATCH_ADD_PRODUCTS"; payload: Product[] }
   | { type: "UPDATE_PRODUCT"; payload: Product }
   | { type: "DELETE_PRODUCT"; payload: string }
   | { type: "ADD_TO_CART"; payload: Product }
@@ -318,6 +319,15 @@ function storeReducer(state: StoreState, action: Action): StoreState {
   switch (action.type) {
     case "ADD_PRODUCT":
       return { ...state, products: [...state.products, action.payload].sort((a, b) => a.name.localeCompare(b.name)) };
+    case "BATCH_ADD_PRODUCTS": {
+      const incomingMap = new Map<string, Product>();
+      state.products.forEach((p) => incomingMap.set(p.id, p));
+      action.payload.forEach((p) => incomingMap.set(p.id, p));
+      return {
+        ...state,
+        products: Array.from(incomingMap.values()).sort((a, b) => a.name.localeCompare(b.name)),
+      };
+    }
     case "UPDATE_PRODUCT":
       return { ...state, products: state.products.map((p) => (p.id === action.payload.id ? action.payload : p)).sort((a, b) => a.name.localeCompare(b.name)) };
     case "DELETE_PRODUCT":
@@ -1323,7 +1333,28 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   // Async Dispatch Wrapper
   const dispatch = async (action: Action) => {
     try {
-      if (action.type === "ADD_PRODUCT") {
+      if (action.type === "BATCH_ADD_PRODUCTS") {
+        if (activeStore?.id && action.payload.length > 0) {
+          const records = action.payload.map((p) => ({
+            store_id: activeStore.id,
+            id: p.id,
+            name: p.name,
+            sku: p.sku,
+            category: p.category,
+            price: Number(p.price) || 0,
+            cost: Number(p.cost) || 0,
+            stock: Number(p.stock) || 0,
+            min_stock: Number(p.minStock) || 0,
+            image: p.image || "📦",
+          }));
+          const { error } = await supabase.from('products').upsert(records);
+          if (error) {
+            console.error("Supabase Batch Add Products Error:", error);
+            alert("Erreur lors de l'enregistrement de l'import: " + error.message);
+          }
+        }
+      }
+      else if (action.type === "ADD_PRODUCT") {
         const p = action.payload;
         const { error } = await supabase.from('products').insert([{ store_id: activeStore.id, 
           id: p.id, name: p.name, sku: p.sku, category: p.category, 
