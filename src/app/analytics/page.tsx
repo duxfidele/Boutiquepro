@@ -462,7 +462,8 @@ export default function AnalyticsPage() {
               ) : (
                 analytics.topDebtors.map((debtor) => {
                   const isOverdue = debtor.dueDate && new Date(debtor.dueDate) < new Date();
-                  const waClean = debtor.phone ? (debtor.phone.replace(/\D/g, "").length === 8 ? "229" + debtor.phone.replace(/\D/g, "") : debtor.phone.replace(/\D/g, "")) : null;
+                  const waRaw = debtor.phone ? debtor.phone.replace(/\D/g, "") : "";
+                   const waClean = waRaw ? (waRaw.startsWith("00") ? waRaw.substring(2) : (waRaw.length === 8 ? "228" + waRaw : waRaw)) : null;
                   const waMsg = encodeURIComponent(
                     `Bonjour ${debtor.name}, sauf erreur de notre part, il reste un solde de ${debtor.remaining.toLocaleString("fr-FR")} FCFA sur votre compte client auprès de ${state.settings.name || "BoutiquePro"}. Merci de nous contacter pour votre règlement.`
                   );

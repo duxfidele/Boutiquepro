@@ -243,7 +243,7 @@ const initialState: StoreState = {
   inventorySessions: [],
   cashSessions: [],
   activeCashSession: null,
-  settings: { name: "BoutiquePro", currency: "FCFA", taxRate: 0, city: "Dakar", country: "Sénégal", email: "contact@boutiquepro.com", phone: "+221 77 000 00 00" },
+  settings: { name: "BoutiquePro", currency: "FCFA", taxRate: 0, city: "Lomé", country: "Togo", email: "contact@boutiquepro.com", phone: "+228 98 37 61 01" },
 };
 
 

@@ -254,14 +254,24 @@ export default function DebtsPage() {
     }
   };
 
+  // Formateur intelligent du numéro WhatsApp pour le Togo (+228 / 00228) et international
+  const formatWhatsAppNumber = (phone?: string) => {
+    if (!phone) return null;
+    let clean = phone.replace(/\D/g, "");
+    if (clean.startsWith("00")) clean = clean.substring(2);
+    // Au Togo, les numéros ont 8 chiffres (ex: 90/91/92/70...). On préfixe par l'indicatif Togo 228
+    if (clean.length === 8) clean = "228" + clean;
+    return clean;
+  };
+
   // WhatsApp link generator for reminders
   const generateWhatsAppReminder = (debt: Sale) => {
     if (!debt.customerPhone) return null;
-    let cleanPhone = debt.customerPhone.replace(/\D/g, "");
-    if (cleanPhone.length === 8) cleanPhone = "229" + cleanPhone;
+    const cleanPhone = formatWhatsAppNumber(debt.customerPhone);
+    if (!cleanPhone) return null;
     
-    const remaining = debt.remainingAmount ?? debt.total;
-    const storeName = activeStore?.name || "Notre Boutique";
+    const remaining = getDebtRemaining(debt);
+    const storeName = activeStore?.name || state.settings?.name || "Notre Boutique";
     const msg = encodeURIComponent(
       `Bonjour ${debt.customerName || "cher client"}, nous vous remercions pour votre confiance auprès de ${storeName}. ` +
       `Sauf erreur de notre part, il reste un solde de ${remaining.toLocaleString("fr-FR")} FCFA sur votre achat (Réf: #${debt.id.slice(-6)}). ` +
@@ -273,10 +283,10 @@ export default function DebtsPage() {
   // WhatsApp link for recovery receipt confirmation
   const generateWhatsAppReceiptMessage = (debt: Sale, payment: DebtPayment, rem: number) => {
     if (!debt.customerPhone) return null;
-    let cleanPhone = debt.customerPhone.replace(/\D/g, "");
-    if (cleanPhone.length === 8) cleanPhone = "229" + cleanPhone;
+    const cleanPhone = formatWhatsAppNumber(debt.customerPhone);
+    if (!cleanPhone) return null;
     
-    const storeName = activeStore?.name || "Notre Boutique";
+    const storeName = activeStore?.name || state.settings?.name || "Notre Boutique";
     const statusTxt = rem === 0 ? "Votre dette est désormais TOTALEMENT SOLDÉE. Félicitations !" : `Il vous reste un solde de ${rem.toLocaleString("fr-FR")} FCFA.`;
     const msg = encodeURIComponent(
       `Bonjour ${debt.customerName || "cher client"},\n\n` +
