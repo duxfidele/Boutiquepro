@@ -126,37 +126,37 @@ export default function ProductsPage() {
           </p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
+          {/* Bouton IMPORTER EXCEL mis en valeur */}
+          <button
+            type="button"
+            onClick={() => setShowImportModal(true)}
+            className="flex items-center gap-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 text-xs font-bold transition-all shadow-md shadow-emerald-600/20 cursor-pointer active:scale-95"
+            title="Importer votre catalogue depuis un fichier Excel ou CSV"
+          >
+            <Upload className="h-4 w-4" />
+            <span>Importer Excel</span>
+          </button>
+
+          {/* Bouton Nouveau Produit Manuel */}
+          <button
+            type="button"
+            onClick={openCreate}
+            className="flex items-center gap-2 rounded-xl bg-primary px-4 py-2 text-xs font-bold text-primary-foreground hover:opacity-90 transition-all shadow-sm cursor-pointer active:scale-95"
+          >
+            <Plus className="h-4 w-4" />
+            <span>Nouveau produit</span>
+          </button>
+
+          {/* Bouton Exporter le stock (secondaire) */}
           <button
             type="button"
             onClick={() => exportInventoryValuation(state.products, state.settings.currency, "excel")}
-            className="flex items-center gap-1.5 rounded-xl border border-border/60 bg-secondary/40 hover:bg-secondary px-3 py-2 text-xs font-bold text-foreground transition-all shadow-xs"
-            title="Exporter l'inventaire complet en Excel"
+            className="flex items-center gap-1.5 rounded-xl border border-border/60 bg-secondary/40 hover:bg-secondary px-3 py-2 text-xs font-medium text-muted-foreground hover:text-foreground transition-all shadow-xs"
+            title="Télécharger l'inventaire complet actuel en Excel"
           >
-            <FileSpreadsheet className="h-3.5 w-3.5 text-emerald-600" />
-            <span>Export Stock (Excel)</span>
+            <FileSpreadsheet className="h-3.5 w-3.5" />
+            <span>Exporter le stock</span>
           </button>
-
-          {role === "admin" && (
-            <button
-              type="button"
-              onClick={() => setShowImportModal(true)}
-              className="flex items-center gap-1.5 rounded-xl border border-emerald-500/30 bg-emerald-500/10 hover:bg-emerald-500/20 px-3.5 py-2 text-xs font-bold text-emerald-600 dark:text-emerald-400 transition-all shadow-xs"
-              title="Importer des produits depuis un fichier Excel ou CSV"
-            >
-              <Upload className="h-3.5 w-3.5" />
-              <span>Importer Excel</span>
-            </button>
-          )}
-
-          {role === "admin" && (
-            <button
-              onClick={openCreate}
-              className="flex items-center gap-2 rounded-xl bg-primary px-4 py-2 text-xs font-bold text-primary-foreground hover:opacity-90 transition-opacity shadow-sm"
-            >
-              <Plus className="h-4 w-4" />
-              Nouveau produit
-            </button>
-          )}
         </div>
       </div>
 
@@ -375,7 +375,23 @@ export default function ProductsPage() {
       {filtered.length === 0 && (
         <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
           <Package className="h-12 w-12 mb-3 opacity-30" />
-          <p className="text-sm">Aucun produit trouvé</p>
+          <p className="text-sm font-medium">Aucun produit trouvé</p>
+          <div className="mt-4 flex items-center gap-3">
+            <button
+              onClick={() => setShowImportModal(true)}
+              className="flex items-center gap-2 px-4 py-2 rounded-xl bg-emerald-600 text-white text-xs font-bold shadow-md hover:bg-emerald-700 transition-all"
+            >
+              <Upload className="h-4 w-4" />
+              <span>Importer un fichier Excel</span>
+            </button>
+            <button
+              onClick={openCreate}
+              className="flex items-center gap-2 px-4 py-2 rounded-xl bg-primary text-primary-foreground text-xs font-bold shadow-md hover:opacity-90 transition-all"
+            >
+              <Plus className="h-4 w-4" />
+              <span>Créer manuellement</span>
+            </button>
+          </div>
         </div>
       )}
 
