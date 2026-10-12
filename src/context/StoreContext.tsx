@@ -593,13 +593,23 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   // Synchronisation des ventes hors-ligne
   const unpaidDebts = useMemo(() => {
-    return (state.sales || []).filter(
-      (s) => s && s.paymentMethod === "credit" && (s.remainingAmount === undefined || s.remainingAmount > 0)
-    );
+    return (state.sales || []).filter((s) => {
+      if (!s || s.paymentMethod !== "credit") return false;
+      const total = Number.isFinite(Number(s.total)) ? Number(s.total) : 0;
+      const paid = Number.isFinite(Number(s.amountPaid)) ? Number(s.amountPaid) : (s.paymentStatus === "paid" ? total : 0);
+      const rem = Number.isFinite(Number(s.remainingAmount)) ? Number(s.remainingAmount) : Math.max(0, total - paid);
+      return rem > 0 && s.paymentStatus !== "paid";
+    });
   }, [state.sales]);
 
   const totalDebtsAmount = useMemo(() => {
-    return (unpaidDebts || []).reduce((sum, s) => sum + (s ? (s.remainingAmount ?? s.total ?? 0) : 0), 0);
+    return (unpaidDebts || []).reduce((sum, s) => {
+      if (!s) return sum;
+      const total = Number.isFinite(Number(s.total)) ? Number(s.total) : 0;
+      const paid = Number.isFinite(Number(s.amountPaid)) ? Number(s.amountPaid) : (s.paymentStatus === "paid" ? total : 0);
+      const rem = Number.isFinite(Number(s.remainingAmount)) ? Number(s.remainingAmount) : Math.max(0, total - paid);
+      return sum + rem;
+    }, 0);
   }, [unpaidDebts]);
 
   const recordDebtPayment = async (
@@ -1119,24 +1129,49 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         if (sales) {
           payload.sales = sales.map((s: any) => {
             const isCreditSale = s.payment_method === 'credit';
-            const total = Number(s.total) || 0;
+            const total = Number.isFinite(Number(s.total)) ? Number(s.total) : 0;
             const salePayments = localStoredPayments.filter((p) => p.saleId === s.id);
-            const paymentsSum = salePayments.reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
+            const paymentsSum = salePayments.reduce((sum, p) => sum + (Number.isFinite(Number(p.amount)) ? Number(p.amount) : 0), 0);
 
-            const rawPaid = s.amount_paid !== null && s.amount_paid !== undefined ? Number(s.amount_paid) : null;
-            const rawRemaining = s.remaining_amount !== null && s.remaining_amount !== undefined ? Number(s.remaining_amount) : null;
+            const rawPaid = (s.amount_paid !== null && s.amount_paid !== undefined && Number.isFinite(Number(s.amount_paid)))
+              ? Number(s.amount_paid)
+              : null;
+            const rawRemaining = (s.remaining_amount !== null && s.remaining_amount !== undefined && Number.isFinite(Number(s.remaining_amount)))
+              ? Number(s.remaining_amount)
+              : null;
 
             let amountPaid = rawPaid !== null ? rawPaid : (isCreditSale ? paymentsSum : total);
             if (isCreditSale && paymentsSum > amountPaid) {
               amountPaid = paymentsSum;
             }
+            if (!Number.isFinite(amountPaid)) amountPaid = isCreditSale ? paymentsSum : total;
 
             let remainingAmount = rawRemaining !== null ? rawRemaining : (isCreditSale ? Math.max(0, total - amountPaid) : 0);
             if (isCreditSale && rawRemaining === null) {
               remainingAmount = Math.max(0, total - amountPaid);
             }
+            if (!Number.isFinite(remainingAmount)) {
+              remainingAmount = isCreditSale ? Math.max(0, total - amountPaid) : 0;
+            }
 
             const paymentStatus = s.payment_status || (isCreditSale ? (remainingAmount === 0 ? 'paid' : amountPaid > 0 ? 'partial' : 'unpaid') : 'paid');
+
+            // Réparation en arrière-plan Supabase si nécessaire
+            if (isCreditSale && (rawRemaining === null || !Number.isFinite(Number(s.remaining_amount)) || !Number.isFinite(Number(s.amount_paid)))) {
+              if (activeStore?.id) {
+                supabase
+                  .from("sales")
+                  .update({
+                    amount_paid: amountPaid,
+                    remaining_amount: remainingAmount,
+                    payment_status: paymentStatus
+                  })
+                  .eq("id", s.id)
+                  .eq("store_id", activeStore.id)
+                  .then(() => {})
+                  .catch(() => {});
+              }
+            }
 
             const resolvedPayments = salePayments.length > 0 ? salePayments : (
               (isCreditSale && amountPaid > 0) ? [{
@@ -1512,7 +1547,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   // Computed values
   const formatPrice = (amount: number) => {
-    return new Intl.NumberFormat("fr-FR").format(amount) + " " + state.settings.currency;
+    const validAmount = Number.isFinite(Number(amount)) ? Number(amount) : 0;
+    return new Intl.NumberFormat("fr-FR").format(validAmount) + " " + (state.settings?.currency || "FCFA");
   };
 
   const lowStockProducts = (state.products || []).filter((p) => p && p.stock <= p.minStock);
@@ -1544,20 +1580,24 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   // Dettes, Crédits & Trésorerie Encaissée
   const creditSales = (state.sales || []).filter(
-    (s) => s && (s.paymentMethod === "credit" || (s.remainingAmount !== undefined && s.remainingAmount > 0))
+    (s) => s && (s.paymentMethod === "credit" || (Number.isFinite(Number(s.remainingAmount)) && Number(s.remainingAmount) > 0))
   );
 
-  const totalCreditSales = creditSales.reduce((sum, s) => sum + (s?.total || 0), 0);
+  const totalCreditSales = creditSales.reduce((sum, s) => sum + (Number.isFinite(Number(s?.total)) ? Number(s.total) : 0), 0);
 
-  const totalRecoveredAmount = creditSales.reduce(
-    (sum, s) => sum + (s?.amountPaid ?? (s?.paymentStatus === "paid" ? s.total : 0)),
-    0
-  );
+  const totalRecoveredAmount = creditSales.reduce((sum, s) => {
+    if (!s) return sum;
+    const total = Number.isFinite(Number(s.total)) ? Number(s.total) : 0;
+    const paid = Number.isFinite(Number(s.amountPaid))
+      ? Number(s.amountPaid)
+      : (s.paymentStatus === "paid" ? total : 0);
+    return sum + paid;
+  }, 0);
 
   const totalCollectedRevenue = Math.max(0, totalRevenue - totalDebtsAmount);
 
-  const recoveryRate = totalCreditSales > 0
-    ? Math.min(100, Math.round((totalRecoveredAmount / totalCreditSales) * 100))
+  const recoveryRate = (totalCreditSales > 0 && Number.isFinite(totalCreditSales) && Number.isFinite(totalRecoveredAmount))
+    ? Math.min(100, Math.max(0, Math.round((totalRecoveredAmount / totalCreditSales) * 100)))
     : 100;
 
   const now = new Date();

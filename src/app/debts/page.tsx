@@ -28,6 +28,29 @@ import {
   ArrowUpRight
 } from "lucide-react";
 
+// Fonctions utilitaires sécurisées anti-NaN
+function getDebtRemaining(debt?: Sale | null): number {
+  if (!debt) return 0;
+  if (debt.paymentStatus === "paid") return 0;
+  if (typeof debt.remainingAmount === "number" && Number.isFinite(debt.remainingAmount)) {
+    return Math.max(0, debt.remainingAmount);
+  }
+  const total = Number.isFinite(Number(debt.total)) ? Number(debt.total) : 0;
+  const paid = (typeof debt.amountPaid === "number" && Number.isFinite(debt.amountPaid)) ? debt.amountPaid : 0;
+  return Math.max(0, total - paid);
+}
+
+function getDebtPaid(debt?: Sale | null): number {
+  if (!debt) return 0;
+  if (typeof debt.amountPaid === "number" && Number.isFinite(debt.amountPaid)) {
+    return Math.max(0, debt.amountPaid);
+  }
+  if (debt.paymentStatus === "paid") {
+    return Number.isFinite(Number(debt.total)) ? Number(debt.total) : 0;
+  }
+  return 0;
+}
+
 export default function DebtsPage() {
   const { 
     state, 
@@ -93,8 +116,8 @@ export default function DebtsPage() {
 
     (debtSales || []).forEach((s) => {
       if (!s) return;
-      const remaining = s.remainingAmount ?? (s.paymentStatus === "paid" ? 0 : s.total);
-      const paid = s.amountPaid ?? (s.paymentStatus === "paid" ? s.total : 0);
+      const remaining = getDebtRemaining(s);
+      const paid = getDebtPaid(s);
       
       totalDue += remaining;
       totalRecovered += paid;
@@ -140,11 +163,12 @@ export default function DebtsPage() {
   const filteredDebts = useMemo(() => {
     const now = new Date();
     return debtSales.filter((s) => {
-      const remaining = s.remainingAmount ?? (s.paymentStatus === "paid" ? 0 : s.total);
+      const remaining = getDebtRemaining(s);
+      const paid = getDebtPaid(s);
       const isOverdue = remaining > 0 && s.dueDate && new Date(s.dueDate) < now;
       
-      if (statusFilter === "unpaid" && (remaining <= 0 || (s.amountPaid && s.amountPaid > 0))) return false;
-      if (statusFilter === "partial" && (remaining <= 0 || !s.amountPaid || s.amountPaid === 0)) return false;
+      if (statusFilter === "unpaid" && (remaining <= 0 || paid > 0)) return false;
+      if (statusFilter === "partial" && (remaining <= 0 || paid === 0)) return false;
       if (statusFilter === "paid" && remaining > 0) return false;
       if (statusFilter === "overdue" && !isOverdue) return false;
 
@@ -164,8 +188,8 @@ export default function DebtsPage() {
   // Open Debt Detail / Payment modal
   const handleOpenDebtDetail = (debt: Sale) => {
     setSelectedDebt(debt);
-    const rem = debt.remainingAmount ?? debt.total;
-    setPaymentAmount(rem.toString());
+    const rem = getDebtRemaining(debt);
+    setPaymentAmount(rem > 0 ? rem.toString() : "0");
     setPaymentMethod("cash");
     setPaymentNote("");
     setPaymentSuccess(null);
@@ -177,13 +201,13 @@ export default function DebtsPage() {
     if (!selectedDebt) return;
 
     const amt = parseFloat(paymentAmount);
-    const currentRem = selectedDebt.remainingAmount ?? selectedDebt.total;
+    const currentRem = getDebtRemaining(selectedDebt);
     if (isNaN(amt) || amt <= 0) return;
 
     setIsSubmittingPayment(true);
     try {
       const effectiveAmount = Math.min(amt, currentRem);
-      const previousPaid = selectedDebt.amountPaid || 0;
+      const previousPaid = getDebtPaid(selectedDebt);
       const newRemaining = Math.max(0, currentRem - effectiveAmount);
 
       const paymentRecord = await recordDebtPayment(
@@ -502,8 +526,8 @@ export default function DebtsPage() {
                     </tr>
                   ) : (
                     filteredDebts.map((debt) => {
-                      const remaining = debt.remainingAmount ?? (debt.paymentStatus === "paid" ? 0 : debt.total);
-                      const paid = debt.amountPaid ?? (debt.paymentStatus === "paid" ? debt.total : 0);
+                      const remaining = getDebtRemaining(debt);
+                      const paid = getDebtPaid(debt);
                       const isFullyPaid = remaining <= 0;
                       const isPartial = paid > 0 && remaining > 0;
                       const isOverdue = remaining > 0 && debt.dueDate && new Date(debt.dueDate) < new Date();
@@ -906,7 +930,7 @@ export default function DebtsPage() {
                   <div className="pt-2 border-t border-border/50 flex justify-between items-center">
                     <span className="font-black text-rose-500 text-sm">RESTE DÛ À RECOUVRER :</span>
                     <span className="font-black text-rose-500 text-lg">
-                      {(selectedDebt.remainingAmount ?? selectedDebt.total).toLocaleString("fr-FR")} FCFA
+                      {getDebtRemaining(selectedDebt).toLocaleString("fr-FR")} FCFA
                     </span>
                   </div>
 
@@ -925,7 +949,7 @@ export default function DebtsPage() {
                 </div>
 
                 {/* SECTION 1: ENCAISSER UN VERSEMENT (Si reste > 0) */}
-                {(selectedDebt.remainingAmount ?? selectedDebt.total) > 0 ? (
+                {getDebtRemaining(selectedDebt) > 0 ? (
                   <form onSubmit={handleConfirmPayment} className="space-y-4 pt-2">
                     <div className="flex items-center gap-2">
                       <div className="w-2 h-2 rounded-full bg-primary" />
@@ -941,7 +965,7 @@ export default function DebtsPage() {
                       <input
                         type="number"
                         min="1"
-                        max={selectedDebt.remainingAmount ?? selectedDebt.total}
+                        max={getDebtRemaining(selectedDebt)}
                         value={paymentAmount}
                         onChange={(e) => setPaymentAmount(e.target.value)}
                         required
@@ -952,21 +976,21 @@ export default function DebtsPage() {
                       <div className="flex gap-2 mt-2">
                         <button
                           type="button"
-                          onClick={() => setPaymentAmount(Math.round((selectedDebt.remainingAmount ?? selectedDebt.total) * 0.25).toString())}
+                          onClick={() => setPaymentAmount(Math.round(getDebtRemaining(selectedDebt) * 0.25).toString())}
                           className="px-2.5 py-1 rounded-lg bg-secondary text-xs hover:bg-secondary/80 font-medium"
                         >
                           25%
                         </button>
                         <button
                           type="button"
-                          onClick={() => setPaymentAmount(Math.round((selectedDebt.remainingAmount ?? selectedDebt.total) * 0.5).toString())}
+                          onClick={() => setPaymentAmount(Math.round(getDebtRemaining(selectedDebt) * 0.5).toString())}
                           className="px-2.5 py-1 rounded-lg bg-secondary text-xs hover:bg-secondary/80 font-medium"
                         >
                           50%
                         </button>
                         <button
                           type="button"
-                          onClick={() => setPaymentAmount((selectedDebt.remainingAmount ?? selectedDebt.total).toString())}
+                          onClick={() => setPaymentAmount(getDebtRemaining(selectedDebt).toString())}
                           className="px-2.5 py-1 rounded-lg bg-primary/10 text-primary text-xs hover:bg-primary/20 font-bold ml-auto"
                         >
                           Solder tout (100%)
@@ -1095,7 +1119,7 @@ export default function DebtsPage() {
                                 debt: selectedDebt,
                                 payment: p,
                                 previousPaid: Math.max(0, (selectedDebt.amountPaid || 0) - p.amount),
-                                newRemaining: selectedDebt.remainingAmount ?? 0
+                                newRemaining: getDebtRemaining(selectedDebt)
                               });
                             }}
                             className="px-2.5 py-1 rounded-lg bg-primary/10 text-primary text-xs font-bold hover:bg-primary/20 flex items-center gap-1"
