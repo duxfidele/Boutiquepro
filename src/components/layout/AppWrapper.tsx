@@ -20,6 +20,7 @@ export default function AppWrapper({ children }: { children: React.ReactNode }) 
   const router = useRouter();
 
   React.useEffect(() => {
+    if (pathname === '/reset-password') return;
     if (role === 'cashier') {
       const allowedPaths = ['/', '/pos', '/debts', '/products', '/customers', '/support', '/profile'];
       if (!allowedPaths.includes(pathname)) {
@@ -27,6 +28,11 @@ export default function AppWrapper({ children }: { children: React.ReactNode }) 
       }
     }
   }, [role, pathname, router]);
+
+  // Si on est sur la page de réinitialisation de mot de passe, ne pas bloquer
+  if (pathname === '/reset-password') {
+    return <ErrorBoundary>{children}</ErrorBoundary>;
+  }
 
   if (loading) {
     return (
