@@ -1,6 +1,7 @@
 "use client";
 
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useRef } from "react";
+import { exportElementToPdf } from "@/lib/pdf";
 import Link from "next/link";
 import { useStore, Sale, DebtPayment } from "@/context/StoreContext";
 import { 
@@ -25,7 +26,9 @@ import {
   History, 
   Receipt, 
   ShoppingCart,
-  ArrowUpRight
+  ArrowUpRight,
+  Download,
+  Loader2
 } from "lucide-react";
 
 // Fonctions utilitaires sécurisées anti-NaN
@@ -83,6 +86,8 @@ export default function DebtsPage() {
   const [paymentMethod, setPaymentMethod] = useState<"cash" | "mobile_money" | "card">("cash");
   const [paymentNote, setPaymentNote] = useState<string>("");
   const [isSubmittingPayment, setIsSubmittingPayment] = useState(false);
+  const receiptRef = useRef<HTMLDivElement>(null);
+  const [isDownloadingReceipt, setIsDownloadingReceipt] = useState(false);
   const [paymentSuccess, setPaymentSuccess] = useState<string | null>(null);
 
   // All sales that are credit or have debt tracking (issues du panier POS)
@@ -934,6 +939,37 @@ export default function DebtsPage() {
                     </span>
                   </div>
 
+                  {/* Bouton pour afficher et télécharger le reçu de cette vente à crédit */}
+                  <div className="pt-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const paidSoFar = getDebtPaid(selectedDebt);
+                        const initialPayment = (selectedDebt.payments && selectedDebt.payments.length > 0)
+                          ? selectedDebt.payments[selectedDebt.payments.length - 1]
+                          : {
+                              id: `rec-${selectedDebt.id}`,
+                              saleId: selectedDebt.id,
+                              amount: paidSoFar,
+                              paymentMethod: "cash" as const,
+                              paidAt: selectedDebt.createdAt,
+                              note: "Achat à crédit initial",
+                              cashierName: "Caissier"
+                            };
+                        setSelectedReceipt({
+                          debt: selectedDebt,
+                          payment: initialPayment,
+                          previousPaid: 0,
+                          newRemaining: getDebtRemaining(selectedDebt)
+                        });
+                      }}
+                      className="w-full py-2 px-3 rounded-lg bg-primary/10 hover:bg-primary/20 text-primary text-xs font-bold flex items-center justify-center gap-1.5 transition-colors border border-primary/20"
+                    >
+                      <Receipt className="w-3.5 h-3.5" />
+                      Voir & Télécharger le reçu / contrat de crédit (Ticket 80mm)
+                    </button>
+                  </div>
+
                   {/* Progress bar */}
                   <div className="w-full bg-secondary h-2 rounded-full overflow-hidden mt-1">
                     <div 
@@ -1156,7 +1192,7 @@ export default function DebtsPage() {
             </div>
 
             {/* Printable Receipt Paper */}
-            <div className="receipt-printable my-4 p-4 rounded-xl bg-white text-black font-mono text-xs shadow-inner border border-gray-200">
+            <div ref={receiptRef} className="receipt-printable my-4 p-4 rounded-xl bg-white text-black font-mono text-xs shadow-inner border border-gray-200">
               <div className="text-center pb-3 border-b border-dashed border-gray-400 space-y-0.5">
                 <h2 className="text-sm font-black uppercase tracking-wider">{activeStore?.name || "BOUTIQUE PRO"}</h2>
                 <p className="text-[10px] text-gray-600">QUITTANCE DE RECOUVREMENT</p>
@@ -1219,8 +1255,27 @@ export default function DebtsPage() {
               </div>
             </div>
 
-            {/* Actions: Print and WhatsApp */}
+            {/* Actions: Download, Print and WhatsApp */}
             <div className="space-y-2 pt-1">
+              <button
+                type="button"
+                disabled={isDownloadingReceipt}
+                onClick={handleDownloadReceipt}
+                className="w-full py-2.5 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-800 font-bold text-xs transition-all flex items-center justify-center gap-2 shadow-sm disabled:opacity-50"
+              >
+                {isDownloadingReceipt ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin text-gray-700" />
+                    <span>Génération du PDF...</span>
+                  </>
+                ) : (
+                  <>
+                    <Download className="w-4 h-4" />
+                    Télécharger la quittance PDF
+                  </>
+                )}
+              </button>
+
               <button
                 type="button"
                 onClick={handlePrintReceipt}
