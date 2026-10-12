@@ -298,6 +298,23 @@ export default function DebtsPage() {
     return `https://wa.me/${cleanPhone}?text=${msg}`;
   };
 
+  const handleDownloadReceipt = async () => {
+    if (!receiptRef.current || !selectedReceipt || isDownloadingReceipt) return;
+    setIsDownloadingReceipt(true);
+    try {
+      await exportElementToPdf(receiptRef.current, {
+        filename: `quittance_${selectedReceipt.payment.id}_${(selectedReceipt.debt.customerName || "client").replace(/\s+/g, "_")}.pdf`,
+        widthPx: 320,
+        scale: 2,
+      });
+    } catch (err) {
+      console.error("Erreur téléchargement reçu dette:", err);
+      alert("Erreur lors de la génération du PDF. Vous pouvez utiliser le bouton Imprimer.");
+    } finally {
+      setIsDownloadingReceipt(false);
+    }
+  };
+
   const handlePrintReceipt = () => {
     setTimeout(() => {
       window.print();
