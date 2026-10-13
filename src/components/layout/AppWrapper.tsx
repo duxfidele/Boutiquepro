@@ -29,36 +29,68 @@ export default function AppWrapper({ children }: { children: React.ReactNode }) 
     }
   }, [role, pathname, router]);
 
-  // Si on est sur la page de réinitialisation de mot de passe, ne pas bloquer
+  // 1. Route publique : Réinitialisation de mot de passe (sans contrôle d'accès)
   if (pathname === '/reset-password') {
     return <ErrorBoundary>{children}</ErrorBoundary>;
   }
 
+  // 2. Route publique : Page d'accueil ('/')
+  // Affichage immédiat sans écran d'attente ni vérification bloquante
+  if (pathname === '/') {
+    // Si l'utilisateur est déjà connecté (ou dès qu'il se connecte), afficher le tableau de bord
+    if (user) {
+      return (
+        <ErrorBoundary>
+          <StoreProvider>
+            <div className="flex min-h-screen">
+              <Sidebar isOpen={isMobileMenuOpen} onClose={() => setIsMobileMenuOpen(false)} />
+              <div className="flex-1 flex flex-col min-w-0 lg:ml-[260px] ml-0 transition-all duration-300">
+                <Header onMenuClick={() => setIsMobileMenuOpen(true)} />
+                <main className="flex-1 p-6">
+                  {children}
+                </main>
+              </div>
+            </div>
+          </StoreProvider>
+        </ErrorBoundary>
+      );
+    }
+
+    // Si l'utilisateur clique sur "Se connecter" ou "Essai gratuit"
+    if (showAuth) {
+      return <Login initialIsSignUp={isSignUpMode} onBack={() => setShowAuth(false)} />;
+    }
+
+    // Affichage instantané de la LandingPage publique
+    return (
+      <ErrorBoundary>
+        <LandingPage 
+          onLoginClick={(signup) => {
+            setIsSignUpMode(signup);
+            setShowAuth(true);
+          }} 
+        />
+      </ErrorBoundary>
+    );
+  }
+
+  // 3. Routes privées (/pos, /products, /debts, /analytics, /orders, /settings, /team, etc.)
+  // Le contrôle d'accès et le chargement s'exécutent UNIQUEMENT sur ces routes
   if (loading) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center bg-background gap-4">
         <Loader2 className="h-10 w-10 text-primary animate-spin" />
-        <p className="text-sm text-muted-foreground font-medium animate-pulse">Vérification de l&apos;accès...</p>
+        <p className="text-sm text-muted-foreground font-medium animate-pulse">Accès sécurisé en cours...</p>
       </div>
     );
   }
 
+  // Si non connecté sur une route privée : afficher l'écran de connexion sécurisé
   if (!user) {
-    if (!showAuth) {
-      return (
-        <ErrorBoundary>
-          <LandingPage 
-            onLoginClick={(signup) => {
-              setIsSignUpMode(signup);
-              setShowAuth(true);
-            }} 
-          />
-        </ErrorBoundary>
-      );
-    }
-    return <Login initialIsSignUp={isSignUpMode} onBack={() => setShowAuth(false)} />;
+    return <Login initialIsSignUp={false} onBack={() => router.replace('/')} />;
   }
 
+  // Utilisateur connecté sur une route privée autorisée
   return (
     <ErrorBoundary>
       <StoreProvider>

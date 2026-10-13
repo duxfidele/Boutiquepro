@@ -89,6 +89,34 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   }, [activeStore]);
 
   useEffect(() => {
+    // Vérification instantanée du cache local pour éviter tout délai aux visiteurs
+    const checkCachedSession = () => {
+      try {
+        if (typeof window === 'undefined') return false;
+        for (let i = 0; i < localStorage.length; i++) {
+          const key = localStorage.key(i);
+          if (key && key.startsWith('sb-') && key.endsWith('-auth-token')) {
+            const raw = localStorage.getItem(key);
+            if (raw) {
+              const parsed = JSON.parse(raw);
+              if (parsed?.user) {
+                setUser(parsed.user);
+                return true;
+              }
+            }
+          }
+        }
+      } catch (e) {}
+      return false;
+    };
+
+    const hasCached = checkCachedSession();
+    if (!hasCached) {
+      // Aucun token en cache : visiteur public, désactiver loading immédiatement
+      setLoading(false);
+    }
+
+    // Vérification réseau auprès de Supabase en arrière-plan
     supabase.auth.getSession().then(({ data: { session } }) => {
       setUser(session?.user ?? null);
       if (session?.user) {
