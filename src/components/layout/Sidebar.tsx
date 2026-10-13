@@ -1,5 +1,4 @@
 "use client";
-import SubscriptionModal from "@/components/subscription/SubscriptionModal";
 
 import React, { useState, useEffect } from "react";
 import Link from "next/link";
@@ -48,7 +47,6 @@ export default function Sidebar({ isOpen, onClose }: { isOpen?: boolean, onClose
   const { lowStockProducts, state, unpaidDebts } = useStore();
   const { user, role, signOut, stores, activeStore, setActiveStore } = useAuth();
   const [cashierName, setCashierName] = useState<string | null>(null);
-  const [showSubModal, setShowSubModal] = useState(false);
 
   useEffect(() => {
     const fetchCashier = async () => {
@@ -227,23 +225,7 @@ export default function Sidebar({ isOpen, onClose }: { isOpen?: boolean, onClose
         </div>
       )}
 
-      {/* Bouton Abonnement pour l'admin */}
-      {!collapsed && role === 'admin' && (
-        <div className="px-3 pb-2">
-          <button
-            onClick={() => setShowSubModal(true)}
-            className="flex w-full items-center justify-between gap-2 rounded-xl py-2 px-3 bg-gradient-to-r from-primary/15 via-primary/5 to-transparent border border-primary/25 text-primary hover:bg-primary/20 transition-all text-xs font-bold shadow-xs"
-          >
-            <span className="flex items-center gap-2">
-              <Sparkles className="w-4 h-4 text-primary shrink-0" />
-              <span>Abonnement SaaS</span>
-            </span>
-            <span className="px-1.5 py-0.5 rounded-full bg-primary text-white text-[10px] font-black">
-              Moneriz
-            </span>
-          </button>
-        </div>
-      )}
+
 
       {/* Bottom actions */}
       <div className="flex flex-col border-t border-border/50 p-3 gap-2">
@@ -279,10 +261,7 @@ export default function Sidebar({ isOpen, onClose }: { isOpen?: boolean, onClose
         </button>
       </div>
     
-      <SubscriptionModal
-        isOpen={showSubModal}
-        onClose={() => setShowSubModal(false)}
-      />
+
     </aside>
     </>
   );
