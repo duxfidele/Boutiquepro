@@ -188,7 +188,7 @@ export default function Dashboard() {
           <div className="h-16 w-16 bg-primary/10 text-primary rounded-2xl flex items-center justify-center mx-auto mb-6">
             <ShoppingBag className="h-8 w-8" />
           </div>
-          <h2 className="text-2xl font-bold mb-2">Bienvenue sur BoutiquePro</h2>
+          <h2 className="text-2xl font-bold mb-2">Bienvenue sur MaBoutiquePro</h2>
           <p className="text-muted-foreground text-sm">
             Veuillez sélectionner ou créer une boutique pour afficher le tableau de bord.
           </p>

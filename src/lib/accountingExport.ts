@@ -88,7 +88,7 @@ export function generateExcel(
   <body>
     <table>
       <tr><td colspan="${headers.length}" class="title-block">${sheetTitle}</td></tr>
-      <tr><td colspan="${headers.length}" class="meta-block">Généré le ${new Date().toLocaleDateString("fr-FR")} à ${new Date().toLocaleTimeString("fr-FR")} • BoutiquePro ERP</td></tr>
+      <tr><td colspan="${headers.length}" class="meta-block">Généré le ${new Date().toLocaleDateString("fr-FR")} à ${new Date().toLocaleTimeString("fr-FR")} • MaBoutiquePro</td></tr>
       <tr></tr>
       <thead>
         <tr>

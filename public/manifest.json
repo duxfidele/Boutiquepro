@@ -1,7 +1,7 @@
 {
-  "name": "BoutiquePro SaaS",
-  "short_name": "BoutiquePro",
-  "description": "Gestion commerciale moderne, ultra-fluide et visuellement époustouflante.",
+  "name": "MaBoutiquePro",
+  "short_name": "MaBoutiquePro",
+  "description": "Application moderne de gestion de boutique, stocks et caisse enregistreuse tactile.",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#f5f5fc",

@@ -137,9 +137,9 @@ export default function SupportPage() {
           {/* Espace Info SaaS */}
           <div className="bg-card border border-border/40 rounded-2xl p-5 text-center">
              <div className="mx-auto w-10 h-10 bg-secondary rounded-full flex items-center justify-center mb-3">
-               <span className="font-black text-lg text-primary">BP</span>
+               <span className="font-black text-lg text-primary">MBP</span>
              </div>
-             <p className="text-sm font-bold">BoutiquePro SaaS</p>
+             <p className="text-sm font-bold">MaBoutiquePro</p>
              <p className="text-xs text-muted-foreground mt-1">Version 1.0.0</p>
              <a href="#" className="inline-flex items-center gap-1 text-xs text-primary hover:underline mt-3 font-medium">
                 Voir les notes de mise à jour <ExternalLink className="h-3 w-3" />

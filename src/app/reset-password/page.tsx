@@ -112,7 +112,7 @@ function ResetPasswordForm() {
           </div>
           <h1 className="text-2xl font-bold text-foreground">Nouveau mot de passe</h1>
           <p className="text-sm text-muted-foreground mt-1 text-center">
-            Choisissez un nouveau mot de passe sécurisé pour votre compte BoutiquePro
+            Choisissez un nouveau mot de passe sécurisé pour votre compte MaBoutiquePro
           </p>
         </div>
 

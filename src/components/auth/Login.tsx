@@ -108,7 +108,7 @@ export default function Login({ initialIsSignUp = false, onBack }: { initialIsSi
             {isForgotPassword ? <KeyRound className="h-8 w-8" /> : <Store className="h-8 w-8" />}
           </div>
           <h1 className="text-2xl font-bold text-foreground">
-            {isForgotPassword ? "Mot de passe oublié" : "BoutiquePro"}
+            {isForgotPassword ? "Mot de passe oublié" : "MaBoutiquePro"}
           </h1>
           <p className="text-sm text-muted-foreground mt-1 text-center">
             {isForgotPassword 

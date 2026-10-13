@@ -1041,7 +1041,7 @@ export default function POSPage() {
                 <div className="text-center pt-2 space-y-1">
                   <p className="text-[11px] font-bold text-black">Merci de votre visite</p>
                   <p className="text-[9px] text-gray-500">À bientôt !</p>
-                  <p className="text-[8px] text-gray-400 pt-1 border-t border-gray-100">BoutiquePro POS • Logiciel Certifié</p>
+                  <p className="text-[8px] text-gray-400 pt-1 border-t border-gray-100">MaBoutiquePro • Caisse Enregistreuse</p>
                 </div>
               </div>
             </div>
@@ -1103,7 +1103,7 @@ export default function POSPage() {
                       </div>
                     )}
                     <div>
-                      <h2 className="text-2xl font-black text-gray-900 tracking-tight">{state.settings.name || "BOUTIQUEPRO"}</h2>
+                      <h2 className="text-2xl font-black text-gray-900 tracking-tight">{state.settings.name || "MABOUTIQUEPRO"}</h2>
                       <p className="text-xs text-gray-600 mt-1 font-medium">
                         {state.settings.city}{state.settings.country ? `, ${state.settings.country}` : ""}
                       </p>
@@ -1189,7 +1189,7 @@ export default function POSPage() {
                   <div className="border-2 border-dashed border-gray-300 rounded-xl p-5 text-center text-xs text-gray-600 h-44 flex flex-col justify-between bg-gray-50/40">
                     <p className="font-extrabold text-gray-800 uppercase tracking-wide">Cachet & Signature de la boutique</p>
                     <div className="py-2 text-[11px] text-gray-400 italic">Mention : Pour acquit et conformité</div>
-                    <p className="text-[10px] text-gray-500 font-medium border-t border-gray-200 pt-2">Vente certifiée • BoutiquePro SaaS</p>
+                    <p className="text-[10px] text-gray-500 font-medium border-t border-gray-200 pt-2">Vente certifiée • MaBoutiquePro</p>
                   </div>
 
                   {/* Totaux financiers avec TVA 0 F et Total TTC ultra visibles */}
@@ -1268,7 +1268,7 @@ export default function POSPage() {
                 {/* Bas de page légal */}
                 <div className="border-t border-gray-200 pt-4 text-center text-xs text-gray-500 space-y-1">
                   <p className="font-semibold text-gray-700">Merci de votre confiance ! Les marchandises vendues ne sont ni reprises ni échangées.</p>
-                  <p className="text-[10px] text-gray-400">Document généré par BoutiquePro — SaaS de Gestion Commerciale</p>
+                  <p className="text-[10px] text-gray-400">Document certifié par MaBoutiquePro — maboutiquepro.app</p>
                 </div>
               </div>
             </div>

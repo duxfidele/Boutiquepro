@@ -244,7 +244,7 @@ const initialState: StoreState = {
   inventorySessions: [],
   cashSessions: [],
   activeCashSession: null,
-  settings: { name: "BoutiquePro", currency: "FCFA", taxRate: 0, city: "Lomé", country: "Togo", email: "contact@boutiquepro.com", phone: "+228 98 37 61 01" },
+  settings: { name: "MaBoutiquePro", currency: "FCFA", taxRate: 0, city: "Lomé", country: "Togo", email: "contact@boutiquepro.com", phone: "+228 98 37 61 01" },
 };
 
 
@@ -1107,12 +1107,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           cart: [],
           categories: demoCategories,
           products: [],
-          settings: { name: "BoutiquePro", currency: "FCFA", taxRate: 0, city: "Dakar", country: "Sénégal", email: "contact@boutiquepro.com", phone: "+228 98 37 61 01" }
+          settings: { name: "MaBoutiquePro", currency: "FCFA", taxRate: 0, city: "Dakar", country: "Sénégal", email: "contact@boutiquepro.com", phone: "+228 98 37 61 01" }
         };
 
         if (settings) {
           payload.settings = {
-            name: settings.name || "BoutiquePro",
+            name: settings.name || "MaBoutiquePro",
             currency: settings.currency || "FCFA",
             taxRate: Number(settings.tax_rate) || 0,
             logo: settings.logo,

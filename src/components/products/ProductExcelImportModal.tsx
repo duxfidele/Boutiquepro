@@ -138,7 +138,7 @@ export default function ProductExcelImportModal({ isOpen, onClose }: ProductExce
     ];
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Modèle Produits");
-    XLSX.writeFile(wb, "modele_import_produits_boutiquepro.xlsx");
+    XLSX.writeFile(wb, "modele_import_produits_maboutiquepro.xlsx");
   };
 
   // Find column flexibly
@@ -415,7 +415,7 @@ export default function ProductExcelImportModal({ isOpen, onClose }: ProductExce
               <div>
                 <h3 className="text-xl font-bold text-foreground">Importation réussie avec succès !</h3>
                 <p className="text-sm text-muted-foreground mt-1 max-w-md mx-auto">
-                  Votre catalogue a été mis à jour instantanément dans BoutiquePro.
+                  Votre catalogue a été mis à jour instantanément dans MaBoutiquePro.
                 </p>
               </div>
 

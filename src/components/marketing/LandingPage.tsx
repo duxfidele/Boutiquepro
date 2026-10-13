@@ -9,7 +9,7 @@ export default function LandingPage({ onLoginClick }: LandingPageProps) {
   const [isAnnual, setIsAnnual] = useState(false);
   return (
     <div className="bg-surface font-sans text-on-surface antialiased">
-      <header className="fixed top-0 left-0 right-0 z-50 bg-surface-container-lowest/90 backdrop-blur-md border-b border-surface-container"><div className="h-20 max-w-7xl mx-auto px-margin-mobile md:px-margin flex items-center justify-between"><div className="flex items-center gap-space-sm"><img alt="BoutiquePro Logo" className="h-8 w-auto object-contain" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCkwJcy-N76VP1yekSGQpP8jSEU8FTJG_iuVLi4LY-f4uAiDpV6HF-gutXQ_EWly0hpQQAL89wwgpO7O0SvS2u4PWN9UnlE1KOt3nd2tOXRYHF17O67h7NZiSdkXsSh3xTvQoC5NJHW8qG8mOX8lQupDHD21gmJYBgKrVe0NLJVxa_5SQFzn-KRHg4qZOKBrKmhQHHQpciyfQ3Meenut-jhBSZlTgqKidW77JEaNRI"/><span className="font-headline-sm text-lg sm:text-headline-sm text-on-surface tracking-tight font-bold">BoutiquePro</span></div><nav className="hidden lg:flex items-center gap-space-lg"><a className="font-title-md text-title-md text-on-surface-variant hover:text-primary transition-colors font-medium" href="#features">Fonctionnalités</a><a className="font-title-md text-title-md text-on-surface-variant hover:text-primary transition-colors font-medium" href="#how-it-works">Comment ça marche</a><a className="font-title-md text-title-md text-on-surface-variant hover:text-primary transition-colors font-medium" href="#tarifs">Tarifs</a><a className="font-title-md text-title-md text-on-surface-variant hover:text-primary transition-colors font-medium" href="#faq-accordion">FAQ</a></nav><div className="flex items-center gap-2 sm:gap-space-md">
+      <header className="fixed top-0 left-0 right-0 z-50 bg-surface-container-lowest/90 backdrop-blur-md border-b border-surface-container"><div className="h-20 max-w-7xl mx-auto px-margin-mobile md:px-margin flex items-center justify-between"><div className="flex items-center gap-space-sm"><img alt="MaBoutiquePro Logo" className="h-8 w-auto object-contain" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCkwJcy-N76VP1yekSGQpP8jSEU8FTJG_iuVLi4LY-f4uAiDpV6HF-gutXQ_EWly0hpQQAL89wwgpO7O0SvS2u4PWN9UnlE1KOt3nd2tOXRYHF17O67h7NZiSdkXsSh3xTvQoC5NJHW8qG8mOX8lQupDHD21gmJYBgKrVe0NLJVxa_5SQFzn-KRHg4qZOKBrKmhQHHQpciyfQ3Meenut-jhBSZlTgqKidW77JEaNRI"/><span className="font-headline-sm text-lg sm:text-headline-sm text-on-surface tracking-tight font-bold">MaBoutiquePro</span></div><nav className="hidden lg:flex items-center gap-space-lg"><a className="font-title-md text-title-md text-on-surface-variant hover:text-primary transition-colors font-medium" href="#features">Fonctionnalités</a><a className="font-title-md text-title-md text-on-surface-variant hover:text-primary transition-colors font-medium" href="#how-it-works">Comment ça marche</a><a className="font-title-md text-title-md text-on-surface-variant hover:text-primary transition-colors font-medium" href="#tarifs">Tarifs</a><a className="font-title-md text-title-md text-on-surface-variant hover:text-primary transition-colors font-medium" href="#faq-accordion">FAQ</a></nav><div className="flex items-center gap-2 sm:gap-space-md">
 <button className="lg:hidden text-on-surface p-2 flex items-center justify-center" onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}><span className="material-symbols-outlined">{isMobileMenuOpen ? 'close' : 'menu'}</span></button>
 <button onClick={() => onLoginClick(false)} className="font-title-md text-title-md text-on-surface-variant hover:text-on-surface transition-colors hidden sm:inline-flex font-semibold mr-4">Se connecter</button><button onClick={() => onLoginClick(true)} className="inline-flex items-center justify-center px-4 sm:px-6 py-2 rounded-xl bg-primary text-on-primary font-title-md text-sm sm:text-base hover:bg-primary-container active:scale-[0.98] transition-all shadow-sm font-semibold whitespace-nowrap"><span className="hidden sm:inline">Essai gratuit 14 jours</span><span className="sm:hidden">Démarrer</span></button></div></div>
 {isMobileMenuOpen && (
@@ -55,7 +55,7 @@ export default function LandingPage({ onLoginClick }: LandingPageProps) {
 </button>
 <a className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-7 py-4 rounded-xl bg-surface-container-lowest text-on-surface font-title-md text-base border border-outline-variant/40 hover:bg-surface-container-low active:scale-[0.98] transition-all shadow-sm font-semibold" href="#mockup">
 <span className="material-symbols-outlined text-primary text-xl" style={{ fontVariationSettings: "'FILL' 1" }}>play_circle</span>
-<span>Découvrir BoutiquePro</span>
+<span>Découvrir MaBoutiquePro</span>
 </a>
 </div>
 <p className="text-sm text-outline flex items-center justify-center gap-2 mb-16 flex-wrap font-medium">
@@ -77,7 +77,7 @@ export default function LandingPage({ onLoginClick }: LandingPageProps) {
 <span className="w-3 h-3 rounded-full bg-[#27C93F] inline-block shadow-inner"></span>
 <span className="ml-4 text-xs text-outline hidden sm:inline-flex items-center gap-1.5 font-medium">
 <span className="material-symbols-outlined text-sm">lock</span>
-              app.boutiquepro.africa
+              maboutiquepro.app
             </span>
 </div>
 <div className="flex items-center gap-3">
@@ -312,7 +312,7 @@ export default function LandingPage({ onLoginClick }: LandingPageProps) {
 </div>
 <div className="mt-12 inline-flex items-center gap-3 px-6 py-3 rounded-xl bg-primary-container text-on-primary font-bold text-base shadow-sm">
 <span className="material-symbols-outlined">auto_awesome</span>
-<span>BoutiquePro rassemble tout au même endroit avec une simplicité déconcertante.</span>
+<span>MaBoutiquePro rassemble tout au même endroit avec une simplicité déconcertante.</span>
 </div>
 </div>
 </section>
@@ -407,7 +407,7 @@ export default function LandingPage({ onLoginClick }: LandingPageProps) {
 <div className="px-4 py-3 bg-surface-container-lowest border-b border-surface-container flex items-center justify-between">
 <div className="flex items-center gap-2">
 <span className="w-7 h-7 rounded-lg bg-primary text-on-primary flex items-center justify-center font-bold text-xs">BP</span>
-<span className="text-xs font-bold text-on-surface">BoutiquePro Mobile</span>
+<span className="text-xs font-bold text-on-surface">MaBoutiquePro Mobile</span>
 </div>
 <span className="material-symbols-outlined text-outline text-lg">notifications</span>
 </div>
@@ -482,7 +482,7 @@ export default function LandingPage({ onLoginClick }: LandingPageProps) {
 <div className="relative z-10 bg-surface-container-lowest p-8 rounded-2xl border border-outline-variant/30 shadow-sm flex flex-col items-center text-center">
 <div className="w-14 h-14 rounded-full bg-tertiary-container text-on-tertiary flex items-center justify-center font-extrabold text-xl shadow-md mb-6">3</div>
 <h3 className="text-xl font-bold text-on-surface mb-2">Commencez à vendre</h3>
-<p className="text-sm text-on-surface-variant font-medium">Enregistrez vos premiers encaissements au comptoir et laissez BoutiquePro calculer vos bénéfices réels.</p>
+<p className="text-sm text-on-surface-variant font-medium">Enregistrez vos premiers encaissements au comptoir et laissez MaBoutiquePro calculer vos bénéfices réels.</p>
 </div>
 </div>
 </div>
@@ -667,7 +667,7 @@ export default function LandingPage({ onLoginClick }: LandingPageProps) {
     <div className="text-center mb-16">
       <span className="text-xs text-primary font-bold uppercase tracking-wider">Foire aux questions</span>
       <h2 className="text-3xl font-extrabold text-on-surface mt-2 mb-4">Questions fréquentes</h2>
-      <p className="text-base text-on-surface-variant font-medium">Tout ce que vous devez savoir sur BoutiquePro.</p>
+      <p className="text-base text-on-surface-variant font-medium">Tout ce que vous devez savoir sur MaBoutiquePro.</p>
     </div>
     <div className="space-y-4">
       <details className="group bg-surface-container-lowest rounded-xl border border-outline-variant/30 shadow-sm overflow-hidden open:ring-2 open:ring-primary/20">
@@ -744,7 +744,7 @@ export default function LandingPage({ onLoginClick }: LandingPageProps) {
       </p>
 </div>
 </section>
-</div></main><footer className="w-full bg-inverse-surface text-inverse-on-surface"><div className="max-w-7xl mx-auto px-4 md:px-8 pt-10 pb-6"><div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-10 pb-10 border-b border-on-surface-variant/20"><div className="lg:col-span-2 flex flex-col gap-4"><div className="flex items-center gap-2"><span className="text-xl font-bold text-inverse-on-surface tracking-tight">BoutiquePro</span></div><p className="text-sm text-inverse-on-surface/80 max-w-sm font-medium">Le système d&apos;exploitation commercial nouvelle génération pensé pour les commerçants modernes d'Afrique. Gestion des stocks, caisse tactile et réconciliations instantanées.</p></div><div className="flex flex-col gap-2"><h4 className="font-bold text-base text-inverse-on-surface">Produit</h4><ul className="flex flex-col gap-1 text-sm text-inverse-on-surface/75 font-medium"><li><a className="hover:text-inverse-primary transition-colors" href="#">Fonctionnalités</a></li><li><a className="hover:text-inverse-primary transition-colors" href="#">Tableau de bord</a></li><li><a className="hover:text-inverse-primary transition-colors" href="#">Gestion des stocks</a></li></ul></div><div className="flex flex-col gap-2"><h4 className="font-bold text-base text-inverse-on-surface">Entreprise</h4><ul className="flex flex-col gap-1 text-sm text-inverse-on-surface/75 font-medium"><li><a className="hover:text-inverse-primary transition-colors" href="#">À propos</a></li><li><a className="hover:text-inverse-primary transition-colors" href="#">Contact</a></li></ul></div><div className="flex flex-col gap-2"><h4 className="font-bold text-base text-inverse-on-surface">Légal</h4><ul className="flex flex-col gap-1 text-sm text-inverse-on-surface/75 font-medium"><li><a className="hover:text-inverse-primary transition-colors" href="#">Conditions d&apos;utilisation</a></li><li><a className="hover:text-inverse-primary transition-colors" href="#">Politique de confidentialité</a></li></ul></div></div><div className="pt-6 flex flex-col md:flex-row items-center justify-between gap-4"><p className="text-xs text-inverse-on-surface/60 font-medium">© 2024 BoutiquePro Technologies. Tous droits réservés.</p><div className="flex items-center gap-1 text-tertiary-fixed font-bold text-sm"><span className="material-symbols-outlined text-[18px]">favorite</span><span>Fait avec fierté pour les entrepreneurs africains.</span></div></div></div></footer>
+</div></main><footer className="w-full bg-inverse-surface text-inverse-on-surface"><div className="max-w-7xl mx-auto px-4 md:px-8 pt-10 pb-6"><div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-10 pb-10 border-b border-on-surface-variant/20"><div className="lg:col-span-2 flex flex-col gap-4"><div className="flex items-center gap-2"><span className="text-xl font-bold text-inverse-on-surface tracking-tight">MaBoutiquePro</span></div><p className="text-sm text-inverse-on-surface/80 max-w-sm font-medium">Le système d&apos;exploitation commercial nouvelle génération pensé pour les commerçants modernes d'Afrique. Gestion des stocks, caisse tactile et réconciliations instantanées.</p></div><div className="flex flex-col gap-2"><h4 className="font-bold text-base text-inverse-on-surface">Produit</h4><ul className="flex flex-col gap-1 text-sm text-inverse-on-surface/75 font-medium"><li><a className="hover:text-inverse-primary transition-colors" href="#">Fonctionnalités</a></li><li><a className="hover:text-inverse-primary transition-colors" href="#">Tableau de bord</a></li><li><a className="hover:text-inverse-primary transition-colors" href="#">Gestion des stocks</a></li></ul></div><div className="flex flex-col gap-2"><h4 className="font-bold text-base text-inverse-on-surface">Entreprise</h4><ul className="flex flex-col gap-1 text-sm text-inverse-on-surface/75 font-medium"><li><a className="hover:text-inverse-primary transition-colors" href="#">À propos</a></li><li><a className="hover:text-inverse-primary transition-colors" href="#">Contact</a></li></ul></div><div className="flex flex-col gap-2"><h4 className="font-bold text-base text-inverse-on-surface">Légal</h4><ul className="flex flex-col gap-1 text-sm text-inverse-on-surface/75 font-medium"><li><a className="hover:text-inverse-primary transition-colors" href="#">Conditions d&apos;utilisation</a></li><li><a className="hover:text-inverse-primary transition-colors" href="#">Politique de confidentialité</a></li></ul></div></div><div className="pt-6 flex flex-col md:flex-row items-center justify-between gap-4"><p className="text-xs text-inverse-on-surface/60 font-medium">© 2026 MaBoutiquePro. Tous droits réservés.</p><div className="flex items-center gap-1 text-tertiary-fixed font-bold text-sm"><span className="material-symbols-outlined text-[18px]">favorite</span><span>Fait avec fierté pour les entrepreneurs africains.</span></div></div></div></footer>
     </div>
   );
 }
