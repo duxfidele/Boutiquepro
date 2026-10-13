@@ -132,6 +132,25 @@ Les données sont strictement cloisonnées grâce aux **Row Level Security (RLS)
 
 ---
 
+
+### 7. Intégration de la Passerelle de Paiement Moneriz (Mobile Money & Cartes)
+- **Passerelle de paiement SaaS :** Intégration officielle de **Moneriz** selon les spécifications d'octobre 2026 pour encaisser les abonnements en **FCFA (XOF)**.
+- **Moyens de paiement acceptés :** Mobile Money (T-Money Togo, Moov Money, Wave, Orange Money, MTN) et Cartes bancaires (Visa, Mastercard via Stripe intégré).
+- **Parcours Liveframe (iframe sécurisée) :** Intégration en mode `iframe` responsive via le protocole `postMessage` v1 (`moneriz.ready`, `moneriz.resize`, `moneriz.resume`, `moneriz.payment`).
+- **Signature cryptographique stricte :** Vérification HMAC-SHA256 sur le corps brut (`rawBody`) avec comparaison en temps constant (`crypto.timingSafeEqual`) et fenêtre anti-rejeu de 5 minutes (`src/lib/server/moneriz-signature.ts`).
+- **Boîte de réception persistante (Inbox dédoublonnée) :** Protection contre les doublons sur `event.id` et activation atomique de l'abonnement après réception de `payment.succeeded` (`src/lib/server/moneriz-app.ts`).
+- **Routes API Next.js :**
+  - `POST /api/checkout` : Création serveur de la session de paiement avec Idempotency-Key.
+  - `POST /api/webhooks/moneriz` : Endpoint webhook public pour recevoir et traiter les notifications signées.
+  - `POST /api/subscription/order` : Initialisation d'une commande d'abonnement pour une boutique.
+  - `GET /api/subscription/status` : Suivi du statut de la commande en temps réel.
+- **Variables d'environnement requises (Serveur uniquement) :**
+  - `MONERIZ_SECRET_KEY` : Clé secrète d'API Moneriz (`izp_live_sk_...` ou `izp_test_sk_...`).
+  - `MONERIZ_WEBHOOK_SECRET` : Secret webhook de signature Moneriz.
+- **Script SQL de migration :** `saas_moneriz_integration.sql` pour configurer les tables de traçabilité et les colonnes d'abonnement dans Supabase.
+
+---
+
 ## 💼 Modèles d'Exploitation Commerciale
 
 1. **SaaS B2B par Abonnement sur `maboutiquepro.app` (Principal) :**
@@ -159,3 +178,11 @@ Les données sont strictement cloisonnées grâce aux **Row Level Security (RLS)
 | `src/context/StoreContext.tsx` | État global réactif, calculs financiers anti-NaN, synchronisation Supabase et actions par lot |
 | `src/lib/pdf.ts` | Moteur d'export PDF haute fidélité pour factures et quittances sans page blanche |
 | `src/lib/accountingExport.ts` | Générateur universel des exports comptables Excel et CSV |
+| `src/lib/server/moneriz-signature.ts` | Vérificateur HMAC-SHA256 temps constant des signatures webhook Moneriz |
+| `src/lib/server/moneriz-checkout.ts` | Client serveur pour l'API Checkout Sessions de Moneriz (v1) |
+| `src/lib/server/moneriz-app.ts` | Gestion des commandes d'abonnement, idempotence et inbox dédoublonnée |
+| `src/app/api/checkout/route.ts` | Route API POST pour initier une session de paiement Moneriz |
+| `src/app/api/webhooks/moneriz/route.ts` | Route API POST publique pour la réception des webhooks signés |
+| `src/components/subscription/MonerizCheckoutModal.tsx` | Composant React Liveframe (iframe) avec gestion du protocole postMessage v1 |
+| `src/components/subscription/SubscriptionModal.tsx` | Modal de sélection d'abonnement (Pro, Business, Mensuel, Annuel) |
+| `saas_moneriz_integration.sql` | Migration SQL Supabase pour les tentatives et événements Moneriz |

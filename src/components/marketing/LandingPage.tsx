@@ -650,7 +650,7 @@ export default function LandingPage({ onLoginClick }: LandingPageProps) {
 <div className="mt-12 text-center text-xs text-on-surface-variant font-medium flex flex-wrap items-center justify-center gap-6">
   <span className="flex items-center gap-1.5">
     <span className="material-symbols-outlined text-primary text-base">payments</span>
-    Paiement en monnaie locale via Mobile Money (MTN, Moov, Orange, Wave)
+    Paiement sécurisé via Moneriz en FCFA (T-Money, Moov, Wave, Orange Money, Carte Bancaire)
   </span>
   <span className="flex items-center gap-1.5">
     <span className="material-symbols-outlined text-emerald-600 text-base">lock</span>

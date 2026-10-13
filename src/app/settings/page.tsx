@@ -1,8 +1,9 @@
 "use client";
+import SubscriptionModal from "@/components/subscription/SubscriptionModal";
 
 import React, { useState } from "react";
 import { useStore } from "@/context/StoreContext";
-import { Save, Image as ImageIcon, Store, DollarSign, Percent, MapPin, Mail, Phone } from "lucide-react";
+import { Save, Image as ImageIcon, CreditCard, Store, DollarSign, Percent, MapPin, Mail, Phone } from "lucide-react";
 import { useRouter } from "next/navigation";
 
 export default function SettingsPage() {
@@ -16,6 +17,7 @@ export default function SettingsPage() {
   const [email, setEmail] = useState(state.settings.email || "");
   const [phone, setPhone] = useState(state.settings.phone || "");
   const [saved, setSaved] = useState(false);
+  const [showSubModal, setShowSubModal] = useState(false);
   const router = useRouter();
 
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -196,6 +198,46 @@ export default function SettingsPage() {
           </button>
         </div>
       </div>
+
+      {/* Section Abonnement & Facturation SaaS */}
+      <div className="bg-card border border-border/40 rounded-2xl p-6 space-y-4">
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="text-lg font-bold flex items-center gap-2">
+              <CreditCard className="w-5 h-5 text-primary" />
+              Abonnement &amp; Facturation (Moneriz)
+            </h2>
+            <p className="text-xs text-muted-foreground mt-1">
+              Gérez votre formule Pro ou Business. Paiement sécurisé par Mobile Money (T-Money, Moov, Wave, Orange) et Carte Bancaire.
+            </p>
+          </div>
+          <span className="px-3 py-1 rounded-full bg-emerald-500/10 text-emerald-600 text-xs font-bold border border-emerald-500/20">
+            Paiement Sécurisé
+          </span>
+        </div>
+
+        <div className="p-4 rounded-xl bg-secondary/30 border border-border/40 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+          <div>
+            <div className="text-sm font-bold text-foreground">Formules Disponibles</div>
+            <div className="text-xs text-muted-foreground mt-0.5">
+              Pro (5 000 FCFA/mois ou 50 000 FCFA/an) • Business (15 000 FCFA/mois ou 150 000 FCFA/an)
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => setShowSubModal(true)}
+            className="px-5 py-2.5 rounded-xl bg-primary text-primary-foreground text-xs font-bold hover:opacity-90 transition-all shadow-sm flex items-center gap-2 shrink-0"
+          >
+            <span>Souscrire / Renouveler</span>
+          </button>
+        </div>
+      </div>
+
+      <SubscriptionModal
+        isOpen={showSubModal}
+        onClose={() => setShowSubModal(false)}
+      />
+
     </div>
   );
 }
