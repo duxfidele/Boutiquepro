@@ -572,6 +572,16 @@ interface StoreContextType {
   recoveryRate: number;
   overdueDebtsCount: number;
   collectedNetProfit: number;
+  closedCashSessions: CashSession[];
+  totalCashDifference: number;
+  totalCashShortage: number;
+  totalCashSurplus: number;
+  todayCashDifference: number;
+  todayCashShortage: number;
+  cashDiscrepancyRate: number;
+  totalPhysicalCashAndBank: number;
+  discrepantSessionsCount: number;
+  lastClosedCashSession: CashSession | null;
   recordDebtPayment: (
     saleId: string, 
     amount: number, 
@@ -1638,6 +1648,58 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   const collectedNetProfit = totalCollectedRevenue - totalCOGS - totalExpenses;
 
+  // ─── Concordance et Écarts de Caisse (Audit Patron) ──────────────────────────
+  const closedCashSessions = useMemo(() => {
+    return (state.cashSessions || [])
+      .filter((cs) => cs && cs.status === "closed")
+      .sort((a, b) => new Date(b.closedAt || b.openedAt).getTime() - new Date(a.closedAt || a.openedAt).getTime());
+  }, [state.cashSessions]);
+
+  const totalCashDifference = useMemo(() => {
+    return closedCashSessions.reduce((sum, cs) => sum + (Number(cs.difference) || 0), 0);
+  }, [closedCashSessions]);
+
+  const totalCashShortage = useMemo(() => {
+    return closedCashSessions
+      .filter((cs) => (Number(cs.difference) || 0) < 0)
+      .reduce((sum, cs) => sum + Math.abs(Number(cs.difference) || 0), 0);
+  }, [closedCashSessions]);
+
+  const totalCashSurplus = useMemo(() => {
+    return closedCashSessions
+      .filter((cs) => (Number(cs.difference) || 0) > 0)
+      .reduce((sum, cs) => sum + (Number(cs.difference) || 0), 0);
+  }, [closedCashSessions]);
+
+  const discrepantSessionsCount = useMemo(() => {
+    return closedCashSessions.filter((cs) => Math.abs(Number(cs.difference) || 0) > 0).length;
+  }, [closedCashSessions]);
+
+  const todayClosedSessions = useMemo(() => {
+    return closedCashSessions.filter((cs) => isSameCalendarDay(cs.closedAt || cs.openedAt));
+  }, [closedCashSessions]);
+
+  const todayCashDifference = useMemo(() => {
+    return todayClosedSessions.reduce((sum, cs) => sum + (Number(cs.difference) || 0), 0);
+  }, [todayClosedSessions]);
+
+  const todayCashShortage = useMemo(() => {
+    return todayClosedSessions
+      .filter((cs) => (Number(cs.difference) || 0) < 0)
+      .reduce((sum, cs) => sum + Math.abs(Number(cs.difference) || 0), 0);
+  }, [todayClosedSessions]);
+
+  const cashDiscrepancyRate = useMemo(() => {
+    if (closedCashSessions.length === 0) return 100;
+    const cleanSessions = closedCashSessions.filter((cs) => Math.abs(Number(cs.difference) || 0) === 0).length;
+    return Math.round((cleanSessions / closedCashSessions.length) * 100);
+  }, [closedCashSessions]);
+
+  const lastClosedCashSession = closedCashSessions.length > 0 ? closedCashSessions[0] : null;
+
+  // Trésorerie physique réelle (CA encaissé net des dettes et déduit des manquants constatés)
+  const totalPhysicalCashAndBank = Math.max(0, totalCollectedRevenue - totalCashShortage);
+
   const categorySales: Record<string, number> = {};
   (state.sales || []).forEach((sale) => {
     if (!sale) return;
@@ -1802,6 +1864,16 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       recoveryRate,
       overdueDebtsCount,
       collectedNetProfit,
+      closedCashSessions,
+      totalCashDifference,
+      totalCashShortage,
+      totalCashSurplus,
+      todayCashDifference,
+      todayCashShortage,
+      cashDiscrepancyRate,
+      totalPhysicalCashAndBank,
+      discrepantSessionsCount,
+      lastClosedCashSession,
       recordDebtPayment,
       createDirectDebt
     }}>

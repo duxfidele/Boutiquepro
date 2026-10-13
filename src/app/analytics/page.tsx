@@ -29,6 +29,8 @@ import {
   AlertTriangle,
   ArrowRight,
   UserCheck,
+  ShieldAlert,
+  ShieldCheck
 } from "lucide-react";
 import {
   exportSalesJournal,
@@ -69,7 +71,14 @@ export default function AnalyticsPage() {
     totalCollectedRevenue,
     recoveryRate,
     overdueDebtsCount,
-    collectedNetProfit
+    collectedNetProfit,
+    closedCashSessions,
+    totalCashDifference,
+    totalCashShortage,
+    totalCashSurplus,
+    cashDiscrepancyRate,
+    discrepantSessionsCount,
+    totalPhysicalCashAndBank
   } = useStore();
   const [period, setPeriod] = useState<"all" | "today" | "week">("all");
   
@@ -209,6 +218,27 @@ export default function AnalyticsPage() {
     });
     const topDebtors = Object.values(debtorsMap).sort((a, b) => b.remaining - a.remaining).slice(0, 5);
 
+    // ─── Concordance de Caisse filtrée par période ─────────────
+    const filteredCashSessions = (closedCashSessions || []).filter((cs) => {
+      const sessionDate = cs.closedAt || cs.openedAt;
+      if (period === "today") return sessionDate?.startsWith(today);
+      if (period === "week") return sessionDate >= weekAgo;
+      return true;
+    });
+
+    const periodCashDifference = filteredCashSessions.reduce((sum, cs) => sum + (Number(cs.difference) || 0), 0);
+    const periodCashShortage = filteredCashSessions
+      .filter((cs) => (Number(cs.difference) || 0) < 0)
+      .reduce((sum, cs) => sum + Math.abs(Number(cs.difference) || 0), 0);
+    const periodCashSurplus = filteredCashSessions
+      .filter((cs) => (Number(cs.difference) || 0) > 0)
+      .reduce((sum, cs) => sum + (Number(cs.difference) || 0), 0);
+    const periodDiscrepantCount = filteredCashSessions.filter((cs) => Math.abs(Number(cs.difference) || 0) > 0).length;
+    const periodCashRate = filteredCashSessions.length > 0 
+      ? Math.round((filteredCashSessions.filter(cs => Math.abs(Number(cs.difference) || 0) === 0).length / filteredCashSessions.length) * 100) 
+      : 100;
+    const periodPhysicalCash = Math.max(0, periodCollectedRevenue - periodCashShortage);
+
     return { 
       revenue, 
       grossRevenue, 
@@ -229,9 +259,16 @@ export default function AnalyticsPage() {
       periodCollectedRevenue,
       periodRecoveryRate,
       periodCollectedNetProfit,
-      topDebtors
+      topDebtors,
+      filteredCashSessions,
+      periodCashDifference,
+      periodCashShortage,
+      periodCashSurplus,
+      periodDiscrepantCount,
+      periodCashRate,
+      periodPhysicalCash
     };
-  }, [state.sales, state.products, state.expenses, period]);
+  }, [state.sales, state.products, state.expenses, closedCashSessions, period]);
 
   const categoryEntries = Object.entries(categorySales).sort((a, b) => b[1] - a[1]);
   const maxCategory = categoryEntries.length > 0 ? categoryEntries[0][1] : 1;

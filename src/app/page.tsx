@@ -26,7 +26,9 @@ import {
   ArrowRight,
   Phone,
   MessageCircle,
-  Check
+  Check,
+  ShieldAlert,
+  ShieldCheck
 } from "lucide-react";
 import { ProductAvatar } from "@/components/ui/ProductAvatar";
 
@@ -68,6 +70,17 @@ export default function Dashboard() {
     recoveryRate,
     overdueDebtsCount,
     collectedNetProfit,
+    closedCashSessions,
+    totalCashDifference,
+    totalCashShortage,
+    totalCashSurplus,
+    todayCashDifference,
+    todayCashShortage,
+    cashDiscrepancyRate,
+    totalPhysicalCashAndBank,
+    discrepantSessionsCount,
+    lastClosedCashSession,
+    activeCashSession,
   } = useStore();
 
   const adminKpis = [
@@ -82,14 +95,32 @@ export default function Dashboard() {
       iconBg: "bg-primary/10 text-primary",
     },
     {
-      label: "Trésorerie Encaissée",
-      value: formatPrice(totalCollectedRevenue),
-      subValue: "En caisse & banque (CA - Dettes)",
+      label: "Trésorerie Encaissée Réelle",
+      value: formatPrice(totalPhysicalCashAndBank),
+      subValue: totalCashShortage > 0 
+        ? `Théorique: ${formatPrice(totalCollectedRevenue)} • Manquant: -${formatPrice(totalCashShortage)}`
+        : "100% net en caisse & banque",
       icon: Wallet,
-      trend: "Encaissé Réel",
-      trendUp: true,
-      gradient: "from-emerald-500/15 to-emerald-500/5",
-      iconBg: "bg-emerald-500/15 text-emerald-500",
+      trend: totalCashShortage > 0 ? "Perte Caisse !" : "Encaissé Réel",
+      trendUp: totalCashShortage === 0,
+      gradient: totalCashShortage > 0 ? "from-amber-500/15 to-rose-500/10" : "from-emerald-500/15 to-emerald-500/5",
+      iconBg: totalCashShortage > 0 ? "bg-amber-500/15 text-amber-500" : "bg-emerald-500/15 text-emerald-500",
+    },
+    {
+      label: "Écarts de Caisse (Audit Z)",
+      value: totalCashDifference === 0 
+        ? "0 FCFA" 
+        : totalCashDifference < 0 
+          ? `-${formatPrice(Math.abs(totalCashDifference))}` 
+          : `+${formatPrice(totalCashDifference)}`,
+      subValue: totalCashShortage > 0 
+        ? `${discrepantSessionsCount} clôture(s) avec déficit` 
+        : `${cashDiscrepancyRate}% clôtures conformes`,
+      icon: totalCashShortage > 0 ? ShieldAlert : ShieldCheck,
+      trend: totalCashDifference < 0 ? "Manquant Caisse" : totalCashDifference > 0 ? "Surplus" : "Conforme",
+      trendUp: totalCashDifference >= 0,
+      gradient: totalCashDifference < 0 ? "from-rose-500/15 to-rose-500/5" : "from-emerald-500/15 to-emerald-500/5",
+      iconBg: totalCashDifference < 0 ? "bg-rose-500/15 text-rose-500" : "bg-emerald-500/15 text-emerald-500",
     },
     {
       label: "Créances Clients (Reste Dû)",
@@ -102,14 +133,14 @@ export default function Dashboard() {
       iconBg: overdueDebtsCount > 0 ? "bg-rose-500/15 text-rose-500" : "bg-amber-500/15 text-amber-500",
     },
     {
-      label: "Bénéfice Net Encaissé",
-      value: formatPrice(collectedNetProfit),
+      label: "Bénéfice Net Réel",
+      value: formatPrice(collectedNetProfit - totalCashShortage),
       subValue: `Théorique: ${formatPrice(netProfit)}`,
       icon: Banknote,
-      trend: collectedNetProfit >= 0 ? "Solde Réel +" : "Déficit Réel",
-      trendUp: collectedNetProfit >= 0,
-      gradient: collectedNetProfit >= 0 ? "from-accent/15 to-primary/5" : "from-destructive/15 to-destructive/5",
-      iconBg: collectedNetProfit >= 0 ? "bg-accent/10 text-accent" : "bg-destructive/10 text-destructive",
+      trend: (collectedNetProfit - totalCashShortage) >= 0 ? "Bénéfice Net" : "Déficit Réel",
+      trendUp: (collectedNetProfit - totalCashShortage) >= 0,
+      gradient: (collectedNetProfit - totalCashShortage) >= 0 ? "from-accent/15 to-primary/5" : "from-destructive/15 to-destructive/5",
+      iconBg: (collectedNetProfit - totalCashShortage) >= 0 ? "bg-accent/10 text-accent" : "bg-destructive/10 text-destructive",
     },
   ];
 
@@ -213,7 +244,7 @@ export default function Dashboard() {
       </div>
 
       {/* KPI Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 stagger-children">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 stagger-children">
         {kpis.map((kpi) => {
           const Icon = kpi.icon;
           return (
@@ -239,6 +270,139 @@ export default function Dashboard() {
           );
         })}
       </div>
+
+            {/* ================================================================ */}
+      {/* SECTION AUDIT PATRON : CONTRÔLE DES CAISSES & CLÔTURES (RAPPORTS Z) */}
+      {/* ================================================================ */}
+      {role === 'admin' && (
+        <div className="rounded-2xl border border-border/60 bg-card p-5 shadow-sm space-y-4 animate-fade-in">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-border/50">
+            <div className="flex items-center gap-2.5">
+              <div className={`w-9 h-9 rounded-xl flex items-center justify-center ${
+                totalCashShortage > 0 
+                  ? "bg-destructive/10 text-destructive border border-destructive/20" 
+                  : "bg-primary/10 text-primary border border-primary/20"
+              }`}>
+                <ShieldAlert className="w-5 h-5" />
+              </div>
+              <div>
+                <h2 className="text-sm font-bold text-foreground flex items-center gap-2">
+                  Audit &amp; Concordance des Caisses (Rapports Z)
+                  {totalCashShortage > 0 && (
+                    <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-destructive text-white animate-pulse">
+                      Déficit: -{formatPrice(totalCashShortage)}
+                    </span>
+                  )}
+                </h2>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Contrôle des montants attendus vs fonds réels déclarés lors des clôtures.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2">
+              {activeCashSession ? (
+                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/10 text-emerald-600 border border-emerald-500/20 text-xs font-bold">
+                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                  Caisse Active : Ouverte (Fond: {formatPrice(activeCashSession.openingAmount)})
+                </span>
+              ) : (
+                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-secondary text-muted-foreground text-xs font-semibold">
+                  Caisse Actuelle : Clôturée
+                </span>
+              )}
+            </div>
+          </div>
+
+          {/* Alerte Patron Manquant */}
+          {totalCashShortage > 0 && (
+            <div className="p-4 rounded-xl bg-destructive/10 border border-destructive/25 text-destructive flex items-start gap-3">
+              <AlertTriangle className="w-5 h-5 shrink-0 mt-0.5" />
+              <div className="text-xs space-y-0.5">
+                <p className="font-bold text-sm">Alerte Déficit de Caisse Constaté</p>
+                <p className="font-medium text-destructive/90">
+                  Un montant total de <span className="font-extrabold underline">{formatPrice(totalCashShortage)}</span> manque à l&apos;appel sur les clôtures de caisse enregistrées. Ce montant a été automatiquement déduit de votre trésorerie réelle.
+                </p>
+              </div>
+            </div>
+          )}
+
+          {/* Tableau des Clôtures */}
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs">
+              <thead>
+                <tr className="border-b border-border/40 text-muted-foreground font-semibold">
+                  <th className="py-2.5 px-3">Date &amp; Heure Clôture</th>
+                  <th className="py-2.5 px-3">Caissier / Opérateur</th>
+                  <th className="py-2.5 px-3 text-right">Fond Initial</th>
+                  <th className="py-2.5 px-3 text-right">Ventes Espèces</th>
+                  <th className="py-2.5 px-3 text-right">Théorique Attendu</th>
+                  <th className="py-2.5 px-3 text-right">Réel Compté</th>
+                  <th className="py-2.5 px-3 text-right">Écart Constaté</th>
+                  <th className="py-2.5 px-3">Motif / Justification</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border/30">
+                {closedCashSessions.length === 0 ? (
+                  <tr>
+                    <td colSpan={8} className="py-6 text-center text-muted-foreground">
+                      Aucune clôture de caisse enregistrée pour le moment.
+                    </td>
+                  </tr>
+                ) : (
+                  closedCashSessions.slice(0, 5).map((cs) => {
+                    const diff = Number(cs.difference) || 0;
+                    const hasShortage = diff < 0;
+                    const hasSurplus = diff > 0;
+                    return (
+                      <tr key={cs.id} className="hover:bg-secondary/20 transition-colors">
+                        <td className="py-3 px-3 font-medium whitespace-nowrap">
+                          {cs.closedAt ? new Date(cs.closedAt).toLocaleString("fr-FR", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" }) : "-"}
+                        </td>
+                        <td className="py-3 px-3 font-semibold text-foreground">
+                          {cs.cashierName || "Gérant"}
+                        </td>
+                        <td className="py-3 px-3 text-right font-mono">
+                          {formatPrice(cs.openingAmount || 0)}
+                        </td>
+                        <td className="py-3 px-3 text-right font-mono">
+                          {formatPrice(cs.totalCashSales || 0)}
+                        </td>
+                        <td className="py-3 px-3 text-right font-mono font-semibold">
+                          {formatPrice(cs.expectedAmount || 0)}
+                        </td>
+                        <td className="py-3 px-3 text-right font-mono font-bold">
+                          {formatPrice(cs.closingAmount || 0)}
+                        </td>
+                        <td className="py-3 px-3 text-right whitespace-nowrap">
+                          {hasShortage ? (
+                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-destructive/15 text-destructive font-black text-xs">
+                              <AlertTriangle className="w-3 h-3" />
+                              -{formatPrice(Math.abs(diff))}
+                            </span>
+                          ) : hasSurplus ? (
+                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-emerald-500/15 text-emerald-600 font-bold text-xs">
+                              +{formatPrice(diff)}
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-secondary text-muted-foreground text-xs font-semibold">
+                              <CheckCircle2 className="w-3 h-3 text-emerald-500" />
+                              0 F (Conforme)
+                            </span>
+                          )}
+                        </td>
+                        <td className="py-3 px-3 text-muted-foreground max-w-xs truncate italic">
+                          {cs.notes || "Aucune remarque"}
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
 
       {/* ================================================================ */}
       {/* SECTION CONCORDANCE FINANCIÈRE & ÉTAT DE RECOUVREMENT DES CRÉDITS */}
