@@ -1,7 +1,7 @@
-# BoutiquePro - Documentation Complète & Référence Technique
+# MaBoutiquePro - Documentation Complète & Référence Technique
 
 ## 📋 Présentation Générale
-**BoutiquePro** est une application web moderne (SaaS) conçue pour la gestion commerciale et le point de vente (POS) adaptée aux réalités du marché africain (monnaie FCFA, Mobile Money, relances WhatsApp, utilisation mobile & tablette).
+**MaBoutiquePro** est une application web moderne conçue pour la gestion commerciale et le point de vente (POS) adaptée aux réalités du marché africain (monnaie FCFA, Mobile Money, relances WhatsApp, utilisation mobile & tablette).
 
 Elle permet à de multiples commerçants de gérer leurs boutiques, leurs stocks, leurs ventes au comptant ou à crédit, et leurs employés depuis une interface unique, moderne et ultra-rapide. L'application est installable (PWA) et déployée sous le domaine officiel **[maboutiquepro.app](https://maboutiquepro.app)**.
 
