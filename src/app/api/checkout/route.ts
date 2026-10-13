@@ -16,7 +16,11 @@ export async function POST(request: Request) {
   }
 
   try {
-    const access = await prepareAuthorizedCheckout(request, (body as any).orderId);
+    const access = await prepareAuthorizedCheckout(request, (body as any).orderId, {
+      planKey: (body as any).planKey,
+      storeId: (body as any).storeId,
+      customerEmail: (body as any).customerEmail,
+    });
     if (!access.ok) {
       return Response.json({ error: { code: access.code } }, { status: access.status });
     }

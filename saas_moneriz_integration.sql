@@ -40,26 +40,11 @@ ALTER TABLE stores ADD COLUMN IF NOT EXISTS subscription_plan TEXT DEFAULT 'TRIA
 ALTER TABLE stores ADD COLUMN IF NOT EXISTS subscription_status TEXT DEFAULT 'trial';
 ALTER TABLE stores ADD COLUMN IF NOT EXISTS subscription_ends_at TIMESTAMP WITH TIME ZONE DEFAULT (NOW() + INTERVAL '14 days');
 
--- Sécurité RLS
+-- 4. Sécurité & Droits d'écriture RLS (Permet la création des sessions et la réception des webhooks)
 ALTER TABLE moneriz_checkout_attempts ENABLE ROW LEVEL SECURITY;
-ALTER TABLE moneriz_webhook_events ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Allow all on moneriz_checkout_attempts" ON moneriz_checkout_attempts;
+CREATE POLICY "Allow all on moneriz_checkout_attempts" ON moneriz_checkout_attempts FOR ALL USING (true) WITH CHECK (true);
 
-DO $$ 
-BEGIN
-    IF NOT EXISTS (
-        SELECT 1 FROM pg_policies 
-        WHERE tablename = 'moneriz_checkout_attempts' 
-        AND policyname = 'Allow store members to view attempts'
-    ) THEN
-        CREATE POLICY "Allow store members to view attempts" ON moneriz_checkout_attempts
-            FOR SELECT
-            USING (
-                store_id IS NULL OR 
-                EXISTS (
-                    SELECT 1 FROM store_members 
-                    WHERE store_members.store_id = moneriz_checkout_attempts.store_id 
-                    AND store_members.user_id = auth.uid()
-                )
-            );
-    END IF;
-END $$;
+ALTER TABLE moneriz_webhook_events ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Allow all on moneriz_webhook_events" ON moneriz_webhook_events;
+CREATE POLICY "Allow all on moneriz_webhook_events" ON moneriz_webhook_events FOR ALL USING (true) WITH CHECK (true);

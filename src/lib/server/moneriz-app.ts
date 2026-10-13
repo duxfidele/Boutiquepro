@@ -173,7 +173,8 @@ export async function createSubscriptionOrder(params: {
  */
 export async function prepareAuthorizedCheckout(
   request: Request,
-  orderId: string
+  orderId: string,
+  extraParams?: { planKey?: PlanKey; storeId?: string; customerEmail?: string }
 ): Promise<
   | { ok: true; attempt: CheckoutAttempt }
   | { ok: false; status: 401 | 403 | 404 | 409 | 429; code: string }
@@ -222,6 +223,34 @@ export async function prepareAuthorizedCheckout(
     } catch {
       // Ignorer si pas disponible
     }
+  }
+
+  if (!stored && extraParams?.planKey) {
+    const plan = SAAS_PLANS[extraParams.planKey] || SAAS_PLANS.pro_monthly;
+    const secret = process.env.MONERIZ_SECRET_KEY || '';
+    const isTest = secret.startsWith('izp_test_');
+    const mode: 'test' | 'live' = isTest ? 'test' : 'live';
+    const reference = `mbp-${mode}-${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 6)}`;
+    const idempotencyKey = `mbp-idem-${Date.now()}-${Math.random().toString(36).substring(2, 10)}`;
+
+    stored = {
+      orderId,
+      storeId: extraParams.storeId,
+      planKey: plan.id,
+      amount: plan.amount,
+      currency: 'XOF',
+      mode,
+      reference,
+      idempotencyKey,
+      status: 'pending',
+      customerEmail: extraParams.customerEmail,
+      session: null,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+
+    local.orders[orderId] = stored;
+    writeLocalFallback(local);
   }
 
   if (!stored) {

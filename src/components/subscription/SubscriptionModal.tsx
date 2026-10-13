@@ -65,7 +65,12 @@ export default function SubscriptionModal({
       const checkoutRes = await fetch('/api/checkout', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ orderId }),
+        body: JSON.stringify({
+          orderId,
+          planKey,
+          storeId: activeStore?.id,
+          customerEmail: user?.email,
+        }),
       });
 
       const sessionData = await checkoutRes.json();
