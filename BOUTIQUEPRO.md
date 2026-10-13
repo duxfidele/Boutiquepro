@@ -125,6 +125,11 @@ Les données sont strictement cloisonnées grâce aux **Row Level Security (RLS)
 - Resynchronisation automatique dès le rétablissement de la connexion.
 - Canaux WebSockets Supabase Realtime pour la décrémentation instantanée du stock sur tous les terminaux de caisse connectés.
 
+### 6. Chargement Instantané de la Page d'Accueil & Sécurisation des Routes Privées
+- **Suppression du blocage au démarrage :** L'écran d'attente « Vérification de l'accès... » a été totalement retiré de la page publique (`/`). La page d'accueil (Landing Page) s'affiche désormais instantanément (0 ms d'attente réseau pour les visiteurs).
+- **Vérification optimisée en arrière-plan :** Si un utilisateur possède une session active en mémoire locale (`localStorage`), il est automatiquement basculé vers son tableau de bord sans flash ni friction.
+- **Contrôle d'accès strict sur les routes privées :** Les routes protégées (`/pos`, `/products`, `/orders`, `/debts`, `/analytics`, etc.) conservent une vérification d'authentification stricte avant tout affichage de données sensibles. En cas de session absente, l'utilisateur est automatiquement redirigé vers l'interface de connexion.
+
 ---
 
 ## 💼 Modèles d'Exploitation Commerciale
