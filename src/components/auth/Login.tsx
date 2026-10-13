@@ -104,8 +104,8 @@ export default function Login({ initialIsSignUp = false, onBack }: { initialIsSi
         )}
 
         <div className="flex flex-col items-center mb-8">
-          <div className="h-16 w-16 bg-gradient-to-br from-primary to-accent rounded-2xl flex items-center justify-center text-white mb-4 shadow-lg shadow-primary/20">
-            {isForgotPassword ? <KeyRound className="h-8 w-8" /> : <Store className="h-8 w-8" />}
+          <div className="h-20 w-20 bg-white rounded-2xl flex items-center justify-center p-2 mb-4 shadow-md border border-border/40">
+            {isForgotPassword ? <KeyRound className="h-10 w-10 text-primary" /> : <img src="/logo.png" alt="MaBoutiquePro" className="w-full h-full object-contain" />}
           </div>
           <h1 className="text-2xl font-bold text-foreground">
             {isForgotPassword ? "Mot de passe oublié" : "MaBoutiquePro"}

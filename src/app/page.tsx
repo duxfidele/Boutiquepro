@@ -181,21 +181,7 @@ export default function Dashboard() {
   const categoryEntries = Object.entries(categorySales).sort((a, b) => b[1] - a[1]);
   const maxCategory = categoryEntries.length > 0 ? categoryEntries[0][1] : 1;
 
-  if (!activeStore) {
-    return (
-      <div className="flex flex-col items-center justify-center h-[70vh] text-center px-4">
-        <div className="bg-card border border-border/50 rounded-3xl p-8 max-w-md w-full shadow-sm">
-          <div className="h-16 w-16 bg-primary/10 text-primary rounded-2xl flex items-center justify-center mx-auto mb-6">
-            <ShoppingBag className="h-8 w-8" />
-          </div>
-          <h2 className="text-2xl font-bold mb-2">Bienvenue sur MaBoutiquePro</h2>
-          <p className="text-muted-foreground text-sm">
-            Veuillez sélectionner ou créer une boutique pour afficher le tableau de bord.
-          </p>
-        </div>
-      </div>
-    );
-  }
+
 
   const categoryColors = ["bg-primary", "bg-accent", "bg-chart-3", "bg-chart-4", "bg-chart-5"];
 

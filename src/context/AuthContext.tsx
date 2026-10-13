@@ -74,9 +74,14 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         
         setActiveStore(selected);
       } else {
+        const fallback = { id: 'default', name: 'Ma Boutique', role: 'admin' };
+        setStores([fallback]);
+        setActiveStore(fallback);
         setRole('admin');
       }
     } catch (e) {
+      const fallback = { id: 'default', name: 'Ma Boutique', role: 'admin' };
+      if (!activeStore) setActiveStore(fallback);
       setRole('admin');
     }
   };
@@ -85,6 +90,9 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     if (activeStore) {
       setRole(activeStore.role);
       localStorage.setItem('activeStoreId', activeStore.id);
+      try {
+        localStorage.setItem('activeStoreObj', JSON.stringify(activeStore));
+      } catch {}
     }
   }, [activeStore]);
 
@@ -93,6 +101,16 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     const checkCachedSession = () => {
       try {
         if (typeof window === 'undefined') return false;
+        const cachedStore = localStorage.getItem('activeStoreObj');
+        if (cachedStore) {
+          try {
+            const parsedStore = JSON.parse(cachedStore);
+            if (parsedStore?.id) {
+              setActiveStore(parsedStore);
+              setRole(parsedStore.role || 'admin');
+            }
+          } catch {}
+        }
         for (let i = 0; i < localStorage.length; i++) {
           const key = localStorage.key(i);
           if (key && key.startsWith('sb-') && key.endsWith('-auth-token')) {

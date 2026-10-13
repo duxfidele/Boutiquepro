@@ -107,12 +107,12 @@ export default function Sidebar({ isOpen, onClose }: { isOpen?: boolean, onClose
       >
       {/* Logo / Brand */}
       <div className="flex h-16 items-center gap-3 border-b border-border/50 px-4">
-        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-primary to-accent text-white font-bold text-sm overflow-hidden">
-          {state.settings.logo ? <img src={state.settings.logo} alt="Logo" className="w-full h-full object-cover" /> : state.settings.name.charAt(0).toUpperCase()}
+        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white shadow-xs overflow-hidden p-1 border border-border/40">
+          <img src={state.settings.logo || "/logo.png"} alt="Logo" className="w-full h-full object-contain" />
         </div>
         {(!collapsed || isOpen) && (
           <div className="animate-fade-in overflow-hidden">
-            <h1 className="text-base font-bold text-gradient truncate">{state.settings.name}</h1>
+            <h1 className="text-base font-bold text-gradient truncate">MaBoutiquePro</h1>
             <p className="text-[10px] text-muted-foreground">Gestion Commerciale</p>
           </div>
         )}

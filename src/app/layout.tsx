@@ -23,9 +23,9 @@ export const metadata: Metadata = {
   applicationName: "MaBoutiquePro",
   manifest: "/manifest.json",
   icons: {
-    icon: "/icon.svg",
-    shortcut: "/icon.svg",
-    apple: "/icon.svg",
+    icon: "/logo.png",
+    shortcut: "/logo.png",
+    apple: "/logo.png",
   },
   openGraph: {
     type: "website",
@@ -36,7 +36,7 @@ export const metadata: Metadata = {
     description: "Gérez votre boutique, vos stocks et vos ventes au comptoir en toute simplicité sur maboutiquepro.app.",
     images: [
       {
-        url: "/icon.svg",
+        url: "/logo.png",
         width: 512,
         height: 512,
         alt: "MaBoutiquePro",
@@ -47,7 +47,7 @@ export const metadata: Metadata = {
     card: "summary",
     title: "MaBoutiquePro — Gestion de Boutique & Point de Vente",
     description: "Gérez votre boutique, vos stocks et vos ventes au comptoir en toute simplicité sur maboutiquepro.app.",
-    images: ["/icon.svg"],
+    images: ["/logo.png"],
   },
 };
 
