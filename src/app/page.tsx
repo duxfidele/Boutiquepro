@@ -81,6 +81,8 @@ export default function Dashboard() {
     discrepantSessionsCount,
     lastClosedCashSession,
     activeCashSession,
+    currentSessionStats,
+    currentSessionSales,
   } = useStore();
 
   const adminKpis = [
@@ -144,26 +146,51 @@ export default function Dashboard() {
     },
   ];
 
+  const cashierLastDiff = Number(lastClosedCashSession?.difference) || 0;
   const cashierKpis = [
     {
-      label: "Chiffre d'affaires",
-      value: formatPrice(totalRevenue),
+      label: "Chiffre d'affaires Encaissé",
+      value: formatPrice(totalPhysicalCashAndBank),
       subValue: `Aujourd'hui: ${formatPrice(todayRevenue)}`,
       icon: TrendingUp,
-      trend: "+12.5%",
+      trend: "Total ventes",
       trendUp: true,
-      gradient: "from-primary/10 to-accent/10",
+      gradient: "from-primary/10 to-indigo-500/10",
       iconBg: "bg-primary/10 text-primary",
     },
     {
-      label: "Ventes du jour",
-      value: todayOrders.toString(),
-      subValue: `Total: ${totalOrders}`,
-      icon: ShoppingBag,
-      trend: "Commandes",
-      trendUp: true,
-      gradient: "from-primary/10 to-accent/10",
-      iconBg: "bg-primary/10 text-primary",
+      label: "Session Caisse Active",
+      value: activeCashSession ? formatPrice(currentSessionStats.total) : "Caisse Fermée",
+      subValue: activeCashSession 
+        ? `${currentSessionStats.count} vente(s) • Tiroir: ${formatPrice(currentSessionStats.expectedCashInDrawer)}` 
+        : "Compteur à 0 • Prêt pour ouverture",
+      icon: Wallet,
+      trend: activeCashSession ? "En cours" : "Fermée",
+      trendUp: !!activeCashSession,
+      gradient: activeCashSession ? "from-emerald-500/15 to-emerald-500/5" : "from-secondary to-muted/20",
+      iconBg: activeCashSession ? "bg-emerald-500/15 text-emerald-500" : "bg-muted text-muted-foreground",
+    },
+    {
+      label: "Écart de Caisse (Audit Z)",
+      value: lastClosedCashSession 
+        ? cashierLastDiff === 0 
+          ? "0 FCFA" 
+          : cashierLastDiff < 0 
+            ? `-${formatPrice(Math.abs(cashierLastDiff))}` 
+            : `+${formatPrice(cashierLastDiff)}`
+        : "0 FCFA",
+      subValue: lastClosedCashSession 
+        ? cashierLastDiff < 0 
+          ? `Dernière clôture: Manquant de -${formatPrice(Math.abs(cashierLastDiff))}` 
+          : cashierLastDiff > 0 
+            ? `Dernière clôture: Surplus de +${formatPrice(cashierLastDiff)}`
+            : "Dernière clôture: 100% conforme"
+        : "Aucune clôture enregistrée",
+      icon: (lastClosedCashSession && cashierLastDiff < 0) ? ShieldAlert : ShieldCheck,
+      trend: (lastClosedCashSession && cashierLastDiff < 0) ? "Manquant Caisse !" : "Conforme",
+      trendUp: !(lastClosedCashSession && cashierLastDiff < 0),
+      gradient: (lastClosedCashSession && cashierLastDiff < 0) ? "from-rose-500/15 to-rose-500/5" : "from-emerald-500/15 to-emerald-500/5",
+      iconBg: (lastClosedCashSession && cashierLastDiff < 0) ? "bg-rose-500/15 text-rose-500" : "bg-emerald-500/15 text-emerald-500",
     },
     {
       label: "Créances Clients en Attente",
@@ -272,10 +299,9 @@ export default function Dashboard() {
       </div>
 
             {/* ================================================================ */}
-      {/* SECTION AUDIT PATRON : CONTRÔLE DES CAISSES & CLÔTURES (RAPPORTS Z) */}
+      {/* SECTION AUDIT & CONTRÔLE DES CAISSES : CLÔTURES & RAPPORTS Z */}
       {/* ================================================================ */}
-      {role === 'admin' && (
-        <div className="rounded-2xl border border-border/60 bg-card p-5 shadow-sm space-y-4 animate-fade-in">
+      <div className="rounded-2xl border border-border/60 bg-card p-5 shadow-sm space-y-4 animate-fade-in">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-border/50">
             <div className="flex items-center gap-2.5">
               <div className={`w-9 h-9 rounded-xl flex items-center justify-center ${
@@ -287,7 +313,7 @@ export default function Dashboard() {
               </div>
               <div>
                 <h2 className="text-sm font-bold text-foreground flex items-center gap-2">
-                  Audit &amp; Concordance des Caisses (Rapports Z)
+                  {role === 'admin' ? "Audit Patron : Contrôle des Caisses & Clôtures (Rapports Z)" : "Audit & Clôtures de ma Caisse (Rapports Z)"}
                   {totalCashShortage > 0 && (
                     <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-destructive text-white animate-pulse">
                       Déficit: -{formatPrice(totalCashShortage)}
@@ -402,7 +428,6 @@ export default function Dashboard() {
             </table>
           </div>
         </div>
-      )}
 
       {/* ================================================================ */}
       {/* SECTION CONCORDANCE FINANCIÈRE & ÉTAT DE RECOUVREMENT DES CRÉDITS */}

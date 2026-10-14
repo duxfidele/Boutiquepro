@@ -263,6 +263,10 @@ export default function POSPage() {
         pdfFormat: [80, 260],
         scale: 1.5,
       });
+      // Fermeture automatique du rapport après téléchargement réussi
+      setTimeout(() => {
+        setShowRapportZModal(false);
+      }, 600);
     } catch (e) {
       console.error("Erreur PDF Rapport Z:", e);
       alert("La génération du PDF du rapport a échoué. Vous pouvez utiliser le bouton Imprimer.");
@@ -324,7 +328,7 @@ export default function POSPage() {
           ) : (
             <div className="flex items-center gap-2 text-amber-600 dark:text-amber-400">
               <Lock className="h-4 w-4" />
-              <span className="text-xs font-bold">Caisse Fermée — Aucun shift en cours</span>
+              <span className="text-xs font-bold">Caisse Clôturée — Compteur à 0 (Prêt pour prochaine ouverture)</span>
             </div>
           )}
         </div>
@@ -1673,7 +1677,7 @@ export default function POSPage() {
                 {isDownloadingRapportZ ? (
                   <>
                     <Loader2 className="h-3.5 w-3.5 animate-spin text-gray-700" />
-                    <span>PDF...</span>
+                    <span>Téléchargement...</span>
                   </>
                 ) : (
                   <>
@@ -1685,10 +1689,18 @@ export default function POSPage() {
               <button
                 type="button"
                 onClick={handlePrint}
-                className="flex-[1.5] py-2.5 rounded-xl bg-primary text-white text-xs font-bold hover:opacity-90 flex items-center justify-center gap-1.5 transition-opacity shadow-md"
+                className="flex-1 py-2.5 rounded-xl bg-primary text-white text-xs font-bold hover:opacity-90 flex items-center justify-center gap-1.5 transition-opacity shadow-md"
               >
                 <Printer className="h-3.5 w-3.5" />
-                Imprimer Ticket
+                Imprimer
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowRapportZModal(false)}
+                className="flex-1 py-2.5 rounded-xl bg-gray-800 text-white hover:bg-gray-900 text-xs font-bold flex items-center justify-center gap-1.5 transition-colors shadow-sm"
+              >
+                <X className="h-3.5 w-3.5" />
+                Fermer
               </button>
             </div>
           </div>

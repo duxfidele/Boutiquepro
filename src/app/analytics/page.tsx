@@ -557,6 +557,173 @@ export default function AnalyticsPage() {
         </div>
       </div>
 
+      {/* ================================================================ */}
+      {/* SECTION AUDIT & CONTRÔLE DES CAISSES : SESSIONS Z (ANALYTIQUE)   */}
+      {/* ================================================================ */}
+      <div className="rounded-2xl border border-border/60 bg-gradient-to-br from-card via-card to-secondary/30 p-6 shadow-sm space-y-6">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-border/50">
+          <div className="flex items-center gap-3">
+            <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${
+              analytics.periodCashShortage > 0 
+                ? "bg-destructive/10 text-destructive border border-destructive/25" 
+                : "bg-primary/10 text-primary border border-primary/20"
+            }`}>
+              {analytics.periodCashShortage > 0 ? (
+                <ShieldAlert className="w-5 h-5 text-destructive" />
+              ) : (
+                <ShieldCheck className="w-5 h-5 text-primary" />
+              )}
+            </div>
+            <div>
+              <h2 className="text-lg font-bold text-foreground flex items-center gap-2">
+                Audit &amp; Contrôle des Caisses : Sessions Z
+                {analytics.periodCashShortage > 0 && (
+                  <span className="px-2.5 py-0.5 rounded-full text-xs font-black bg-destructive text-white animate-pulse">
+                    Pertes Caisse : -{formatPrice(analytics.periodCashShortage)}
+                  </span>
+                )}
+              </h2>
+              <p className="text-xs text-muted-foreground">
+                Vérification des montants attendus vs fonds réels déclarés lors des clôtures ({period === "today" ? "Aujourd'hui" : period === "week" ? "7 derniers jours" : "Tout l'historique"})
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-semibold px-3 py-1.5 rounded-xl bg-secondary/60 border border-border/40 text-muted-foreground">
+              {analytics.filteredCashSessions.length} clôture(s) sur la période
+            </span>
+          </div>
+        </div>
+
+        {/* 4 Indicateurs Caisse */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className={`p-4 rounded-xl border ${
+            analytics.periodCashShortage > 0 
+              ? "bg-destructive/10 border-destructive/25 text-destructive" 
+              : "bg-emerald-500/10 border-emerald-500/20 text-emerald-600 dark:text-emerald-400"
+          }`}>
+            <span className="text-xs font-bold uppercase tracking-wider flex items-center gap-1">
+              {analytics.periodCashShortage > 0 ? <AlertTriangle className="w-3.5 h-3.5" /> : <CheckCircle2 className="w-3.5 h-3.5" />}
+              Pertes / Manquants Caisse
+            </span>
+            <div className="text-2xl font-black mt-1">
+              {analytics.periodCashShortage > 0 ? `-${formatPrice(analytics.periodCashShortage)}` : "0 FCFA"}
+            </div>
+            <p className="text-[11px] opacity-80 mt-0.5">
+              {analytics.periodCashShortage > 0 ? "Déduit automatiquement du net" : "Aucun manquant constaté"}
+            </p>
+          </div>
+
+          <div className="p-4 rounded-xl bg-primary/10 border border-primary/20 text-primary">
+            <span className="text-xs font-bold uppercase tracking-wider flex items-center gap-1">
+              <CheckCircle2 className="w-3.5 h-3.5" /> Taux de Concordance
+            </span>
+            <div className="text-2xl font-black mt-1">
+              {analytics.periodCashRate}%
+            </div>
+            <p className="text-[11px] text-muted-foreground mt-0.5">Clôtures équilibrées à 100%</p>
+          </div>
+
+          <div className="p-4 rounded-xl bg-secondary/40 border border-border/50 text-foreground">
+            <span className="text-xs font-bold uppercase tracking-wider flex items-center gap-1 text-muted-foreground">
+              <Clock className="w-3.5 h-3.5" /> Sessions avec Écart
+            </span>
+            <div className="text-2xl font-black mt-1">
+              {analytics.periodDiscrepantCount} <span className="text-xs font-normal text-muted-foreground">/ {analytics.filteredCashSessions.length}</span>
+            </div>
+            <p className="text-[11px] text-muted-foreground mt-0.5">
+              {analytics.periodDiscrepantCount > 0 ? "Clôtures ayant requis un motif" : "Toutes conformes"}
+            </p>
+          </div>
+
+          <div className="p-4 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-600 dark:text-emerald-400">
+            <span className="text-xs font-bold uppercase tracking-wider flex items-center gap-1">
+              <TrendingUp className="w-3.5 h-3.5" /> Excédents / Surplus Caisse
+            </span>
+            <div className="text-2xl font-black mt-1">
+              +{formatPrice(analytics.periodCashSurplus)}
+            </div>
+            <p className="text-[11px] opacity-80 mt-0.5">Surplus physique constaté</p>
+          </div>
+        </div>
+
+        {/* Tableau des Sessions de Caisse */}
+        <div className="overflow-x-auto rounded-xl border border-border/40 bg-card">
+          <table className="w-full text-left text-xs">
+            <thead>
+              <tr className="border-b border-border/40 bg-secondary/30 text-muted-foreground font-semibold">
+                <th className="py-2.5 px-3">Date &amp; Heure Clôture</th>
+                <th className="py-2.5 px-3">Caissier / Opérateur</th>
+                <th className="py-2.5 px-3 text-right">Fond Initial</th>
+                <th className="py-2.5 px-3 text-right">Ventes Espèces</th>
+                <th className="py-2.5 px-3 text-right">Théorique Attendu</th>
+                <th className="py-2.5 px-3 text-right">Réel Compté</th>
+                <th className="py-2.5 px-3 text-right">Écart Constaté</th>
+                <th className="py-2.5 px-3">Motif / Justification Caissier</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-border/30">
+              {analytics.filteredCashSessions.length === 0 ? (
+                <tr>
+                  <td colSpan={8} className="py-8 text-center text-muted-foreground">
+                    Aucune session de caisse clôturée pour la période sélectionnée ({period === "today" ? "Aujourd'hui" : period === "week" ? "Cette Semaine" : "Tout l'historique"}).
+                  </td>
+                </tr>
+              ) : (
+                analytics.filteredCashSessions.map((cs) => {
+                  const diff = Number(cs.difference) || 0;
+                  const hasShortage = diff < 0;
+                  const hasSurplus = diff > 0;
+                  return (
+                    <tr key={cs.id} className="hover:bg-secondary/20 transition-colors">
+                      <td className="py-3 px-3 font-medium whitespace-nowrap">
+                        {cs.closedAt ? new Date(cs.closedAt).toLocaleString("fr-FR", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" }) : "-"}
+                      </td>
+                      <td className="py-3 px-3 font-semibold text-foreground">
+                        {cs.cashierName || "Caissier"}
+                      </td>
+                      <td className="py-3 px-3 text-right font-mono">
+                        {formatPrice(cs.openingAmount || 0)}
+                      </td>
+                      <td className="py-3 px-3 text-right font-mono">
+                        {formatPrice(cs.totalCashSales || 0)}
+                      </td>
+                      <td className="py-3 px-3 text-right font-mono font-semibold">
+                        {formatPrice(cs.expectedAmount || 0)}
+                      </td>
+                      <td className="py-3 px-3 text-right font-mono font-bold">
+                        {formatPrice(cs.closingAmount || 0)}
+                      </td>
+                      <td className="py-3 px-3 text-right whitespace-nowrap">
+                        {hasShortage ? (
+                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-destructive/15 text-destructive font-black text-xs">
+                            <AlertTriangle className="w-3 h-3" />
+                            -{formatPrice(Math.abs(diff))}
+                          </span>
+                        ) : hasSurplus ? (
+                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-emerald-500/15 text-emerald-600 font-bold text-xs">
+                            +{formatPrice(diff)}
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-secondary text-muted-foreground text-xs font-semibold">
+                            <CheckCircle2 className="w-3 h-3 text-emerald-500" />
+                            0 F (Conforme)
+                          </span>
+                        )}
+                      </td>
+                      <td className="py-3 px-3 text-muted-foreground max-w-xs truncate italic">
+                        {cs.notes || "Aucune remarque"}
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Top Products */}
         <div className="rounded-2xl border border-border/40 bg-card p-6">

@@ -273,45 +273,12 @@ export function getSalesForSession(
   if (isNaN(sessionOpenedTime)) return [];
   const sessionClosedTime = session.closedAt ? new Date(session.closedAt).getTime() : Infinity;
 
-  // Si la session est déjà clôturée officiellement
-  if (session.status === "closed" && session.closedAt) {
-    return (allSales || []).filter((s) => {
-      if (!s || !s.createdAt) return false;
-      const saleTime = new Date(s.createdAt).getTime();
-      return !isNaN(saleTime) && saleTime >= sessionOpenedTime && saleTime <= sessionClosedTime;
-    });
-  }
-
-  // Session en cours : rechercher la dernière clôture avant cette session
-  const previousClosedSessions = (allSessions || []).filter((cs) =>
-    cs &&
-    cs.id !== session.id &&
-    cs.status === "closed" &&
-    cs.closedAt &&
-    new Date(cs.closedAt).getTime() <= sessionOpenedTime
-  );
-
-  let cutoffTime = 0;
-  if (previousClosedSessions.length > 0) {
-    previousClosedSessions.sort((a, b) => new Date(b.closedAt!).getTime() - new Date(a.closedAt!).getTime());
-    cutoffTime = new Date(previousClosedSessions[0].closedAt!).getTime();
-  }
-
+  // Strictement les ventes enregistrées durant cette session de caisse (entre son ouverture et sa clôture)
   return (allSales || []).filter((s) => {
     if (!s || !s.createdAt) return false;
     const saleTime = new Date(s.createdAt).getTime();
     if (isNaN(saleTime)) return false;
-
-    // 1. Vente après l'ouverture du shift
-    if (saleTime >= sessionOpenedTime) return true;
-
-    // 2. OU vente de la journée avant l'ouverture du shift (sans précédent shift fermé la couvrant)
-    const isToday = isSameCalendarDay(s.createdAt, session.openedAt);
-    if (isToday && (cutoffTime === 0 || saleTime > cutoffTime)) {
-      return true;
-    }
-
-    return false;
+    return saleTime >= sessionOpenedTime && saleTime <= sessionClosedTime;
   });
 }
 // ─── Reducer ─────────────────────────────────────────────────
@@ -557,6 +524,16 @@ interface StoreContextType {
   netProfit: number;
   activeCashSession: CashSession | null;
   cashSessions: CashSession[];
+  currentSessionSales: Sale[];
+  currentSessionStats: {
+    cash: number;
+    mm: number;
+    card: number;
+    total: number;
+    count: number;
+    opening: number;
+    expectedCashInDrawer: number;
+  };
   openCashSession: (openingAmount: number, cashierName?: string) => Promise<CashSession>;
   closeCashSession: (closingAmount: number, notes?: string) => Promise<CashSession | null>;
   isOnline: boolean;
@@ -1716,9 +1693,41 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   const categoryNames = state.categories.map((c) => c.name);
 
+  const currentSessionSales = useMemo(() => {
+    if (!state.activeCashSession) return [];
+    return getSalesForSession(state.activeCashSession, state.sales || [], state.cashSessions || []);
+  }, [state.activeCashSession, state.sales, state.cashSessions]);
+
+  const currentSessionStats = useMemo(() => {
+    const sales = currentSessionSales || [];
+    const cash = sales.filter((s) => s && s.paymentMethod === "cash").reduce((sum, s) => sum + (Number(s.total) || 0), 0);
+    const mm = sales.filter((s) => s && s.paymentMethod === "mobile_money").reduce((sum, s) => sum + (Number(s.total) || 0), 0);
+    const card = sales.filter((s) => s && s.paymentMethod === "card").reduce((sum, s) => sum + (Number(s.total) || 0), 0);
+    const total = sales.reduce((sum, s) => sum + (Number(s.total) || 0), 0);
+    const count = sales.length;
+    const opening = Number(state.activeCashSession?.openingAmount) || 0;
+    const expectedCashInDrawer = opening + cash;
+    return { cash, mm, card, total, count, opening, expectedCashInDrawer };
+  }, [currentSessionSales, state.activeCashSession]);
+
   const openCashSession = async (openingAmount: number, cashierName?: string): Promise<CashSession> => {
     const openedAt = new Date().toISOString();
-    const tempSession: CashSession = {
+
+    // S'assurer qu'aucune ancienne session ne reste "open" par accident
+    if (activeStore?.id) {
+      try {
+        await supabase
+          .from("cash_sessions")
+          .update({ status: "closed", closed_at: openedAt })
+          .eq("store_id", activeStore.id)
+          .eq("status", "open");
+      } catch (e) {
+        console.warn("Fermeture sessions orphelines:", e);
+      }
+    }
+
+    // Le shift de caisse démarre TOUJOURS avec compteurs remis à 0
+    const session: CashSession = {
       id: "cs_" + Date.now() + "_" + Math.random().toString(36).substring(2, 7),
       storeId: activeStore?.id || "",
       userId: user?.id || "",
@@ -1734,23 +1743,6 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       status: "open",
     };
 
-    // Prendre en compte les ventes déjà faites aujourd'hui avant ouverture
-    const priorSales = getSalesForSession(tempSession, state.sales, state.cashSessions);
-    const priorCash = priorSales.filter((s) => s.paymentMethod === "cash").reduce((sum, s) => sum + s.total, 0);
-    const priorMM = priorSales.filter((s) => s.paymentMethod === "mobile_money").reduce((sum, s) => sum + s.total, 0);
-    const priorCard = priorSales.filter((s) => s.paymentMethod === "card").reduce((sum, s) => sum + s.total, 0);
-    const priorTotal = priorSales.reduce((sum, s) => sum + s.total, 0);
-
-    const session: CashSession = {
-      ...tempSession,
-      totalCashSales: priorCash,
-      totalMobileMoneySales: priorMM,
-      totalCardSales: priorCard,
-      totalSalesCount: priorSales.length,
-      totalSalesAmount: priorTotal,
-      expectedAmount: openingAmount + priorCash,
-    };
-
     if (activeStore?.id) {
       try {
         await supabase.from("cash_sessions").insert([{
@@ -1760,11 +1752,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           cashier_name: session.cashierName,
           opening_amount: session.openingAmount,
           expected_amount: session.expectedAmount,
-          total_cash_sales: session.totalCashSales,
-          total_mobile_money_sales: session.totalMobileMoneySales,
-          total_card_sales: session.totalCardSales,
-          total_sales_count: session.totalSalesCount,
-          total_sales_amount: session.totalSalesAmount,
+          total_cash_sales: 0,
+          total_mobile_money_sales: 0,
+          total_card_sales: 0,
+          total_sales_count: 0,
+          total_sales_amount: 0,
           status: "open",
           opened_at: session.openedAt
         }]);
@@ -1849,6 +1841,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       netProfit,
       activeCashSession: state.activeCashSession,
       cashSessions: state.cashSessions,
+      currentSessionSales,
+      currentSessionStats,
       openCashSession,
       closeCashSession,
       isOnline,
