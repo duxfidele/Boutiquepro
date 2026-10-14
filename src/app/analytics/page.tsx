@@ -87,10 +87,11 @@ export default function AnalyticsPage() {
   const [exportType, setExportType] = useState<"sales" | "expenses" | "inventory" | "ledger">("sales");
   const [exportPeriod, setExportPeriod] = useState<"all" | "month" | "last_month" | "week" | "today">("month");
   const [exportFormat, setExportFormat] = useState<ExportFormat>("excel");
+  const [exportSortOrder, setExportSortOrder] = useState<"asc" | "desc">("asc");
   const [exportSuccessNotice, setExportSuccessNotice] = useState<string | null>(null);
 
   const handleRunExport = () => {
-    const filter: DateFilterOptions = { period: exportPeriod };
+    const filter: DateFilterOptions = { period: exportPeriod, sortOrder: exportSortOrder };
     const currency = state.settings.currency || "FCFA";
 
     if (exportType === "sales") {
@@ -1148,10 +1149,43 @@ export default function AnalyticsPage() {
                   </div>
                 )}
 
+                {/* Ordre Chronologique */}
+                {(exportType === "sales" || exportType === "expenses") && (
+                  <div>
+                    <label className="text-xs font-bold text-foreground block mb-2">3. Ordre de tri par date & heure</label>
+                    <div className="grid grid-cols-2 gap-2 text-xs">
+                      <button
+                        type="button"
+                        onClick={() => setExportSortOrder("asc")}
+                        className={`py-2 px-2.5 rounded-xl border text-center transition-all ${
+                          exportSortOrder === "asc"
+                            ? "border-primary bg-primary/10 text-primary font-bold"
+                            : "border-border/50 bg-secondary/20 hover:bg-secondary/40 text-muted-foreground"
+                        }`}
+                      >
+                        <span className="block font-bold">Chronologique (Recommandé)</span>
+                        <span className="text-[10px] opacity-75">Du matin au soir (08h → 20h)</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setExportSortOrder("desc")}
+                        className={`py-2 px-2.5 rounded-xl border text-center transition-all ${
+                          exportSortOrder === "desc"
+                            ? "border-primary bg-primary/10 text-primary font-bold"
+                            : "border-border/50 bg-secondary/20 hover:bg-secondary/40 text-muted-foreground"
+                        }`}
+                      >
+                        <span className="block font-bold">Antéchronologique</span>
+                        <span className="text-[10px] opacity-75">Du plus récent au plus ancien</span>
+                      </button>
+                    </div>
+                  </div>
+                )}
+
                 {/* 3. Format */}
                 <div>
                   <label className="text-xs font-bold text-foreground block mb-2">
-                    {exportType === "inventory" ? "2. Format du fichier" : "3. Format du fichier"}
+                    {exportType === "inventory" ? "2. Format du fichier" : exportType === "ledger" ? "3. Format du fichier" : "4. Format du fichier"}
                   </label>
                   <div className="grid grid-cols-2 gap-3">
                     <button

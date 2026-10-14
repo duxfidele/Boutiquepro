@@ -1093,11 +1093,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           supabase.from('settings').select('*').eq('store_id', activeStore.id).maybeSingle(),
           supabase.from('categories').select('*').eq('store_id', activeStore.id),
           supabase.from('products').select('*').eq('store_id', activeStore.id),
-          supabase.from('sales').select('*, items:sale_items(*)').eq('store_id', activeStore.id),
+          supabase.from('sales').select('*, items:sale_items(*)').eq('store_id', activeStore.id).order('created_at', { ascending: false }),
           supabase.from('customers').select('*').eq('store_id', activeStore.id),
           supabase.from('orders').select('*, items:order_items(*)').eq('store_id', activeStore.id),
           supabase.from('inventory_sessions').select('*, items:inventory_items(*)'),
-          supabase.from('expenses').select('*').eq('store_id', activeStore.id),
+          supabase.from('expenses').select('*').eq('store_id', activeStore.id).order('date', { ascending: false }),
           supabase.from('cash_sessions').select('*').eq('store_id', activeStore.id).order('opened_at', { ascending: false })
         ]);
 
@@ -1260,7 +1260,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         if (expenses) {
           payload.expenses = expenses.map((e: any) => ({
              ...e,
-             createdAt: e.created_at
+             createdAt: e.created_at || e.createdAt || e.date
           }));
         }
         // 1. Lire d'abord le cache local pour la boutique active (résilience multi-boutique absolue)

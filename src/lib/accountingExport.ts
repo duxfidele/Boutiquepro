@@ -7,6 +7,7 @@ export interface DateFilterOptions {
   period?: "all" | "today" | "week" | "month" | "last_month" | "custom";
   startDate?: string;
   endDate?: string;
+  sortOrder?: "asc" | "desc";
 }
 
 // ─── 1. Téléchargement Universel de Fichier ───────────────────
@@ -48,6 +49,25 @@ export function generateCSV(
 
 // ─── 3. Générateur Excel Structuré (.xls XML) ─────────────────
 // ─── 3. Générateur Microsoft Excel Natif (.xlsx Binaire Standard) ───
+// ─── Helpers Horodatage & Dates Locales Fiables ─────────────
+export function parseSafeTimestamp(raw?: string | null): number {
+  if (!raw) return 0;
+  const t = new Date(raw).getTime();
+  return isNaN(t) ? 0 : t;
+}
+
+export function getLocalISODate(raw?: string | null): string {
+  if (!raw) return "";
+  const d = new Date(raw);
+  if (isNaN(d.getTime())) {
+    return raw.split("T")[0] || "";
+  }
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
 export function generateExcel(
   sheetTitle: string,
   headers: string[],
@@ -110,12 +130,16 @@ export function filterItemsByPeriod<T extends { createdAt?: string; date?: strin
   if (!options || !options.period || options.period === "all") return items;
 
   const now = new Date();
-  const todayStr = now.toISOString().split("T")[0];
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, "0");
+  const day = String(now.getDate()).padStart(2, "0");
+  const todayStr = `${year}-${month}-${day}`;
 
   return items.filter((item) => {
     const rawDate = item.createdAt || item.date;
     if (!rawDate) return false;
-    const itemDate = rawDate.split("T")[0];
+    const itemDate = getLocalISODate(rawDate);
+    if (!itemDate) return false;
 
     if (options.period === "today") return itemDate === todayStr;
     if (options.period === "week") {
@@ -124,15 +148,18 @@ export function filterItemsByPeriod<T extends { createdAt?: string; date?: strin
       const diffToMonday = (currentDay + 6) % 7;
       d.setDate(d.getDate() - diffToMonday);
       d.setHours(0, 0, 0, 0);
-      const mondayStr = d.toISOString().split("T")[0];
+      const monYear = d.getFullYear();
+      const monMonth = String(d.getMonth() + 1).padStart(2, "0");
+      const monDay = String(d.getDate()).padStart(2, "0");
+      const mondayStr = `${monYear}-${monMonth}-${monDay}`;
       return itemDate >= mondayStr;
     }
     if (options.period === "month") {
-      const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+      const currentMonth = `${year}-${month}`;
       return itemDate.startsWith(currentMonth);
     }
     if (options.period === "last_month") {
-      const prevDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+      const prevDate = new Date(year, now.getMonth() - 1, 1);
       const prevMonth = `${prevDate.getFullYear()}-${String(prevDate.getMonth() + 1).padStart(2, "0")}`;
       return itemDate.startsWith(prevMonth);
     }
@@ -152,7 +179,17 @@ export function exportSalesJournal(
   format: ExportFormat = "excel",
   filter?: DateFilterOptions
 ) {
-  const filtered = filterItemsByPeriod(sales, filter);
+  // Tri chronologique strict par Date et Heure (par défaut : du matin au soir, jour après jour)
+  const isDesc = filter?.sortOrder === "desc";
+  const filtered = filterItemsByPeriod(sales, filter).sort((a, b) => {
+    const timeA = parseSafeTimestamp(a.createdAt);
+    const timeB = parseSafeTimestamp(b.createdAt);
+    if (timeA !== timeB) {
+      return isDesc ? timeB - timeA : timeA - timeB;
+    }
+    return String(a.id || "").localeCompare(String(b.id || ""));
+  });
+
   const dateSuffix = new Date().toISOString().split("T")[0];
   const filename = `journal_des_ventes_${dateSuffix}`;
 
@@ -175,9 +212,10 @@ export function exportSalesJournal(
   let sumTotal = 0;
 
   const rows = filtered.map((s) => {
-    const d = new Date(s.createdAt);
-    const dateStr = d.toLocaleDateString("fr-FR");
-    const timeStr = d.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
+    const d = s.createdAt ? new Date(s.createdAt) : null;
+    const isValid = d && !isNaN(d.getTime());
+    const dateStr = isValid ? d.toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit", year: "numeric" }) : "-";
+    const timeStr = isValid ? d.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit", second: "2-digit" }) : "-";
 
     const totalQty = (s.items || []).reduce((acc, item) => acc + item.quantity, 0);
     const itemsDetail = (s.items || []).map((i) => `${i.productName} (x${i.quantity})`).join(", ");
@@ -234,12 +272,25 @@ export function exportExpensesJournal(
   format: ExportFormat = "excel",
   filter?: DateFilterOptions
 ) {
-  const filtered = filterItemsByPeriod(expenses, filter);
+  // Tri chronologique strict par Date et Heure (par défaut : du plus ancien au plus récent)
+  const isDesc = filter?.sortOrder === "desc";
+  const filtered = filterItemsByPeriod(expenses, filter).sort((a, b) => {
+    const rawA = a.createdAt || a.date;
+    const rawB = b.createdAt || b.date;
+    const timeA = parseSafeTimestamp(rawA);
+    const timeB = parseSafeTimestamp(rawB);
+    if (timeA !== timeB) {
+      return isDesc ? timeB - timeA : timeA - timeB;
+    }
+    return String(a.id || "").localeCompare(String(b.id || ""));
+  });
+
   const dateSuffix = new Date().toISOString().split("T")[0];
   const filename = `journal_des_depenses_${dateSuffix}`;
 
   const headers = [
     "Date",
+    "Heure",
     "N° Pièce",
     "Catégorie",
     "Description / Libellé",
@@ -249,12 +300,17 @@ export function exportExpensesJournal(
   let sumAmount = 0;
 
   const rows = filtered.map((e) => {
-    const d = e.date ? new Date(e.date).toLocaleDateString("fr-FR") : "";
+    const raw = e.createdAt || e.date;
+    const d = raw ? new Date(raw) : null;
+    const isValid = d && !isNaN(d.getTime());
+    const dateStr = isValid ? d.toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit", year: "numeric" }) : (e.date || "-");
+    const timeStr = isValid && (e.createdAt || (e.date && e.date.includes("T"))) ? d.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit", second: "2-digit" }) : "-";
     const amount = Number(e.amount) || 0;
     sumAmount += amount;
 
     return [
-      d,
+      dateStr,
+      timeStr,
       e.id,
       e.category || "Frais divers",
       e.description || "-",
@@ -265,6 +321,7 @@ export function exportExpensesJournal(
   const totalsRow: (string | number)[] = [
     "TOTAL DÉPENSES",
     `${filtered.length} opérations`,
+    "",
     "",
     "",
     sumAmount,
@@ -283,6 +340,13 @@ export function exportInventoryValuation(
   currency: string = "FCFA",
   format: ExportFormat = "excel"
 ) {
+  // Tri méthodique et ordonné par Catégorie (A-Z) puis par Nom de Produit (A-Z)
+  const sortedProducts = [...products].sort((a, b) => {
+    const catComp = (a.category || "").localeCompare(b.category || "");
+    if (catComp !== 0) return catComp;
+    return (a.name || "").localeCompare(b.name || "");
+  });
+
   const dateSuffix = new Date().toISOString().split("T")[0];
   const filename = `valorisation_stocks_${dateSuffix}`;
 
@@ -304,7 +368,7 @@ export function exportInventoryValuation(
   let totalCostValuation = 0;
   let totalSellingValuation = 0;
 
-  const rows = products.map((p) => {
+  const rows = sortedProducts.map((p) => {
     const cost = Number(p.cost) || 0;
     const price = Number(p.price) || 0;
     const stock = Number(p.stock) || 0;
@@ -337,7 +401,7 @@ export function exportInventoryValuation(
 
   const totalsRow: (string | number)[] = [
     "TOTAL INVENTAIRE",
-    `${products.length} références`,
+    `${sortedProducts.length} références`,
     "",
     "",
     "",
