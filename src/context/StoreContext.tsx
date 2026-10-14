@@ -249,6 +249,17 @@ const initialState: StoreState = {
 
 
 // ─── Fonctions d'agrégation des ventes de caisse ──────────────
+function generateUUID(): string {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return crypto.randomUUID();
+  }
+  return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, function (c) {
+    const r = (Math.random() * 16) | 0;
+    const v = c === "x" ? r : (r & 0x3) | 0x8;
+    return v.toString(16);
+  });
+}
+
 export function isSameCalendarDay(d1: string | Date, d2: string | Date = new Date()): boolean {
   try {
     const date1 = new Date(d1);
@@ -438,17 +449,22 @@ function storeReducer(state: StoreState, action: Action): StoreState {
       return { ...state, inventorySessions: newSessions, products: updatedProducts };
     }
     case "OPEN_CASH_SESSION": {
+      const updated = [action.payload, ...state.cashSessions.filter((cs) => cs.id !== action.payload.id)];
       return {
         ...state,
         activeCashSession: action.payload,
-        cashSessions: [action.payload, ...state.cashSessions.filter((cs) => cs.id !== action.payload.id)]
+        cashSessions: updated
       };
     }
     case "CLOSE_CASH_SESSION": {
+      const exists = state.cashSessions.some((cs) => cs.id === action.payload.id);
+      const updated = exists
+        ? state.cashSessions.map((cs) => cs.id === action.payload.id ? action.payload : cs)
+        : [action.payload, ...state.cashSessions];
       return {
         ...state,
         activeCashSession: null,
-        cashSessions: state.cashSessions.map((cs) => cs.id === action.payload.id ? action.payload : cs)
+        cashSessions: updated
       };
     }
     case "REALTIME_PRODUCT_UPDATE": {
@@ -1244,46 +1260,69 @@ export function StoreProvider({ children }: { children: ReactNode }) {
              createdAt: e.created_at
           }));
         }
-        payload.cashSessions = [];
-        payload.activeCashSession = null;
-        if (cashSessionsData && cashSessionsData.length > 0) {
-          payload.cashSessions = cashSessionsData.map((cs: any) => ({
-            id: cs.id,
-            storeId: cs.store_id,
-            userId: cs.user_id,
-            cashierName: cs.cashier_name,
-            openingAmount: Number(cs.opening_amount) || 0,
-            closingAmount: cs.closing_amount !== null ? Number(cs.closing_amount) : undefined,
-            expectedAmount: cs.expected_amount !== null ? Number(cs.expected_amount) : undefined,
-            difference: cs.difference !== null ? Number(cs.difference) : undefined,
-            totalCashSales: Number(cs.total_cash_sales) || 0,
-            totalMobileMoneySales: Number(cs.total_mobile_money_sales) || 0,
-            totalCardSales: Number(cs.total_card_sales) || 0,
-            totalSalesCount: Number(cs.total_sales_count) || 0,
-            totalSalesAmount: Number(cs.total_sales_amount) || 0,
-            openedAt: cs.opened_at,
-            closedAt: cs.closed_at,
-            status: cs.status || "open",
-            notes: cs.notes
-          }));
-          const currentOpen = payload.cashSessions.find((cs: any) => cs.status === "open");
-          if (currentOpen) {
-            // Recalcul dynamique des ventes réelles pour la session en cours
-            const sessionSales = getSalesForSession(currentOpen, payload.sales, payload.cashSessions);
-            const cash = sessionSales.filter((s: any) => s.paymentMethod === "cash").reduce((sum: number, s: any) => sum + s.total, 0);
-            const mm = sessionSales.filter((s: any) => s.paymentMethod === "mobile_money").reduce((sum: number, s: any) => sum + s.total, 0);
-            const card = sessionSales.filter((s: any) => s.paymentMethod === "card").reduce((sum: number, s: any) => sum + s.total, 0);
-            const totalAmount = sessionSales.reduce((sum: number, s: any) => sum + s.total, 0);
+        // 1. Lire d'abord le cache local pour la boutique active (résilience multi-boutique absolue)
+        let localSessions: CashSession[] = [];
+        if (typeof window !== "undefined" && activeStore?.id) {
+          try {
+            const raw = localStorage.getItem(`boutiquepro_cash_sessions_${activeStore.id}`);
+            if (raw) localSessions = JSON.parse(raw);
+          } catch (e) {}
+        }
 
-            currentOpen.totalCashSales = cash;
-            currentOpen.totalMobileMoneySales = mm;
-            currentOpen.totalCardSales = card;
-            currentOpen.totalSalesCount = sessionSales.length;
-            currentOpen.totalSalesAmount = totalAmount;
-            currentOpen.expectedAmount = currentOpen.openingAmount + cash;
+        const supabaseSessions: CashSession[] = (cashSessionsData || []).map((cs: any) => ({
+          id: cs.id,
+          storeId: cs.store_id,
+          userId: cs.user_id,
+          cashierName: cs.cashier_name,
+          openingAmount: Number(cs.opening_amount) || 0,
+          closingAmount: cs.closing_amount !== null && cs.closing_amount !== undefined ? Number(cs.closing_amount) : undefined,
+          expectedAmount: cs.expected_amount !== null && cs.expected_amount !== undefined ? Number(cs.expected_amount) : undefined,
+          difference: cs.difference !== null && cs.difference !== undefined ? Number(cs.difference) : undefined,
+          totalCashSales: Number(cs.total_cash_sales) || 0,
+          totalMobileMoneySales: Number(cs.total_mobile_money_sales) || 0,
+          totalCardSales: Number(cs.total_card_sales) || 0,
+          totalSalesCount: Number(cs.total_sales_count) || 0,
+          totalSalesAmount: Number(cs.total_sales_amount) || 0,
+          openedAt: cs.opened_at,
+          closedAt: cs.closed_at,
+          status: cs.status || "open",
+          notes: cs.notes
+        }));
 
-            payload.activeCashSession = currentOpen;
-          }
+        // Fusion sans perte : Supabase consolidé par les données locales
+        const sessionMap = new Map<string, CashSession>();
+        localSessions.forEach((s) => { if (s && s.id) sessionMap.set(s.id, s); });
+        supabaseSessions.forEach((s) => { if (s && s.id) sessionMap.set(s.id, s); });
+
+        const mergedSessions = Array.from(sessionMap.values()).sort(
+          (a, b) => new Date(b.openedAt).getTime() - new Date(a.openedAt).getTime()
+        );
+
+        if (typeof window !== "undefined" && activeStore?.id && mergedSessions.length > 0) {
+          try {
+            localStorage.setItem(`boutiquepro_cash_sessions_${activeStore.id}`, JSON.stringify(mergedSessions));
+          } catch (e) {}
+        }
+
+        payload.cashSessions = mergedSessions;
+        const currentOpen = mergedSessions.find((cs: any) => cs.status === "open");
+        if (currentOpen) {
+          const sessionSales = getSalesForSession(currentOpen, payload.sales, mergedSessions);
+          const cash = sessionSales.filter((s: any) => s.paymentMethod === "cash").reduce((sum: number, s: any) => sum + s.total, 0);
+          const mm = sessionSales.filter((s: any) => s.paymentMethod === "mobile_money").reduce((sum: number, s: any) => sum + s.total, 0);
+          const card = sessionSales.filter((s: any) => s.paymentMethod === "card").reduce((sum: number, s: any) => sum + s.total, 0);
+          const totalAmount = sessionSales.reduce((sum: number, s: any) => sum + s.total, 0);
+
+          currentOpen.totalCashSales = cash;
+          currentOpen.totalMobileMoneySales = mm;
+          currentOpen.totalCardSales = card;
+          currentOpen.totalSalesCount = sessionSales.length;
+          currentOpen.totalSalesAmount = totalAmount;
+          currentOpen.expectedAmount = currentOpen.openingAmount + cash;
+
+          payload.activeCashSession = currentOpen;
+        } else {
+          payload.activeCashSession = null;
         }
 
         // Restore Cart from localStorage (cart shouldn't be in DB)
@@ -1726,9 +1765,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       }
     }
 
-    // Le shift de caisse démarre TOUJOURS avec compteurs remis à 0
+    // Le shift de caisse démarre TOUJOURS avec un vrai UUID valide pour Postgres et compteurs à 0
+    const sessionId = generateUUID();
     const session: CashSession = {
-      id: "cs_" + Date.now() + "_" + Math.random().toString(36).substring(2, 7),
+      id: sessionId,
       storeId: activeStore?.id || "",
       userId: user?.id || "",
       cashierName: cashierName || user?.user_metadata?.full_name || user?.email?.split('@')[0] || "Caissier",
@@ -1743,12 +1783,24 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       status: "open",
     };
 
+    // Sauvegarde locale instantanée garantie par boutique
     if (activeStore?.id) {
       try {
-        await supabase.from("cash_sessions").insert([{
+        const storeKey = `boutiquepro_cash_sessions_${activeStore.id}`;
+        const existing: CashSession[] = JSON.parse(localStorage.getItem(storeKey) || "[]");
+        const updated = [session, ...existing.filter((s) => s.id !== session.id)];
+        localStorage.setItem(storeKey, JSON.stringify(updated));
+      } catch (e) {
+        console.warn("Notice stockage local ouverture caisse:", e);
+      }
+    }
+
+    if (activeStore?.id) {
+      try {
+        const { error } = await supabase.from("cash_sessions").insert([{
           id: session.id,
           store_id: activeStore.id,
-          user_id: user?.id,
+          user_id: user?.id || null,
           cashier_name: session.cashierName,
           opening_amount: session.openingAmount,
           expected_amount: session.expectedAmount,
@@ -1760,6 +1812,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           status: "open",
           opened_at: session.openedAt
         }]);
+        if (error) console.error("Erreur insertion Supabase cash_sessions:", error);
       } catch (e) {
         console.warn("Supabase cash_sessions insert notice:", e);
       }
@@ -1800,9 +1853,24 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       notes: notes || undefined
     };
 
+    // Sauvegarde locale instantanée garantie par boutique
     if (activeStore?.id) {
       try {
-        await supabase.from("cash_sessions").update({
+        const storeKey = `boutiquepro_cash_sessions_${activeStore.id}`;
+        const existing: CashSession[] = JSON.parse(localStorage.getItem(storeKey) || "[]");
+        const updated = existing.map((s) => s.id === cur.id ? closedSession : s);
+        if (!updated.some((s) => s.id === cur.id)) {
+          updated.unshift(closedSession);
+        }
+        localStorage.setItem(storeKey, JSON.stringify(updated));
+      } catch (e) {
+        console.warn("Notice stockage local clôture caisse:", e);
+      }
+    }
+
+    if (activeStore?.id) {
+      try {
+        const { error } = await supabase.from("cash_sessions").update({
           closing_amount: closingAmount,
           expected_amount: expected,
           difference: diff,
@@ -1815,6 +1883,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           closed_at: closedAt,
           notes: notes || null
         }).eq("id", cur.id);
+        if (error) console.error("Erreur mise à jour Supabase cash_sessions:", error);
       } catch (e) {
         console.warn("Supabase cash_sessions update notice:", e);
       }

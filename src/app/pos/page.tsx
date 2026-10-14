@@ -126,6 +126,13 @@ export default function POSPage() {
   const handleCompleteSale = () => {
     if (cart.length === 0) return;
 
+    if (!activeCashSession) {
+      alert("⚠️ La caisse est actuellement fermée. Veuillez d'abord ouvrir la caisse avec votre fond de caisse initial pour commencer les encaissements.");
+      setOpeningAmountInput("");
+      setShowOpenModal(true);
+      return;
+    }
+
     if (payMethod === "credit" && !customerName.trim()) {
       alert("⚠️ Le nom du client est obligatoire pour enregistrer une vente à crédit.");
       return;
@@ -247,6 +254,8 @@ export default function POSPage() {
         setSelectedZSession(closed);
         setShowCloseModal(false);
         setShowRapportZModal(true);
+        setClosingAmountInput("");
+        setClosingNotesInput("");
       }
     } finally {
       setIsClosingSubmitting(false);
