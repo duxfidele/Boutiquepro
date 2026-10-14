@@ -1129,7 +1129,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         if (products) {
           payload.products = products.map((p: any) => ({
             ...p,
-            minStock: p.min_stock || 0
+            price: Number(p.price) || 0,
+            cost: Number(p.cost) || 0,
+            stock: Number(p.stock) || 0,
+            minStock: Number(p.min_stock ?? p.minStock ?? 5),
+            image: p.image || "📦",
           }));
         }
         let localStoredPayments: DebtPayment[] = [];

@@ -141,38 +141,16 @@ export default function ProductExcelImportModal({ isOpen, onClose }: ProductExce
     XLSX.writeFile(wb, "modele_import_produits_maboutiquepro.xlsx");
   };
 
-  // Find column flexibly
-  const findValue = (row: any, candidates: string[]) => {
-    const keys = Object.keys(row);
-    // Direct or normalized match
-    for (const c of candidates) {
-      const match = keys.find(
-        (k) =>
-          k
-            .trim()
-            .toLowerCase()
-            .normalize("NFD")
-            .replace(/[̀-ͯ]/g, "") === c
-      );
-      if (match && row[match] !== undefined && row[match] !== null && String(row[match]).trim() !== "") {
-        return row[match];
-      }
-    }
-    // Partial substring match
-    for (const c of candidates) {
-      const match = keys.find((k) =>
-        k
-          .trim()
-          .toLowerCase()
-          .normalize("NFD")
-          .replace(/[̀-ͯ]/g, "")
-          .includes(c)
-      );
-      if (match && row[match] !== undefined && row[match] !== null && String(row[match]).trim() !== "") {
-        return row[match];
-      }
-    }
-    return undefined;
+  // Normalisation intelligente et exhaustive des en-têtes (accents, apostrophes ' et ’, ponctuations)
+  const normalizeHeader = (header: string): string => {
+    return String(header || "")
+      .trim()
+      .toLowerCase()
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "") // Enlève les accents
+      .replace(/[\'\’\`\-_()\[\]/\\.,:;]/g, " ") // Remplace apostrophes et ponctuations par des espaces
+      .replace(/\s+/g, " ")
+      .trim();
   };
 
   const processFile = async (selectedFile: File) => {
@@ -198,26 +176,124 @@ export default function ProductExcelImportModal({ isOpen, onClose }: ProductExce
 
       const rows: ParsedRow[] = [];
 
-      rawJson.forEach((row, idx) => {
-        const rawName = findValue(row, ["nom du produit", "nom", "designation", "libelle", "produit", "article", "name"]);
+      rawJson.forEach((row) => {
+        const keys = Object.keys(row);
+        const items = keys.map((k) => ({ original: k, norm: normalizeHeader(k) }));
+
+        const getValue = (predicate: (norm: string) => boolean) => {
+          const found = items.find((item) => {
+            if (!predicate(item.norm)) return false;
+            const v = row[item.original];
+            return v !== undefined && v !== null && String(v).trim() !== "";
+          });
+          return found ? row[found.original] : undefined;
+        };
+
+        // 1. Nom / Désignation du produit
+        const rawName = getValue((n) =>
+          n.includes("nom") ||
+          n.includes("designation") ||
+          n.includes("libelle") ||
+          n.includes("article") ||
+          n.includes("produit") ||
+          n.includes("description") ||
+          n.includes("name") ||
+          n.includes("item")
+        );
         if (!rawName || !String(rawName).trim()) return; // Ignorer les lignes sans nom
 
         const name = String(rawName).trim();
-        const rawCategory = findValue(row, ["categorie", "famille", "rayon", "category", "type", "groupe"]);
+
+        // 2. Catégorie / Rayon / Famille
+        const rawCategory = getValue((n) =>
+          n.includes("categor") ||
+          n.includes("rayon") ||
+          n.includes("famille") ||
+          n.includes("groupe") ||
+          n.includes("type")
+        );
         const category = rawCategory ? String(rawCategory).trim() : (state.categories[0]?.name || "Divers");
 
-        const rawSku = findValue(row, ["code barre (sku)", "code barre", "code-barre", "code barres", "code-barres", "sku", "code", "barcode", "reference", "ref"]);
-        const sku = rawSku ? String(rawSku).trim() : (name.substring(0, 3).toUpperCase() + "-" + Math.floor(1000 + Math.random() * 9000));
+        // 3. Code-barres / SKU / Référence
+        const rawSku = getValue((n) =>
+          (n.includes("sku") || n.includes("barre") || n.includes("barcode") || n.includes("ref") || n.includes("code")) &&
+          !n.includes("postal") && !n.includes("client") && !n.includes("pays")
+        );
+        const sku = rawSku 
+          ? String(rawSku).trim() 
+          : (name.substring(0, 3).toUpperCase() + "-" + Math.floor(1000 + Math.random() * 9000));
 
-        const price = parseSafeNumber(findValue(row, ["prix de vente", "prix vente", "prix ttc", "prix unitaire", "pv", "prix", "price", "selling price"]), 0);
-        const cost = parseSafeNumber(findValue(row, ["prix d achat", "prix dachat", "prix achat", "cout d achat", "cout", "pa", "cost", "purchase price"]), 0);
-        const stock = parseSafeNumber(findValue(row, ["quantite en stock", "quantite", "stock", "qte", "qty", "quantity"]), 0);
-        const minStock = parseSafeNumber(findValue(row, ["stock minimum", "stock min", "alerte stock", "min stock", "seuil"]), 5);
+        // 4. Prix d'achat / Coût de revient (Cost) - Détection infaillible avec apostrophes
+        const rawCost = getValue((n) =>
+          (n.includes("achat") ||
+           n.includes("cout") ||
+           n.includes("fournisseur") ||
+           n.includes("revient") ||
+           n.includes("cost") ||
+           n.includes("purchase") ||
+           n.includes("buy") ||
+           n === "pa" ||
+           n.startsWith("pa ") ||
+           n.endsWith(" pa")) &&
+          !n.includes("vente")
+        );
 
-        // Check if existing product in store
+        // 5. Prix de vente (Price) - Détection sans jamais confondre avec le prix d'achat
+        const rawPrice = getValue((n) => {
+          if (
+            n.includes("achat") ||
+            n.includes("cout") ||
+            n.includes("fournisseur") ||
+            n.includes("revient") ||
+            n.includes("cost") ||
+            n === "pa" ||
+            n.startsWith("pa ") ||
+            n.endsWith(" pa")
+          ) {
+            return false;
+          }
+          return (
+            n.includes("vente") ||
+            n.includes("selling") ||
+            n.includes("sale") ||
+            n.includes("public") ||
+            n.includes("client") ||
+            n.includes("ttc") ||
+            n.includes("prix") ||
+            n.includes("price") ||
+            n.includes("unitaire") ||
+            n === "pv" ||
+            n.startsWith("pv ")
+          );
+        });
+
+        // 6. Quantité en stock
+        const rawStock = getValue((n) =>
+          (n.includes("quantite") ||
+           n.includes("qte") ||
+           n.includes("qty") ||
+           n.includes("stock") ||
+           n.includes("disponible") ||
+           n.includes("physique") ||
+           n.includes("magasin") ||
+           n.includes("quantity")) &&
+          !n.includes("min") && !n.includes("seuil") && !n.includes("alerte") && !n.includes("max")
+        );
+
+        // 7. Stock minimum / seuil alerte
+        const rawMinStock = getValue((n) =>
+          n.includes("min") || n.includes("seuil") || n.includes("alerte") || n.includes("reapprovisionnement")
+        );
+
+        const price = parseSafeNumber(rawPrice, 0);
+        const cost = parseSafeNumber(rawCost, 0);
+        const stock = parseSafeNumber(rawStock, 0);
+        const minStock = parseSafeNumber(rawMinStock, 5);
+
+        // Vérification si le produit existe déjà en boutique
         const existing = state.products.find(
           (p) =>
-            (p.sku && p.sku.toLowerCase() === sku.toLowerCase()) ||
+            (p.sku && sku && p.sku.toLowerCase() === sku.toLowerCase()) ||
             p.name.toLowerCase() === name.toLowerCase()
         );
 
@@ -288,18 +364,23 @@ export default function ProductExcelImportModal({ isOpen, onClose }: ProductExce
             continue; // Ignorer les doublons si option décochée
           }
           const existingProd = state.products.find((p) => p.id === row.existingId);
-          const currentStock = existingProd ? existingProd.stock : 0;
+          const currentStock = existingProd ? Number(existingProd.stock) || 0 : 0;
           const finalStock = stockMode === "add" ? currentStock + row.stock : row.stock;
+
+          // Conservation intelligente : si le fichier ne fournit pas de prix d'achat (> 0), conserver l'ancien coût enregistré
+          const finalCost = row.cost > 0 ? row.cost : (Number(existingProd?.cost) || 0);
+          const finalPrice = row.price > 0 ? row.price : (Number(existingProd?.price) || 0);
+          const finalMinStock = row.minStock > 0 ? row.minStock : (Number(existingProd?.minStock) || 5);
 
           finalProductsToUpsert.push({
             id: row.existingId,
             name: row.name,
             sku: row.sku,
             category: row.category,
-            price: row.price,
-            cost: row.cost,
+            price: finalPrice,
+            cost: finalCost,
             stock: finalStock,
-            minStock: row.minStock,
+            minStock: finalMinStock,
             image: existingProd?.image || getEmojiForProduct(row.name, row.category),
             createdAt: existingProd?.createdAt || new Date().toISOString().split("T")[0],
           });
@@ -315,7 +396,7 @@ export default function ProductExcelImportModal({ isOpen, onClose }: ProductExce
             price: row.price,
             cost: row.cost,
             stock: row.stock,
-            minStock: row.minStock,
+            minStock: row.minStock > 0 ? row.minStock : 5,
             image: getEmojiForProduct(row.name, row.category),
             createdAt: new Date().toISOString().split("T")[0],
           });
@@ -375,6 +456,8 @@ export default function ProductExcelImportModal({ isOpen, onClose }: ProductExce
   const newRowsCount = parsedRows.filter((r) => !r.isExisting).length;
   const updateRowsCount = parsedRows.filter((r) => r.isExisting).length;
   const totalStockValue = parsedRows.reduce((acc, r) => acc + r.stock * r.price, 0);
+  const totalCostValue = parsedRows.reduce((acc, r) => acc + r.stock * r.cost, 0);
+  const totalProjectedProfit = totalStockValue - totalCostValue;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 overflow-y-auto animate-fade-in">
@@ -512,28 +595,34 @@ export default function ProductExcelImportModal({ isOpen, onClose }: ProductExce
             </div>
           ) : (
             <div className="space-y-5 animate-fade-in">
-              {/* Summary Badges */}
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                <div className="p-3.5 rounded-2xl bg-secondary/40 border border-border/60">
-                  <div className="text-xs text-muted-foreground font-medium">Produits détectés</div>
-                  <div className="text-lg font-bold text-foreground mt-0.5">{parsedRows.length}</div>
+              {/* Summary Badges : Nouveaux, Existants, Valeur Vente & Valeur Achat */}
+              <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+                <div className="p-3 rounded-2xl bg-secondary/40 border border-border/60">
+                  <div className="text-[11px] text-muted-foreground font-medium">Produits détectés</div>
+                  <div className="text-base font-bold text-foreground mt-0.5">{parsedRows.length}</div>
                 </div>
-                <div className="p-3.5 rounded-2xl bg-emerald-500/10 border border-emerald-500/20">
-                  <div className="text-xs text-emerald-600 dark:text-emerald-400 font-medium">Nouveaux</div>
-                  <div className="text-lg font-bold text-emerald-600 dark:text-emerald-400 mt-0.5">
+                <div className="p-3 rounded-2xl bg-emerald-500/10 border border-emerald-500/20">
+                  <div className="text-[11px] text-emerald-600 dark:text-emerald-400 font-medium">Nouveaux</div>
+                  <div className="text-base font-bold text-emerald-600 dark:text-emerald-400 mt-0.5">
                     +{newRowsCount}
                   </div>
                 </div>
-                <div className="p-3.5 rounded-2xl bg-blue-500/10 border border-blue-500/20">
-                  <div className="text-xs text-blue-600 dark:text-blue-400 font-medium">Déjà existants</div>
-                  <div className="text-lg font-bold text-blue-600 dark:text-blue-400 mt-0.5">
+                <div className="p-3 rounded-2xl bg-blue-500/10 border border-blue-500/20">
+                  <div className="text-[11px] text-blue-600 dark:text-blue-400 font-medium">Déjà existants</div>
+                  <div className="text-base font-bold text-blue-600 dark:text-blue-400 mt-0.5">
                     {updateRowsCount}
                   </div>
                 </div>
-                <div className="p-3.5 rounded-2xl bg-secondary/40 border border-border/60">
-                  <div className="text-xs text-muted-foreground font-medium">Valeur estimée</div>
-                  <div className="text-sm font-bold text-foreground mt-1 truncate">
+                <div className="p-3 rounded-2xl bg-secondary/40 border border-border/60">
+                  <div className="text-[11px] text-muted-foreground font-medium">Valeur Vente (CA)</div>
+                  <div className="text-xs font-bold text-primary mt-1 truncate" title={formatPrice(totalStockValue)}>
                     {formatPrice(totalStockValue)}
+                  </div>
+                </div>
+                <div className="p-3 rounded-2xl bg-amber-500/10 border border-amber-500/20">
+                  <div className="text-[11px] text-amber-600 dark:text-amber-400 font-medium">Valeur Achat (Coût)</div>
+                  <div className="text-xs font-bold text-amber-600 dark:text-amber-400 mt-1 truncate" title={formatPrice(totalCostValue)}>
+                    {formatPrice(totalCostValue)}
                   </div>
                 </div>
               </div>
@@ -594,37 +683,49 @@ export default function ProductExcelImportModal({ isOpen, onClose }: ProductExce
                           <th className="p-3">SKU</th>
                           <th className="p-3 text-right">Prix Vente</th>
                           <th className="p-3 text-right">Prix Achat</th>
+                          <th className="p-3 text-right">Marge</th>
                           <th className="p-3 text-right">Stock</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-border/40">
-                        {parsedRows.slice(0, 10).map((r, i) => (
-                          <tr key={i} className="hover:bg-secondary/20 transition-colors">
-                            <td className="p-3">
-                              {r.isExisting ? (
-                                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-500/10 text-blue-600 dark:text-blue-400">
-                                  Existant
+                        {parsedRows.slice(0, 10).map((r, i) => {
+                          const margin = r.price - r.cost;
+                          const marginPct = r.price > 0 ? Math.round((margin / r.price) * 100) : 0;
+                          return (
+                            <tr key={i} className="hover:bg-secondary/20 transition-colors">
+                              <td className="p-3">
+                                {r.isExisting ? (
+                                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-500/10 text-blue-600 dark:text-blue-400">
+                                    Existant
+                                  </span>
+                                ) : (
+                                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
+                                    Nouveau
+                                  </span>
+                                )}
+                              </td>
+                              <td className="p-3 font-medium text-foreground">{r.name}</td>
+                              <td className="p-3 text-muted-foreground">{r.category}</td>
+                              <td className="p-3 font-mono text-[11px] text-muted-foreground">{r.sku}</td>
+                              <td className="p-3 text-right font-semibold text-foreground">
+                                {formatPrice(r.price)}
+                              </td>
+                              <td className="p-3 text-right font-medium text-amber-600 dark:text-amber-400">
+                                {formatPrice(r.cost)}
+                              </td>
+                              <td className="p-3 text-right">
+                                <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                                  margin >= 0 ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400" : "bg-destructive/10 text-destructive"
+                                }`}>
+                                  {marginPct}% ({formatPrice(margin)})
                                 </span>
-                              ) : (
-                                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
-                                  Nouveau
-                                </span>
-                              )}
-                            </td>
-                            <td className="p-3 font-medium text-foreground">{r.name}</td>
-                            <td className="p-3 text-muted-foreground">{r.category}</td>
-                            <td className="p-3 font-mono text-[11px] text-muted-foreground">{r.sku}</td>
-                            <td className="p-3 text-right font-semibold text-foreground">
-                              {formatPrice(r.price)}
-                            </td>
-                            <td className="p-3 text-right text-muted-foreground">
-                              {formatPrice(r.cost)}
-                            </td>
-                            <td className="p-3 text-right font-bold text-foreground">
-                              {r.stock}
-                            </td>
-                          </tr>
-                        ))}
+                              </td>
+                              <td className="p-3 text-right font-bold text-foreground">
+                                {r.stock}
+                              </td>
+                            </tr>
+                          );
+                        })}
                       </tbody>
                     </table>
                   </div>
