@@ -31,9 +31,9 @@ const config: Config = {
       colors: {
         "on-surface-variant":"#3d4947", "on-secondary-fixed-variant":"#3323cc", "on-primary-fixed":"#00201d",
         "surface-container-lowest":"#ffffff", "inverse-primary":"#6bd8cb", "on-secondary-fixed":"#0f0069",
-        "primary":"#00685f", "tertiary":"#006947", "tertiary-fixed-dim":"#4edea3", "on-secondary":"#ffffff",
-        "secondary":"#4b41e1", "secondary-fixed-dim":"#c3c0ff", "secondary-container":"#645efb",
-        "surface-container-high":"#dce9ff", "error":"#ba1a1a", "outline-variant":"#bcc9c6", "background":"#f8f9ff",
+        "tertiary":"#006947", "tertiary-fixed-dim":"#4edea3", "on-secondary":"#ffffff",
+        "secondary-fixed-dim":"#c3c0ff", "secondary-container":"#645efb",
+        "surface-container-high":"#dce9ff", "error":"#ba1a1a", "outline-variant":"#bcc9c6", 
         "outline":"#6d7a77", "surface-bright":"#f8f9ff", "primary-fixed-dim":"#6bd8cb", "surface-container":"#e5eeff",
         "surface-container-low":"#eff4ff", "surface-dim":"#cbdbf5", "error-container":"#ffdad6", "on-tertiary":"#ffffff",
         "tertiary-fixed":"#6ffbbe", "on-primary":"#ffffff", "on-primary-container":"#f4fffc", "inverse-on-surface":"#eaf1ff",

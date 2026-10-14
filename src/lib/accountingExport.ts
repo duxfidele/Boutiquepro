@@ -1,3 +1,4 @@
+import * as XLSX from "xlsx";
 import { Sale, Expense, Product } from "@/context/StoreContext";
 
 export type ExportFormat = "excel" | "csv";
@@ -46,6 +47,7 @@ export function generateCSV(
 }
 
 // ─── 3. Générateur Excel Structuré (.xls XML) ─────────────────
+// ─── 3. Générateur Microsoft Excel Natif (.xlsx Binaire Standard) ───
 export function generateExcel(
   sheetTitle: string,
   headers: string[],
@@ -53,87 +55,54 @@ export function generateExcel(
   filename: string,
   totalsRow?: (string | number)[]
 ) {
-  let html = `
-  <html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">
-  <head>
-    <!--[if gte mso 9]>
-    <xml>
-      <x:ExcelWorkbook>
-        <x:ExcelWorksheets>
-          <x:ExcelWorksheet>
-            <x:Name>${sheetTitle.replace(/[/\\?*\[\]]/g, "_")}</x:Name>
-            <x:WorksheetOptions>
-              <x:DisplayGridlines/>
-            </x:WorksheetOptions>
-          </x:ExcelWorksheet>
-        </x:ExcelWorksheets>
-      </x:ExcelWorkbook>
-    </xml>
-    <![endif]-->
-    <meta http-equiv="content-type" content="text/plain; charset=UTF-8"/>
-    <style>
-      body { font-family: Calibri, Arial, sans-serif; }
-      table { border-collapse: collapse; width: 100%; font-size: 11pt; }
-      th { background-color: #1E3A8A; color: #FFFFFF; font-weight: bold; border: 1px solid #0F172A; padding: 10px; text-align: left; }
-      td { border: 1px solid #CBD5E1; padding: 8px 10px; }
-      .text-left { text-align: left; }
-      .text-center { text-align: center; }
-      .text-right { text-align: right; }
-      .zebra { background-color: #F8FAFC; }
-      .total-row { background-color: #E2E8F0; font-weight: bold; border-top: 2px solid #0F172A; border-bottom: 2px solid #0F172A; }
-      .title-block { font-size: 15pt; font-weight: bold; color: #1E3A8A; padding-bottom: 8px; }
-      .meta-block { font-size: 10pt; color: #64748B; padding-bottom: 12px; }
-    </style>
-  </head>
-  <body>
-    <table>
-      <tr><td colspan="${headers.length}" class="title-block">${sheetTitle}</td></tr>
-      <tr><td colspan="${headers.length}" class="meta-block">Généré le ${new Date().toLocaleDateString("fr-FR")} à ${new Date().toLocaleTimeString("fr-FR")} • MaBoutiquePro</td></tr>
-      <tr></tr>
-      <thead>
-        <tr>
-          ${headers.map((h) => `<th>${h}</th>`).join("")}
-        </tr>
-      </thead>
-      <tbody>
-  `;
+  // Créer un vrai classeur Excel binaire OpenXML compatible 100% Microsoft Office, Excel Online & Mobile
+  const wb = XLSX.utils.book_new();
 
-  rows.forEach((row, idx) => {
-    const isZebra = idx % 2 === 1 ? ' class="zebra"' : '';
-    html += `<tr${isZebra}>`;
-    row.forEach((cell) => {
-      const isNum = typeof cell === "number";
-      const align = isNum ? ' class="text-right"' : ' class="text-left"';
-      html += `<td${align}>${cell !== null && cell !== undefined ? cell : ""}</td>`;
-    });
-    html += `</tr>`;
-  });
+  // Entête propre
+  const sheetData: (string | number)[][] = [
+    [sheetTitle],
+    [`Document généré le ${new Date().toLocaleDateString("fr-FR")} à ${new Date().toLocaleTimeString("fr-FR")} • MaBoutiquePro`],
+    [], // ligne vide
+    headers,
+    ...rows,
+  ];
 
   if (totalsRow) {
-    html += `<tr class="total-row">`;
-    totalsRow.forEach((cell) => {
-      const isNum = typeof cell === "number";
-      const align = isNum ? ' class="text-right"' : ' class="text-left"';
-      html += `<td${align}>${cell !== null && cell !== undefined ? cell : ""}</td>`;
-    });
-    html += `</tr>`;
+    sheetData.push(totalsRow);
   }
 
-  html += `
-      </tbody>
-    </table>
-  </body>
-  </html>
-  `;
+  const ws = XLSX.utils.aoa_to_sheet(sheetData);
 
-  triggerFileDownload(
-    html,
-    filename.endsWith(".xls") ? filename : `${filename}.xls`,
-    "application/vnd.ms-excel;charset=utf-8;"
-  );
+  // Calcul intelligent des largeurs de colonnes pour lisibilité maximale
+  const colWidths = headers.map((h, colIndex) => {
+    let maxLen = String(h || "").length;
+    for (const r of rows) {
+      const cellVal = r[colIndex];
+      if (cellVal !== undefined && cellVal !== null) {
+        maxLen = Math.max(maxLen, String(cellVal).length);
+      }
+    }
+    if (totalsRow && totalsRow[colIndex] !== undefined && totalsRow[colIndex] !== null) {
+      maxLen = Math.max(maxLen, String(totalsRow[colIndex]).length);
+    }
+    return { wch: Math.max(maxLen + 4, 15) };
+  });
+  ws["!cols"] = colWidths;
+
+  const cleanName = sheetTitle.substring(0, 31).replace(/[/\\?*\[\]]/g, "_") || "Données";
+  XLSX.utils.book_append_sheet(wb, ws, cleanName);
+
+  const finalName = filename.endsWith(".xlsx")
+    ? filename
+    : filename.endsWith(".xls")
+    ? filename.replace(/\.xls$/, ".xlsx")
+    : `${filename}.xlsx`;
+
+  if (typeof window !== "undefined") {
+    XLSX.writeFile(wb, finalName);
+  }
 }
 
-// ─── 4. Filtre de Période Temporelle ──────────────────────────
 export function filterItemsByPeriod<T extends { createdAt?: string; date?: string }>(
   items: T[],
   options?: DateFilterOptions
@@ -150,8 +119,13 @@ export function filterItemsByPeriod<T extends { createdAt?: string; date?: strin
 
     if (options.period === "today") return itemDate === todayStr;
     if (options.period === "week") {
-      const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
-      return itemDate >= weekAgo;
+      const d = new Date(now);
+      const currentDay = d.getDay();
+      const diffToMonday = (currentDay + 6) % 7;
+      d.setDate(d.getDate() - diffToMonday);
+      d.setHours(0, 0, 0, 0);
+      const mondayStr = d.toISOString().split("T")[0];
+      return itemDate >= mondayStr;
     }
     if (options.period === "month") {
       const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;

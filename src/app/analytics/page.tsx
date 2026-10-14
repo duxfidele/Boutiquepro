@@ -80,7 +80,7 @@ export default function AnalyticsPage() {
     discrepantSessionsCount,
     totalPhysicalCashAndBank
   } = useStore();
-  const [period, setPeriod] = useState<"all" | "today" | "week">("all");
+  const [period, setPeriod] = useState<"all" | "today" | "week" | "month">("all");
   
   // Modal Export Comptable
   const [showExportModal, setShowExportModal] = useState(false);
@@ -115,18 +115,31 @@ export default function AnalyticsPage() {
 
   // Computed analytics (Concordance stricte avec le tableau de bord et prise en compte des remises)
   const analytics = useMemo(() => {
-    const today = new Date().toISOString().split("T")[0];
-    const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
+    const now = new Date();
+    const today = now.toISOString().split("T")[0];
+    
+    // Semaine calendaire stricte : Lundi 00:00:00 -> Dimanche 23:59:59
+    const currentDay = now.getDay();
+    const diffToMonday = (currentDay + 6) % 7;
+    const monday = new Date(now.getFullYear(), now.getMonth(), now.getDate() - diffToMonday, 0, 0, 0, 0);
+    const mondayStr = monday.toISOString().split("T")[0];
+    const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
 
     const filteredSales = state.sales.filter((s) => {
-      if (period === "today") return s.createdAt.startsWith(today);
-      if (period === "week") return s.createdAt >= weekAgo;
+      if (!s || !s.createdAt) return false;
+      const d = s.createdAt.split("T")[0];
+      if (period === "today") return d === today;
+      if (period === "week") return d >= mondayStr;
+      if (period === "month") return d.startsWith(currentMonth);
       return true;
     });
 
     const filteredExpenses = (state.expenses || []).filter((e) => {
-      if (period === "today") return e.date?.startsWith(today);
-      if (period === "week") return e.date >= weekAgo;
+      if (!e || !e.date) return false;
+      const d = e.date.split("T")[0];
+      if (period === "today") return d === today;
+      if (period === "week") return d >= mondayStr;
+      if (period === "month") return d.startsWith(currentMonth);
       return true;
     });
 
@@ -221,8 +234,11 @@ export default function AnalyticsPage() {
     // ─── Concordance de Caisse filtrée par période ─────────────
     const filteredCashSessions = (closedCashSessions || []).filter((cs) => {
       const sessionDate = cs.closedAt || cs.openedAt;
-      if (period === "today") return sessionDate?.startsWith(today);
-      if (period === "week") return sessionDate >= weekAgo;
+      if (!sessionDate) return false;
+      const d = sessionDate.split("T")[0];
+      if (period === "today") return d === today;
+      if (period === "week") return d >= mondayStr;
+      if (period === "month") return d.startsWith(currentMonth);
       return true;
     });
 
@@ -312,12 +328,13 @@ export default function AnalyticsPage() {
             <span>Export Comptable (Excel / CSV)</span>
           </button>
 
-          {/* Period selector */}
+          {/* Period selector (Journalier, Hebdo, Mensuel, Tout) */}
           <div className="flex items-center gap-1 bg-secondary/40 rounded-xl p-1">
             {[
-              { id: "all" as const, label: "Tout" },
-              { id: "week" as const, label: "7 jours" },
               { id: "today" as const, label: "Aujourd'hui" },
+              { id: "week" as const, label: "Cette semaine" },
+              { id: "month" as const, label: "Ce mois-ci" },
+              { id: "all" as const, label: "Tout l'historique" },
             ].map((p) => (
               <button
                 key={p.id}
@@ -908,7 +925,7 @@ export default function AnalyticsPage() {
             </p>
           </div>
           <span className="text-[11px] font-semibold text-emerald-600 bg-emerald-500/10 px-2.5 py-1 rounded-full border border-emerald-500/20 self-start sm:self-auto">
-            Formats Excel (.xls) & CSV
+            Formats Excel (.xlsx) & CSV
           </span>
         </div>
 
@@ -1110,7 +1127,7 @@ export default function AnalyticsPage() {
                       {[
                         { id: "month" as const, label: "Ce mois-ci" },
                         { id: "last_month" as const, label: "Mois dernier" },
-                        { id: "week" as const, label: "7 derniers jours" },
+                        { id: "week" as const, label: "Cette semaine" },
                         { id: "today" as const, label: "Aujourd'hui" },
                         { id: "all" as const, label: "Tout l'historique" },
                       ].map((p) => (
@@ -1148,7 +1165,7 @@ export default function AnalyticsPage() {
                     >
                       <FileSpreadsheet className="h-6 w-6 text-emerald-600" />
                       <div className="text-left">
-                        <p className="text-xs font-bold text-foreground">Microsoft Excel (.xls)</p>
+                        <p className="text-xs font-bold text-foreground">Microsoft Excel (.xlsx)</p>
                         <p className="text-[10px] opacity-80">Mise en forme stylisée & totaux</p>
                       </div>
                     </button>

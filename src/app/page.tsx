@@ -1,6 +1,6 @@
 "use client";
 
-import React from "react";
+import React, { useState, useMemo } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useStore } from "@/context/StoreContext";
@@ -28,7 +28,8 @@ import {
   MessageCircle,
   Check,
   ShieldAlert,
-  ShieldCheck
+  ShieldCheck,
+  Calendar
 } from "lucide-react";
 import { ProductAvatar } from "@/components/ui/ProductAvatar";
 
@@ -85,44 +86,170 @@ export default function Dashboard() {
     currentSessionSales,
   } = useStore();
 
+  const [period, setPeriod] = useState<"today" | "week" | "month" | "all">("today");
+
+  const periodStats = useMemo(() => {
+    const now = new Date();
+    const todayStr = now.toISOString().split("T")[0];
+
+    // Semaine calendaire stricte : Lundi 00:00:00 -> Dimanche 23:59:59
+    const currentDay = now.getDay(); // 0 = Dimanche, 1 = Lundi, ...
+    const diffToMonday = (currentDay + 6) % 7;
+    const monday = new Date(now.getFullYear(), now.getMonth(), now.getDate() - diffToMonday, 0, 0, 0, 0);
+    const mondayStr = monday.toISOString().split("T")[0];
+    const sunday = new Date(monday);
+    sunday.setDate(monday.getDate() + 6);
+    sunday.setHours(23, 59, 59, 999);
+
+    const currentMonthStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+
+    // Ventes de la période sélectionnée
+    const filteredSales = (state.sales || []).filter((s) => {
+      if (!s || !s.createdAt) return false;
+      const dStr = s.createdAt.split("T")[0];
+      if (period === "today") return dStr === todayStr;
+      if (period === "week") return dStr >= mondayStr;
+      if (period === "month") return dStr.startsWith(currentMonthStr);
+      return true;
+    });
+
+    // Dépenses de la période sélectionnée
+    const filteredExpenses = (state.expenses || []).filter((e) => {
+      if (!e || !e.date) return false;
+      const dStr = e.date.split("T")[0];
+      if (period === "today") return dStr === todayStr;
+      if (period === "week") return dStr >= mondayStr;
+      if (period === "month") return dStr.startsWith(currentMonthStr);
+      return true;
+    });
+
+    // Clôtures de caisse de la période sélectionnée
+    const filteredSessions = (closedCashSessions || []).filter((cs) => {
+      const d = cs.closedAt || cs.openedAt;
+      if (!d) return false;
+      const dStr = d.split("T")[0];
+      if (period === "today") return dStr === todayStr;
+      if (period === "week") return dStr >= mondayStr;
+      if (period === "month") return dStr.startsWith(currentMonthStr);
+      return true;
+    });
+
+    const revenue = filteredSales.reduce((acc, s) => acc + (Number(s.total) || 0), 0);
+    const ordersCount = filteredSales.length;
+
+    // Dépenses totales sur la période
+    const periodExpenses = filteredExpenses.reduce((acc, e) => acc + (Number(e.amount) || 0), 0);
+
+    // Coût d'achat des marchandises vendues (COGS) sur la période
+    let totalCost = 0;
+    filteredSales.forEach((s) => {
+      (s.items || []).forEach((item) => {
+        const prod = (state.products || []).find((p) => p.id === item.productId);
+        if (prod) {
+          totalCost += (Number(prod.cost) || 0) * (Number(item.quantity) || 0);
+        }
+      });
+    });
+
+    // Écarts & déficits de caisse sur la période
+    const cashDiff = filteredSessions.reduce((acc, cs) => acc + (Number(cs.difference) || 0), 0);
+    const cashShortage = filteredSessions
+      .filter((cs) => (Number(cs.difference) || 0) < 0)
+      .reduce((acc, cs) => acc + Math.abs(Number(cs.difference) || 0), 0);
+    const cashSurplus = filteredSessions
+      .filter((cs) => (Number(cs.difference) || 0) > 0)
+      .reduce((acc, cs) => acc + (Number(cs.difference) || 0), 0);
+    const discrepantCount = filteredSessions.filter((cs) => Math.abs(Number(cs.difference) || 0) > 0).length;
+
+    // Crédits & recouvrement sur la période
+    const creditSalesPeriod = filteredSales.filter(
+      (s) => s.paymentMethod === "credit" || (s.remainingAmount !== undefined && s.remainingAmount > 0)
+    );
+    const periodCreditAmount = creditSalesPeriod.reduce((acc, s) => acc + (Number(s.total) || 0), 0);
+    const periodRemainingDebts = creditSalesPeriod.reduce(
+      (acc, s) => acc + (s.remainingAmount ?? (s.paymentStatus === "paid" ? 0 : s.total)),
+      0
+    );
+    const periodCollected = Math.max(0, revenue - periodRemainingDebts);
+    const physicalCashAndBank = Math.max(0, periodCollected - cashShortage);
+
+    const grossProfit = revenue - totalCost;
+    const netProfitPeriod = grossProfit - periodExpenses;
+    const collectedNetProfitPeriod = periodCollected - totalCost - periodExpenses - cashShortage;
+
+    return {
+      revenue,
+      ordersCount,
+      periodExpenses,
+      totalCost,
+      cashDiff,
+      cashShortage,
+      cashSurplus,
+      discrepantCount,
+      sessionsCount: filteredSessions.length,
+      periodCreditAmount,
+      periodRemainingDebts,
+      periodCollected,
+      physicalCashAndBank,
+      grossProfit,
+      netProfit: netProfitPeriod,
+      collectedNetProfit: collectedNetProfitPeriod,
+      filteredSales,
+      filteredSessions,
+      monday,
+      sunday,
+    };
+  }, [state.sales, state.expenses, state.products, closedCashSessions, period]);
+
+  const periodLabel = 
+    period === "today" 
+      ? "Aujourd'hui" 
+      : period === "week" 
+      ? "Cette Semaine" 
+      : period === "month" 
+      ? "Ce Mois-ci" 
+      : "Tout l'historique";
+
   const adminKpis = [
     {
-      label: "Chiffre d'affaires Facturé",
-      value: formatPrice(totalRevenue),
-      subValue: `Aujourd'hui: ${formatPrice(todayRevenue)}`,
+      label: `Chiffre d'affaires (${periodLabel})`,
+      value: formatPrice(periodStats.revenue),
+      subValue: period === "today" 
+        ? `${periodStats.ordersCount} vente(s) enregistrée(s)`
+        : `Aujourd'hui: ${formatPrice(todayRevenue)} • ${periodStats.ordersCount} vente(s)`,
       icon: TrendingUp,
-      trend: "Total ventes",
+      trend: periodLabel,
       trendUp: true,
       gradient: "from-primary/10 to-indigo-500/10",
       iconBg: "bg-primary/10 text-primary",
     },
     {
-      label: "Trésorerie Encaissée Réelle",
-      value: formatPrice(totalPhysicalCashAndBank),
-      subValue: totalCashShortage > 0 
-        ? `Théorique: ${formatPrice(totalCollectedRevenue)} • Manquant: -${formatPrice(totalCashShortage)}`
+      label: `Trésorerie Encaissée (${periodLabel})`,
+      value: formatPrice(periodStats.physicalCashAndBank),
+      subValue: periodStats.cashShortage > 0 
+        ? `Théorique: ${formatPrice(periodStats.periodCollected)} • Manquant: -${formatPrice(periodStats.cashShortage)}`
         : "100% net en caisse & banque",
       icon: Wallet,
-      trend: totalCashShortage > 0 ? "Perte Caisse !" : "Encaissé Réel",
-      trendUp: totalCashShortage === 0,
-      gradient: totalCashShortage > 0 ? "from-amber-500/15 to-rose-500/10" : "from-emerald-500/15 to-emerald-500/5",
-      iconBg: totalCashShortage > 0 ? "bg-amber-500/15 text-amber-500" : "bg-emerald-500/15 text-emerald-500",
+      trend: periodStats.cashShortage > 0 ? "Perte Caisse !" : "Encaissé Réel",
+      trendUp: periodStats.cashShortage === 0,
+      gradient: periodStats.cashShortage > 0 ? "from-amber-500/15 to-rose-500/10" : "from-emerald-500/15 to-emerald-500/5",
+      iconBg: periodStats.cashShortage > 0 ? "bg-amber-500/15 text-amber-500" : "bg-emerald-500/15 text-emerald-500",
     },
     {
-      label: "Écarts de Caisse (Audit Z)",
-      value: totalCashDifference === 0 
+      label: `Écarts de Caisse (${periodLabel})`,
+      value: periodStats.cashDiff === 0 
         ? "0 FCFA" 
-        : totalCashDifference < 0 
-          ? `-${formatPrice(Math.abs(totalCashDifference))}` 
-          : `+${formatPrice(totalCashDifference)}`,
-      subValue: totalCashShortage > 0 
-        ? `${discrepantSessionsCount} clôture(s) avec déficit` 
-        : `${cashDiscrepancyRate}% clôtures conformes`,
-      icon: totalCashShortage > 0 ? ShieldAlert : ShieldCheck,
-      trend: totalCashDifference < 0 ? "Manquant Caisse" : totalCashDifference > 0 ? "Surplus" : "Conforme",
-      trendUp: totalCashDifference >= 0,
-      gradient: totalCashDifference < 0 ? "from-rose-500/15 to-rose-500/5" : "from-emerald-500/15 to-emerald-500/5",
-      iconBg: totalCashDifference < 0 ? "bg-rose-500/15 text-rose-500" : "bg-emerald-500/15 text-emerald-500",
+        : periodStats.cashDiff < 0 
+          ? `-${formatPrice(Math.abs(periodStats.cashDiff))}` 
+          : `+${formatPrice(periodStats.cashDiff)}`,
+      subValue: periodStats.cashShortage > 0 
+        ? `${periodStats.discrepantCount} clôture(s) avec déficit sur la période` 
+        : `${periodStats.sessionsCount} clôture(s) enregistrée(s)`,
+      icon: periodStats.cashShortage > 0 ? ShieldAlert : ShieldCheck,
+      trend: periodStats.cashDiff < 0 ? "Manquant Caisse" : periodStats.cashDiff > 0 ? "Surplus" : "Conforme",
+      trendUp: periodStats.cashDiff >= 0,
+      gradient: periodStats.cashDiff < 0 ? "from-rose-500/15 to-rose-500/5" : "from-emerald-500/15 to-emerald-500/5",
+      iconBg: periodStats.cashDiff < 0 ? "bg-rose-500/15 text-rose-500" : "bg-emerald-500/15 text-emerald-500",
     },
     {
       label: "Créances Clients (Reste Dû)",
@@ -135,25 +262,25 @@ export default function Dashboard() {
       iconBg: overdueDebtsCount > 0 ? "bg-rose-500/15 text-rose-500" : "bg-amber-500/15 text-amber-500",
     },
     {
-      label: "Bénéfice Net Réel",
-      value: formatPrice(collectedNetProfit - totalCashShortage),
-      subValue: `Théorique: ${formatPrice(netProfit)}`,
+      label: `Bénéfice Net Réel (${periodLabel})`,
+      value: formatPrice(periodStats.collectedNetProfit),
+      subValue: `Marge: ${formatPrice(periodStats.grossProfit)} • Dépenses: -${formatPrice(periodStats.periodExpenses)}`,
       icon: Banknote,
-      trend: (collectedNetProfit - totalCashShortage) >= 0 ? "Bénéfice Net" : "Déficit Réel",
-      trendUp: (collectedNetProfit - totalCashShortage) >= 0,
-      gradient: (collectedNetProfit - totalCashShortage) >= 0 ? "from-accent/15 to-primary/5" : "from-destructive/15 to-destructive/5",
-      iconBg: (collectedNetProfit - totalCashShortage) >= 0 ? "bg-accent/10 text-accent" : "bg-destructive/10 text-destructive",
+      trend: periodStats.collectedNetProfit >= 0 ? "Bénéfice Net" : "Déficit Réel",
+      trendUp: periodStats.collectedNetProfit >= 0,
+      gradient: periodStats.collectedNetProfit >= 0 ? "from-accent/15 to-primary/5" : "from-destructive/15 to-destructive/5",
+      iconBg: periodStats.collectedNetProfit >= 0 ? "bg-accent/10 text-accent" : "bg-destructive/10 text-destructive",
     },
   ];
 
   const cashierLastDiff = Number(lastClosedCashSession?.difference) || 0;
   const cashierKpis = [
     {
-      label: "Chiffre d'affaires Encaissé",
-      value: formatPrice(totalPhysicalCashAndBank),
-      subValue: `Aujourd'hui: ${formatPrice(todayRevenue)}`,
+      label: `CA Encaissé (${periodLabel})`,
+      value: formatPrice(periodStats.physicalCashAndBank),
+      subValue: `Aujourd'hui: ${formatPrice(todayRevenue)} • ${periodStats.ordersCount} vente(s)`,
       icon: TrendingUp,
-      trend: "Total ventes",
+      trend: periodLabel,
       trendUp: true,
       gradient: "from-primary/10 to-indigo-500/10",
       iconBg: "bg-primary/10 text-primary",
@@ -171,26 +298,20 @@ export default function Dashboard() {
       iconBg: activeCashSession ? "bg-emerald-500/15 text-emerald-500" : "bg-muted text-muted-foreground",
     },
     {
-      label: "Écart de Caisse (Audit Z)",
-      value: lastClosedCashSession 
-        ? cashierLastDiff === 0 
-          ? "0 FCFA" 
-          : cashierLastDiff < 0 
-            ? `-${formatPrice(Math.abs(cashierLastDiff))}` 
-            : `+${formatPrice(cashierLastDiff)}`
-        : "0 FCFA",
-      subValue: lastClosedCashSession 
-        ? cashierLastDiff < 0 
-          ? `Dernière clôture: Manquant de -${formatPrice(Math.abs(cashierLastDiff))}` 
-          : cashierLastDiff > 0 
-            ? `Dernière clôture: Surplus de +${formatPrice(cashierLastDiff)}`
-            : "Dernière clôture: 100% conforme"
-        : "Aucune clôture enregistrée",
-      icon: (lastClosedCashSession && cashierLastDiff < 0) ? ShieldAlert : ShieldCheck,
-      trend: (lastClosedCashSession && cashierLastDiff < 0) ? "Manquant Caisse !" : "Conforme",
-      trendUp: !(lastClosedCashSession && cashierLastDiff < 0),
-      gradient: (lastClosedCashSession && cashierLastDiff < 0) ? "from-rose-500/15 to-rose-500/5" : "from-emerald-500/15 to-emerald-500/5",
-      iconBg: (lastClosedCashSession && cashierLastDiff < 0) ? "bg-rose-500/15 text-rose-500" : "bg-emerald-500/15 text-emerald-500",
+      label: `Écart de Caisse (${periodLabel})`,
+      value: periodStats.cashDiff === 0 
+        ? "0 FCFA" 
+        : periodStats.cashDiff < 0 
+          ? `-${formatPrice(Math.abs(periodStats.cashDiff))}` 
+          : `+${formatPrice(periodStats.cashDiff)}`,
+      subValue: periodStats.cashShortage > 0 
+        ? `Déficit de -${formatPrice(periodStats.cashShortage)} sur la période` 
+        : `${periodStats.sessionsCount} clôture(s) enregistrée(s)`,
+      icon: (periodStats.cashDiff < 0 || (lastClosedCashSession && cashierLastDiff < 0)) ? ShieldAlert : ShieldCheck,
+      trend: periodStats.cashDiff < 0 ? "Manquant Caisse !" : "Conforme",
+      trendUp: periodStats.cashDiff >= 0,
+      gradient: periodStats.cashDiff < 0 ? "from-rose-500/15 to-rose-500/5" : "from-emerald-500/15 to-emerald-500/5",
+      iconBg: periodStats.cashDiff < 0 ? "bg-rose-500/15 text-rose-500" : "bg-emerald-500/15 text-emerald-500",
     },
     {
       label: "Créances Clients en Attente",
@@ -216,24 +337,32 @@ export default function Dashboard() {
 
   const kpis = role === 'cashier' ? cashierKpis : adminKpis;
 
-  // Weekly sales chart data
+  // Weekly sales chart data : Semaine calendaire stricte du Lundi au Dimanche (remise à 0 le lundi)
   const weekDays = ["Lun", "Mar", "Mer", "Jeu", "Ven", "Sam", "Dim"];
   const weeklyData = [0, 0, 0, 0, 0, 0, 0];
   const now = new Date();
-  const oneWeekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
   
-  (state.sales || []).forEach(sale => {
+  // Calcul du Lundi de la semaine en cours à 00:00:00
+  const currentDayOfWeek = now.getDay(); // 0 = Dimanche, 1 = Lundi, ...
+  const diffToMonday = (currentDayOfWeek + 6) % 7;
+  const startOfWeek = new Date(now.getFullYear(), now.getMonth(), now.getDate() - diffToMonday, 0, 0, 0, 0);
+  const endOfWeek = new Date(startOfWeek);
+  endOfWeek.setDate(startOfWeek.getDate() + 7); // Exclusif
+
+  let currentWeekTotal = 0;
+  (state.sales || []).forEach((sale) => {
     if (!sale || !sale.createdAt) return;
     const saleDate = new Date(sale.createdAt);
-    if (saleDate >= oneWeekAgo) {
-      let dayIndex = saleDate.getDay() - 1;
-      if (dayIndex === -1) dayIndex = 6;
-      weeklyData[dayIndex] += sale.total;
+    if (saleDate >= startOfWeek && saleDate < endOfWeek) {
+      const dayIndex = (saleDate.getDay() + 6) % 7;
+      weeklyData[dayIndex] += Number(sale.total) || 0;
+      currentWeekTotal += Number(sale.total) || 0;
     }
   });
 
   const maxWeekly = Math.max(...weeklyData, 1);
-  const weeklyPercentages = weeklyData.map(val => (val / maxWeekly) * 100);
+  const weeklyPercentages = weeklyData.map((val) => (val / maxWeekly) * 100);
+  const todayIndex = (now.getDay() + 6) % 7;
 
   // Category breakdown
   const categoryEntries = Object.entries(categorySales).sort((a, b) => b[1] - a[1]);
@@ -245,8 +374,8 @@ export default function Dashboard() {
 
   return (
     <div className="space-y-6 animate-fade-in">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+      {/* Header avec Sélecteur de Période en 1 clic */}
+      <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold">
             {role === 'cashier' ? "Mon Tableau de bord" : "Tableau de bord de Direction"}
@@ -258,15 +387,69 @@ export default function Dashboard() {
             {new Date().toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}
           </p>
         </div>
-        <div className="flex gap-2">
-          <Link href="/debts" className="flex items-center gap-2 rounded-xl border border-amber-500/40 bg-amber-500/10 text-amber-500 px-3.5 py-2 text-sm font-semibold hover:bg-amber-500/20 transition-colors">
-            <BookOpen className="h-4 w-4" />
-            Carnet de Dettes ({unpaidDebts.length})
-          </Link>
-          <Link href="/pos" className="flex items-center gap-2 rounded-xl bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground hover:opacity-90 transition-opacity shadow-sm">
-            <ShoppingCart className="h-4 w-4" />
-            Nouvelle vente
-          </Link>
+
+        <div className="flex items-center gap-2.5 flex-wrap">
+          {/* Sélecteur de Période 1-Clic */}
+          <div className="inline-flex items-center p-1 rounded-2xl bg-secondary/80 border border-border/60 shadow-inner">
+            <button
+              type="button"
+              onClick={() => setPeriod("today")}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
+                period === "today"
+                  ? "bg-primary text-primary-foreground shadow-sm scale-[1.02]"
+                  : "text-muted-foreground hover:text-foreground hover:bg-background/50"
+              }`}
+            >
+              <Clock className="w-3.5 h-3.5" />
+              Aujourd&apos;hui
+            </button>
+            <button
+              type="button"
+              onClick={() => setPeriod("week")}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
+                period === "week"
+                  ? "bg-primary text-primary-foreground shadow-sm scale-[1.02]"
+                  : "text-muted-foreground hover:text-foreground hover:bg-background/50"
+              }`}
+            >
+              <Calendar className="w-3.5 h-3.5" />
+              Cette Semaine
+            </button>
+            <button
+              type="button"
+              onClick={() => setPeriod("month")}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
+                period === "month"
+                  ? "bg-primary text-primary-foreground shadow-sm scale-[1.02]"
+                  : "text-muted-foreground hover:text-foreground hover:bg-background/50"
+              }`}
+            >
+              <BarChart3 className="w-3.5 h-3.5" />
+              Ce Mois-ci
+            </button>
+            <button
+              type="button"
+              onClick={() => setPeriod("all")}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
+                period === "all"
+                  ? "bg-primary text-primary-foreground shadow-sm scale-[1.02]"
+                  : "text-muted-foreground hover:text-foreground hover:bg-background/50"
+              }`}
+            >
+              Tout
+            </button>
+          </div>
+
+          <div className="flex gap-2">
+            <Link href="/debts" className="flex items-center gap-2 rounded-xl border border-amber-500/40 bg-amber-500/10 text-amber-500 px-3.5 py-2 text-sm font-semibold hover:bg-amber-500/20 transition-colors">
+              <BookOpen className="h-4 w-4" />
+              Carnet de Dettes ({unpaidDebts.length})
+            </Link>
+            <Link href="/pos" className="flex items-center gap-2 rounded-xl bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground hover:opacity-90 transition-opacity shadow-sm">
+              <ShoppingCart className="h-4 w-4" />
+              Nouvelle vente
+            </Link>
+          </div>
         </div>
       </div>
 
@@ -461,39 +644,39 @@ export default function Dashboard() {
           </Link>
         </div>
 
-        {/* 3 Pillars Summary */}
+        {/* 3 Pillars Summary avec synchronisation période */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div className="p-4 rounded-xl bg-secondary/40 border border-border/40">
-            <div className="text-xs text-muted-foreground font-medium">1. Total Facturé (CA Brut)</div>
+            <div className="text-xs text-muted-foreground font-medium">1. Total Facturé ({periodLabel})</div>
             <div className="text-xl font-black text-foreground mt-1">
-              {formatPrice(totalRevenue)}
+              {formatPrice(periodStats.revenue)}
             </div>
             <div className="text-[11px] text-muted-foreground mt-0.5">
-              Toutes les ventes (comptant + crédit)
+              Ventes de la période ({periodStats.ordersCount} commande(s))
             </div>
           </div>
 
           <div className="p-4 rounded-xl bg-emerald-500/10 border border-emerald-500/20">
             <div className="text-xs text-emerald-500 font-semibold flex items-center gap-1">
-              <CheckCircle2 className="w-3.5 h-3.5" /> 2. Encaissé Réel (En Caisse)
+              <CheckCircle2 className="w-3.5 h-3.5" /> 2. Encaissé Réel ({periodLabel})
             </div>
             <div className="text-xl font-black text-emerald-500 mt-1">
-              {formatPrice(totalCollectedRevenue)}
+              {formatPrice(periodStats.periodCollected)}
             </div>
             <div className="text-[11px] text-muted-foreground mt-0.5">
-              Comptant + Acomptes recouvrés
+              Fonds nets rentrés sur la période
             </div>
           </div>
 
           <div className="p-4 rounded-xl bg-rose-500/10 border border-rose-500/20">
             <div className="text-xs text-rose-500 font-semibold flex items-center gap-1">
-              <Clock className="w-3.5 h-3.5" /> 3. Crédits en Attente (Reste Dû)
+              <Clock className="w-3.5 h-3.5" /> 3. Crédits en Attente ({periodLabel})
             </div>
             <div className="text-xl font-black text-rose-500 mt-1">
-              {formatPrice(totalDebtsAmount)}
+              {formatPrice(periodStats.periodRemainingDebts)}
             </div>
             <div className="text-[11px] text-muted-foreground mt-0.5">
-              À faire rentrer dans la trésorerie
+              Restes dus sur les ventes de la période
             </div>
           </div>
         </div>
@@ -537,34 +720,63 @@ export default function Dashboard() {
 
       {/* Charts Row */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Weekly Sales Chart */}
+        {/* Weekly Sales Chart (Semaine du Lundi au Dimanche avec remise à 0 automatique) */}
         <div className="lg:col-span-2 rounded-2xl border border-border/40 bg-card p-6">
-          <div className="flex items-center justify-between mb-6">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-6">
             <div>
-              <h2 className="text-base font-semibold">Ventes hebdomadaires</h2>
-              <p className="text-xs text-muted-foreground mt-0.5">Performance de la semaine en cours</p>
+              <div className="flex items-center gap-2">
+                <h2 className="text-base font-semibold">Ventes hebdomadaires</h2>
+                <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-primary/10 text-primary border border-primary/20">
+                  Du Lun. {startOfWeek.toLocaleDateString("fr-FR", { day: "numeric", month: "short" })} au Dim. {new Date(startOfWeek.getTime() + 6 * 86400000).toLocaleDateString("fr-FR", { day: "numeric", month: "short" })}
+                </span>
+              </div>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Cycle hebdomadaire strict • Le graphique redémarre à zéro chaque lundi
+              </p>
             </div>
-            <div className="flex items-center gap-1 text-xs text-accent font-medium">
-              <TrendingUp className="h-3.5 w-3.5" />
-              Activité de la semaine
+            <div className="flex items-center gap-1.5 self-start sm:self-auto">
+              <span className="text-xs font-black text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-3 py-1.5 rounded-xl border border-emerald-500/20">
+                Total semaine : {formatPrice(currentWeekTotal)}
+              </span>
             </div>
           </div>
           <div className="flex items-end justify-between gap-3 h-48">
-            {weekDays.map((day, i) => (
-              <div key={day} className="flex-1 flex flex-col items-center gap-2">
-                <div className="w-full relative flex items-end justify-center" style={{ height: "180px" }}>
-                  <div
-                    className="w-full max-w-[40px] rounded-t-lg bg-gradient-to-t from-primary to-primary/60 transition-all duration-500 hover:from-accent hover:to-accent/60 cursor-pointer"
-                    title={`${formatPrice(weeklyData[i])}`}
-                    style={{
-                      height: `${weeklyPercentages[i]}%`,
-                      animationDelay: `${i * 80}ms`,
-                    }}
-                  />
+            {weekDays.map((day, i) => {
+              const isToday = i === todayIndex;
+              const hasSales = weeklyData[i] > 0;
+              return (
+                <div key={day} className="flex-1 flex flex-col items-center gap-2">
+                  <div className="w-full relative flex items-end justify-center" style={{ height: "180px" }}>
+                    <div
+                      className={`w-full max-w-[42px] rounded-t-xl transition-all duration-500 cursor-pointer relative group ${
+                        isToday
+                          ? "bg-gradient-to-t from-emerald-500 to-emerald-400 shadow-md shadow-emerald-500/20"
+                          : hasSales
+                          ? "bg-gradient-to-t from-primary to-primary/60 hover:from-accent hover:to-accent/60"
+                          : "bg-secondary/40 hover:bg-secondary/60"
+                      }`}
+                      style={{
+                        height: `${Math.max(weeklyPercentages[i], hasSales ? 6 : 2)}%`,
+                        animationDelay: `${i * 80}ms`,
+                      }}
+                    >
+                      {/* Tooltip interactif */}
+                      <div className="absolute -top-9 left-1/2 -translate-x-1/2 bg-popover text-popover-foreground text-[10px] font-bold px-2 py-1 rounded-lg border border-border shadow-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-10">
+                        {formatPrice(weeklyData[i])}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex flex-col items-center">
+                    <span className={`text-[10px] font-semibold ${isToday ? "text-emerald-500 font-bold" : "text-muted-foreground"}`}>
+                      {day}
+                    </span>
+                    {isToday && (
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 mt-0.5 animate-pulse" title="Aujourd'hui" />
+                    )}
+                  </div>
                 </div>
-                <span className="text-[10px] text-muted-foreground font-medium">{day}</span>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
 

@@ -4,6 +4,7 @@ import React, { useState, useMemo, useRef } from "react";
 import { exportElementToPdf } from "@/lib/pdf";
 import Link from "next/link";
 import { useStore, Sale, DebtPayment } from "@/context/StoreContext";
+import { useAuth } from "@/context/AuthContext";
 import { 
   BookOpen, 
   Search, 
@@ -55,10 +56,10 @@ function getDebtPaid(debt?: Sale | null): number {
 }
 
 export default function DebtsPage() {
+  const { activeStore } = useAuth();
   const { 
     state, 
     recordDebtPayment, 
-    activeStore, 
     activeCashSession,
     formatPrice 
   } = useStore();

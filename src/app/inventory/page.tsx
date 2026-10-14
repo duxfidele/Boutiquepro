@@ -390,7 +390,7 @@ export default function InventoryPage() {
                         filename: `inventaire_${selectedSession.id}.pdf`,
                         image: { type: 'jpeg' as const, quality: 0.98 },
                         html2canvas: { scale: 2, useCORS: true, windowWidth: 1000 },
-                        jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
+                        jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' as const }
                       };
                       
                       html2pdf().set(opt).from(element).save().then(() => {

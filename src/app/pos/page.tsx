@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useMemo, useRef } from "react";
-import { useStore, Sale, CashSession, getSalesForSession } from "@/context/StoreContext";
+import { useStore, Sale, CashSession, getSalesForSession, DebtPayment } from "@/context/StoreContext";
 import { ProductAvatar } from "@/components/ui/ProductAvatar";
 import {
   ShoppingCart,

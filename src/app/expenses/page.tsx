@@ -14,7 +14,7 @@ export default function ExpensesPage() {
   const [form, setForm] = useState({
     date: new Date().toISOString().split("T")[0],
     category: "Loyer",
-    
+    description: "",
     amount: 0,
   });
 
@@ -43,12 +43,12 @@ export default function ExpensesPage() {
     }
     setShowModal(false);
     setEditExpense(null);
-    setForm({ date: new Date().toISOString().split("T")[0], category: "Loyer",  amount: 0 });
+    setForm({ date: new Date().toISOString().split("T")[0], category: "Loyer", description: "", amount: 0 });
   };
 
   const openEdit = (e: any) => {
     setEditExpense(e);
-    setForm({ date: e.date, category: e.category, amount: e.amount });
+    setForm({ date: e.date, category: e.category, description: e.description || "", amount: e.amount });
     setShowModal(true);
   };
 

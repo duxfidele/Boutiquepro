@@ -390,7 +390,7 @@ function storeReducer(state: StoreState, action: Action): StoreState {
           ...updatedActiveSession,
           totalCashSales: updatedActiveSession.totalCashSales + paymentAmount,
           totalSalesAmount: updatedActiveSession.totalSalesAmount + paymentAmount,
-          expectedAmount: updatedActiveSession.expectedAmount + paymentAmount,
+          expectedAmount: (updatedActiveSession.expectedAmount || 0) + paymentAmount,
         };
         updatedCashSessions = updatedCashSessions.map((cs) =>
           cs.id === updatedActiveSession?.id ? updatedActiveSession : cs
@@ -1181,8 +1181,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
                   })
                   .eq("id", s.id)
                   .eq("store_id", activeStore.id)
-                  .then(() => {})
-                  .catch(() => {});
+                  .then(() => {}, () => {});
               }
             }
 
@@ -1895,6 +1894,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   return (
     <StoreContext.Provider value={{ 
+      sales: state.sales,
+      products: state.products,
+      customers: state.customers,
+      expenses: state.expenses,
+      orders: state.orders,
       state, 
       dispatch, 
       formatPrice, 
