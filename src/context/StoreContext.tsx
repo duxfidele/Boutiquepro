@@ -194,6 +194,7 @@ type Action =
   | { type: "REALTIME_PRODUCT_UPDATE"; payload: Product }
   | { type: "REALTIME_PRODUCT_INSERT"; payload: Product }
   | { type: "REALTIME_PRODUCT_DELETE"; payload: string }
+  | { type: "REALTIME_PRODUCT_COST_UPDATE"; payload: { productId: string; cost: number } }
   | { type: "REALTIME_SALE_INSERT"; payload: Sale }
   | { type: "LOAD_STATE"; payload: StoreState };
 
@@ -471,7 +472,14 @@ function storeReducer(state: StoreState, action: Action): StoreState {
       const updated = action.payload;
       return {
         ...state,
-        products: state.products.map((p) => (p.id === updated.id ? { ...p, ...updated } : p)),
+        products: state.products.map((p) => (p.id === updated.id ? { ...p, ...updated, cost: (updated.cost !== undefined && updated.cost !== null) ? updated.cost : p.cost } : p)),
+      };
+    }
+    case "REALTIME_PRODUCT_COST_UPDATE": {
+      const { productId, cost } = action.payload;
+      return {
+        ...state,
+        products: state.products.map((p) => (p.id === productId ? { ...p, cost } : p)),
       };
     }
     case "REALTIME_PRODUCT_INSERT": {
@@ -597,7 +605,8 @@ interface StoreContextType {
 const StoreContext = createContext<StoreContextType | undefined>(undefined);
 
 export function StoreProvider({ children }: { children: ReactNode }) {
-  const { activeStore, user } = useAuth();
+  const { activeStore, user, role } = useAuth();
+  const isAdmin = role === 'admin' || activeStore?.role === 'admin';
   const [state, dispatchBase] = useReducer(storeReducer, initialState);
   const [isInitialized, setIsInitialized] = useState(false);
   const [isOnline, setIsOnline] = useState<boolean>(true);
@@ -980,7 +989,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
                 sku: p.sku,
                 category: p.category,
                 price: Number(p.price) || 0,
-                cost: Number(p.cost) || 0,
+                cost: undefined as any,
                 stock: Number(p.stock) || 0,
                 minStock: Number(p.min_stock || 0),
                 image: p.image || "📦",
@@ -997,7 +1006,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
                 sku: p.sku,
                 category: p.category,
                 price: Number(p.price) || 0,
-                cost: Number(p.cost) || 0,
+                cost: 0,
                 stock: Number(p.stock) || 0,
                 minStock: Number(p.min_stock || 0),
                 image: p.image || "📦",
@@ -1067,11 +1076,37 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         setIsRealtimeActive(status === "SUBSCRIBED");
       });
 
+    if (isAdmin) {
+      channel.on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "product_costs",
+          filter: `store_id=eq.${activeStore.id}`,
+        },
+        (payload: any) => {
+          if (payload.eventType === "INSERT" || payload.eventType === "UPDATE") {
+            const c = payload.new;
+            if (c?.product_id) {
+              dispatchBase({
+                type: "REALTIME_PRODUCT_COST_UPDATE",
+                payload: {
+                  productId: c.product_id,
+                  cost: Number(c.cost) || 0,
+                },
+              });
+            }
+          }
+        }
+      );
+    }
+
     return () => {
       supabase.removeChannel(channel);
       setIsRealtimeActive(false);
     };
-  }, [activeStore?.id]);
+  }, [activeStore?.id, isAdmin]);
 
   // Load from Supabase
   useEffect(() => {
@@ -1079,6 +1114,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
     async function loadData() {
       try {
+        const isAdminUser = role === 'admin' || activeStore?.role === 'admin';
+
         const [
           { data: settings },
           { data: categories },
@@ -1088,18 +1125,32 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           { data: orders },
           { data: inventory },
           { data: expenses },
-          { data: cashSessionsData }
+          { data: cashSessionsData },
+          productCostsRes
         ] = await Promise.all([
           supabase.from('settings').select('*').eq('store_id', activeStore.id).maybeSingle(),
           supabase.from('categories').select('*').eq('store_id', activeStore.id),
-          supabase.from('products').select('*').eq('store_id', activeStore.id),
+          supabase.from('products').select('id, name, sku, category, price, stock, min_stock, image, created_at, user_id, store_id').eq('store_id', activeStore.id),
           supabase.from('sales').select('*, items:sale_items(*)').eq('store_id', activeStore.id).order('created_at', { ascending: false }),
           supabase.from('customers').select('*').eq('store_id', activeStore.id),
           supabase.from('orders').select('*, items:order_items(*)').eq('store_id', activeStore.id),
           supabase.from('inventory_sessions').select('*, items:inventory_items(*)'),
           supabase.from('expenses').select('*').eq('store_id', activeStore.id).order('date', { ascending: false }),
-          supabase.from('cash_sessions').select('*').eq('store_id', activeStore.id).order('opened_at', { ascending: false })
+          supabase.from('cash_sessions').select('*').eq('store_id', activeStore.id).order('opened_at', { ascending: false }),
+          // Charger product_costs UNIQUEMENT pour l'admin (ne jamais interroger pour le caissier)
+          isAdminUser
+            ? supabase.from('product_costs').select('product_id, cost').eq('store_id', activeStore.id)
+            : Promise.resolve({ data: [] as any[] })
         ]);
+
+        const productCostsData = productCostsRes?.data;
+
+        const costsMap = new Map<string, number>();
+        if (isAdminUser && Array.isArray(productCostsData)) {
+          productCostsData.forEach((c: any) => {
+            costsMap.set(c.product_id, Number(c.cost) || 0);
+          });
+        }
 
         const payload: any = {
           sales: [],
@@ -1128,12 +1179,18 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         if (categories && categories.length > 0) payload.categories = categories;
         if (products) {
           payload.products = products.map((p: any) => ({
-            ...p,
+            id: p.id,
+            name: p.name,
+            sku: p.sku,
+            category: p.category,
             price: Number(p.price) || 0,
-            cost: Number(p.cost) || 0,
+            cost: isAdminUser ? (costsMap.get(p.id) ?? 0) : 0,
             stock: Number(p.stock) || 0,
             minStock: Number(p.min_stock ?? p.minStock ?? 5),
             image: p.image || "📦",
+            createdAt: p.created_at || new Date().toISOString(),
+            userId: p.user_id,
+            storeId: p.store_id,
           }));
         }
         let localStoredPayments: DebtPayment[] = [];
@@ -1350,7 +1407,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       }
     }
     loadData();
-  }, [activeStore]);
+  }, [activeStore?.id, role, activeStore?.role]);
 
   // Sync to local storage for unmigrated data (sales, inventory) just so it doesn't break
   useEffect(() => {
@@ -1362,8 +1419,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   // Async Dispatch Wrapper
   const dispatch = async (action: Action) => {
     try {
+      const isAdminUser = role === 'admin' || activeStore?.role === 'admin';
+
       if (action.type === "BATCH_ADD_PRODUCTS") {
         if (activeStore?.id && action.payload.length > 0) {
+          // 1. Enregistrement dans products sans colonne cost
           const records = action.payload.map((p) => ({
             store_id: activeStore.id,
             id: p.id,
@@ -1371,7 +1431,6 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             sku: p.sku,
             category: p.category,
             price: Number(p.price) || 0,
-            cost: Number(p.cost) || 0,
             stock: Number(p.stock) || 0,
             min_stock: Number(p.minStock) || 0,
             image: p.image || "📦",
@@ -1380,17 +1439,50 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           if (error) {
             console.error("Supabase Batch Add Products Error:", error);
             alert("Erreur lors de l'enregistrement de l'import: " + error.message);
+          } else if (isAdminUser) {
+            // 2. Coût enregistré dans product_costs UNIQUEMENT par l'admin
+            const costRecords = action.payload
+              .filter(p => p.cost !== undefined && p.cost !== null)
+              .map(p => ({
+                product_id: p.id,
+                store_id: activeStore.id,
+                cost: Number(p.cost) || 0
+              }));
+            if (costRecords.length > 0) {
+              const { error: costError } = await supabase.from('product_costs').upsert(costRecords);
+              if (costError) {
+                console.error("Supabase Batch Add Product Costs Error:", costError);
+              }
+            }
           }
         }
       }
       else if (action.type === "ADD_PRODUCT") {
         const p = action.payload;
-        const { error } = await supabase.from('products').insert([{ store_id: activeStore.id, 
-          id: p.id, name: p.name, sku: p.sku, category: p.category, 
-          price: p.price, cost: p.cost, stock: p.stock, 
-          min_stock: p.minStock, image: p.image
+        // 1. Enregistrement dans products sans colonne cost
+        const { error } = await supabase.from('products').insert([{
+          store_id: activeStore.id, 
+          id: p.id,
+          name: p.name,
+          sku: p.sku,
+          category: p.category, 
+          price: Number(p.price) || 0,
+          stock: Number(p.stock) || 0, 
+          min_stock: Number(p.minStock) || 0,
+          image: p.image || "📦"
         }]);
-        if (error) { console.error("Supabase Add Product Error:", error); alert("Erreur Supabase Produit: " + error.message + " (Code: " + error.code + ")"); }
+        if (error) {
+          console.error("Supabase Add Product Error:", error);
+          alert("Erreur Supabase Produit: " + error.message + " (Code: " + error.code + ")");
+        } else if (isAdminUser && p.cost !== undefined && p.cost !== null) {
+          // 2. Coût enregistré dans product_costs UNIQUEMENT pour l'admin
+          const { error: costError } = await supabase.from('product_costs').upsert({
+            product_id: p.id,
+            store_id: activeStore.id,
+            cost: Number(p.cost) || 0
+          });
+          if (costError) console.error("Supabase Add Product Cost Error:", costError);
+        }
       } 
       else if (action.type === "DELETE_PRODUCT") {
         const { error } = await supabase.from('products').delete().eq('id', action.payload);
@@ -1398,12 +1490,27 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       }
       else if (action.type === "UPDATE_PRODUCT") {
         const p = action.payload;
+        // 1. Mise à jour de products sans colonne cost
         const { error } = await supabase.from('products').update({
-          name: p.name, sku: p.sku, category: p.category, 
-          price: p.price, cost: p.cost, stock: p.stock, 
-          min_stock: p.minStock, image: p.image
+          name: p.name,
+          sku: p.sku,
+          category: p.category, 
+          price: Number(p.price) || 0,
+          stock: Number(p.stock) || 0, 
+          min_stock: Number(p.minStock) || 0,
+          image: p.image || "📦"
         }).eq('id', p.id);
         if (error) console.error("Supabase Update Product Error:", error);
+
+        if (isAdminUser && p.cost !== undefined && p.cost !== null) {
+          // 2. Coût mis à jour dans product_costs UNIQUEMENT pour l'admin
+          const { error: costError } = await supabase.from('product_costs').upsert({
+            product_id: p.id,
+            store_id: activeStore.id,
+            cost: Number(p.cost) || 0
+          });
+          if (costError) console.error("Supabase Update Product Cost Error:", costError);
+        }
       }
       else if (action.type === "UPDATE_SETTINGS") {
         const s = action.payload as any;

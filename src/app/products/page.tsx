@@ -60,7 +60,16 @@ export default function ProductsPage() {
 
   const openEdit = (p: Product) => {
     setEditProduct(p);
-    setForm({ name: p.name, sku: p.sku, category: p.category, price: p.price, cost: p.cost, stock: p.stock, minStock: p.minStock, image: p.image });
+    setForm({
+      name: p.name,
+      sku: p.sku,
+      category: p.category,
+      price: p.price,
+      cost: role === "admin" ? p.cost : 0,
+      stock: p.stock,
+      minStock: p.minStock,
+      image: p.image
+    });
     setShowModal(true);
   };
 
@@ -68,13 +77,15 @@ export default function ProductsPage() {
     if (!form.name) return;
     
     const finalSku = form.sku.trim() || (form.name.substring(0, 3).toUpperCase() + "-" + Math.floor(1000 + Math.random() * 9000));
+    const costToSave = role === "admin" ? (Number(form.cost) || 0) : 0;
 
     if (editProduct) {
-      dispatch({ type: "UPDATE_PRODUCT", payload: { ...editProduct, ...form, sku: finalSku } });
+      dispatch({ type: "UPDATE_PRODUCT", payload: { ...editProduct, ...form, cost: costToSave, sku: finalSku } });
     } else {
       const newProduct: Product = {
         id: "p" + Date.now(),
         ...form,
+        cost: costToSave,
         sku: finalSku,
         createdAt: new Date().toISOString().split("T")[0],
       };
@@ -126,16 +137,18 @@ export default function ProductsPage() {
           </p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
-          {/* Bouton IMPORTER EXCEL mis en valeur */}
-          <button
-            type="button"
-            onClick={() => setShowImportModal(true)}
-            className="flex items-center gap-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 text-xs font-bold transition-all shadow-md shadow-emerald-600/20 cursor-pointer active:scale-95"
-            title="Importer votre catalogue depuis un fichier Excel ou CSV"
-          >
-            <Upload className="h-4 w-4" />
-            <span>Importer Excel</span>
-          </button>
+          {/* Bouton IMPORTER EXCEL (Admin uniquement) */}
+          {role === "admin" && (
+            <button
+              type="button"
+              onClick={() => setShowImportModal(true)}
+              className="flex items-center gap-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 text-xs font-bold transition-all shadow-md shadow-emerald-600/20 cursor-pointer active:scale-95"
+              title="Importer votre catalogue depuis un fichier Excel ou CSV"
+            >
+              <Upload className="h-4 w-4" />
+              <span>Importer Excel</span>
+            </button>
+          )}
 
           {/* Bouton Nouveau Produit Manuel */}
           <button
@@ -147,16 +160,18 @@ export default function ProductsPage() {
             <span>Nouveau produit</span>
           </button>
 
-          {/* Bouton Exporter le stock (secondaire) */}
-          <button
-            type="button"
-            onClick={() => exportInventoryValuation(state.products, state.settings.currency, "excel")}
-            className="flex items-center gap-1.5 rounded-xl border border-border/60 bg-secondary/40 hover:bg-secondary px-3 py-2 text-xs font-medium text-muted-foreground hover:text-foreground transition-all shadow-xs"
-            title="Télécharger l'inventaire complet actuel en Excel"
-          >
-            <FileSpreadsheet className="h-3.5 w-3.5" />
-            <span>Exporter le stock</span>
-          </button>
+          {/* Bouton Exporter le stock (Admin uniquement) */}
+          {role === "admin" && (
+            <button
+              type="button"
+              onClick={() => exportInventoryValuation(state.products, state.settings.currency, "excel")}
+              className="flex items-center gap-1.5 rounded-xl border border-border/60 bg-secondary/40 hover:bg-secondary px-3 py-2 text-xs font-medium text-muted-foreground hover:text-foreground transition-all shadow-xs"
+              title="Télécharger l'inventaire complet actuel en Excel"
+            >
+              <FileSpreadsheet className="h-3.5 w-3.5" />
+              <span>Exporter le stock</span>
+            </button>
+          )}
         </div>
       </div>
 

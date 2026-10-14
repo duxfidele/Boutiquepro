@@ -42,7 +42,8 @@ interface ParsedRow {
 
 export default function ProductExcelImportModal({ isOpen, onClose }: ProductExcelImportModalProps) {
   const { state, dispatch, formatPrice } = useStore();
-  const { activeStore } = useAuth();
+  const { activeStore, role } = useAuth();
+  const isAdmin = role === "admin" || activeStore?.role === "admin";
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [file, setFile] = useState<File | null>(null);
@@ -456,8 +457,8 @@ export default function ProductExcelImportModal({ isOpen, onClose }: ProductExce
   const newRowsCount = parsedRows.filter((r) => !r.isExisting).length;
   const updateRowsCount = parsedRows.filter((r) => r.isExisting).length;
   const totalStockValue = parsedRows.reduce((acc, r) => acc + r.stock * r.price, 0);
-  const totalCostValue = parsedRows.reduce((acc, r) => acc + r.stock * r.cost, 0);
-  const totalProjectedProfit = totalStockValue - totalCostValue;
+  const totalCostValue = isAdmin ? parsedRows.reduce((acc, r) => acc + r.stock * r.cost, 0) : 0;
+  const totalProjectedProfit = isAdmin ? (totalStockValue - totalCostValue) : 0;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 overflow-y-auto animate-fade-in">
@@ -596,7 +597,7 @@ export default function ProductExcelImportModal({ isOpen, onClose }: ProductExce
           ) : (
             <div className="space-y-5 animate-fade-in">
               {/* Summary Badges : Nouveaux, Existants, Valeur Vente & Valeur Achat */}
-              <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+              <div className={`grid ${isAdmin ? "grid-cols-2 sm:grid-cols-5" : "grid-cols-2 sm:grid-cols-4"} gap-3`}>
                 <div className="p-3 rounded-2xl bg-secondary/40 border border-border/60">
                   <div className="text-[11px] text-muted-foreground font-medium">Produits détectés</div>
                   <div className="text-base font-bold text-foreground mt-0.5">{parsedRows.length}</div>
@@ -619,12 +620,14 @@ export default function ProductExcelImportModal({ isOpen, onClose }: ProductExce
                     {formatPrice(totalStockValue)}
                   </div>
                 </div>
-                <div className="p-3 rounded-2xl bg-amber-500/10 border border-amber-500/20">
-                  <div className="text-[11px] text-amber-600 dark:text-amber-400 font-medium">Valeur Achat (Coût)</div>
-                  <div className="text-xs font-bold text-amber-600 dark:text-amber-400 mt-1 truncate" title={formatPrice(totalCostValue)}>
-                    {formatPrice(totalCostValue)}
+                {isAdmin && (
+                  <div className="p-3 rounded-2xl bg-amber-500/10 border border-amber-500/20">
+                    <div className="text-[11px] text-amber-600 dark:text-amber-400 font-medium">Valeur Achat (Coût)</div>
+                    <div className="text-xs font-bold text-amber-600 dark:text-amber-400 mt-1 truncate" title={formatPrice(totalCostValue)}>
+                      {formatPrice(totalCostValue)}
+                    </div>
                   </div>
-                </div>
+                )}
               </div>
 
               {/* Options */}
@@ -682,8 +685,8 @@ export default function ProductExcelImportModal({ isOpen, onClose }: ProductExce
                           <th className="p-3">Catégorie</th>
                           <th className="p-3">SKU</th>
                           <th className="p-3 text-right">Prix Vente</th>
-                          <th className="p-3 text-right">Prix Achat</th>
-                          <th className="p-3 text-right">Marge</th>
+                          {isAdmin && <th className="p-3 text-right">Prix Achat</th>}
+                          {isAdmin && <th className="p-3 text-right">Marge</th>}
                           <th className="p-3 text-right">Stock</th>
                         </tr>
                       </thead>
@@ -710,16 +713,20 @@ export default function ProductExcelImportModal({ isOpen, onClose }: ProductExce
                               <td className="p-3 text-right font-semibold text-foreground">
                                 {formatPrice(r.price)}
                               </td>
-                              <td className="p-3 text-right font-medium text-amber-600 dark:text-amber-400">
-                                {formatPrice(r.cost)}
-                              </td>
-                              <td className="p-3 text-right">
-                                <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                                  margin >= 0 ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400" : "bg-destructive/10 text-destructive"
-                                }`}>
-                                  {marginPct}% ({formatPrice(margin)})
-                                </span>
-                              </td>
+                              {isAdmin && (
+                                <td className="p-3 text-right font-medium text-amber-600 dark:text-amber-400">
+                                  {formatPrice(r.cost)}
+                                </td>
+                              )}
+                              {isAdmin && (
+                                <td className="p-3 text-right">
+                                  <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                                    margin >= 0 ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400" : "bg-destructive/10 text-destructive"
+                                  }`}>
+                                    {marginPct}% ({formatPrice(margin)})
+                                  </span>
+                                </td>
+                              )}
                               <td className="p-3 text-right font-bold text-foreground">
                                 {r.stock}
                               </td>
