@@ -1071,10 +1071,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             console.warn("Notice Realtime sale items:", e);
           }
         }
-      )
-      .subscribe((status) => {
-        setIsRealtimeActive(status === "SUBSCRIBED");
-      });
+      );
 
     if (isAdmin) {
       channel.on(
@@ -1101,6 +1098,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         }
       );
     }
+
+    channel.subscribe((status) => {
+      setIsRealtimeActive(status === "SUBSCRIBED");
+    });
 
     return () => {
       supabase.removeChannel(channel);
