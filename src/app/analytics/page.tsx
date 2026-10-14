@@ -199,11 +199,25 @@ export default function AnalyticsPage() {
 
     // Métriques Crédits & Recouvrement pour la période sélectionnée
     const creditSalesPeriod = filteredSales.filter(
-      (s) => s.paymentMethod === "credit" || (s.remainingAmount !== undefined && s.remainingAmount > 0)
+      (s) => s && (s.paymentMethod === "credit" || (s.remainingAmount !== undefined && s.remainingAmount > 0))
     );
-    const periodCreditAmount = creditSalesPeriod.reduce((sum, s) => sum + s.total, 0);
-    const periodRemainingDebts = creditSalesPeriod.reduce((sum, s) => sum + (s.remainingAmount ?? (s.paymentStatus === 'paid' ? 0 : s.total)), 0);
-    const periodRecovered = creditSalesPeriod.reduce((sum, s) => sum + (s.amountPaid ?? (s.paymentStatus === 'paid' ? s.total : 0)), 0);
+    const periodCreditAmount = creditSalesPeriod.reduce((sum, s) => sum + (Number(s.total) || 0), 0);
+    const periodRemainingDebts = creditSalesPeriod.reduce((sum, s) => {
+      if (!s) return sum;
+      const total = Number.isFinite(Number(s.total)) ? Number(s.total) : 0;
+      const paid = Number.isFinite(Number(s.amountPaid)) ? Number(s.amountPaid) : 0;
+      const calculatedRem = Math.max(0, total - paid);
+      const rem = (typeof s.remainingAmount === "number" && Number.isFinite(s.remainingAmount) && s.remainingAmount > 0)
+        ? s.remainingAmount
+        : calculatedRem;
+      const isPaid = (s.paymentStatus === "paid" && paid >= total) || rem <= 0;
+      return sum + (isPaid ? 0 : rem);
+    }, 0);
+    const periodRecovered = creditSalesPeriod.reduce((sum, s) => {
+      if (!s) return sum;
+      const paid = Number.isFinite(Number(s.amountPaid)) ? Number(s.amountPaid) : (s.paymentStatus === "paid" ? Number(s.total) || 0 : 0);
+      return sum + paid;
+    }, 0);
     const periodCollectedRevenue = Math.max(0, revenue - periodRemainingDebts);
     const periodRecoveryRate = periodCreditAmount > 0 ? Math.min(100, Math.round((periodRecovered / periodCreditAmount) * 100)) : 100;
     const periodCollectedNetProfit = periodCollectedRevenue - totalCost - totalExpenses;
@@ -211,8 +225,15 @@ export default function AnalyticsPage() {
     // Top clients débiteurs
     const debtorsMap: Record<string, { name: string; phone?: string; remaining: number; totalCredit: number; dueDate?: string }> = {};
     (state.sales || []).forEach((s) => {
-      const rem = s.remainingAmount ?? (s.paymentMethod === 'credit' && s.paymentStatus !== 'paid' ? s.total : 0);
-      if (rem > 0 && s.customerName) {
+      if (!s) return;
+      const total = Number.isFinite(Number(s.total)) ? Number(s.total) : 0;
+      const paid = Number.isFinite(Number(s.amountPaid)) ? Number(s.amountPaid) : 0;
+      const calculatedRem = Math.max(0, total - paid);
+      const rem = (typeof s.remainingAmount === "number" && Number.isFinite(s.remainingAmount) && s.remainingAmount > 0)
+        ? s.remainingAmount
+        : calculatedRem;
+      const isPaid = (s.paymentStatus === "paid" && paid >= total) || rem <= 0;
+      if (!isPaid && rem > 0 && s.customerName) {
         const key = s.customerName.toLowerCase().trim();
         if (!debtorsMap[key]) {
           debtorsMap[key] = {

@@ -35,12 +35,12 @@ import {
 // Fonctions utilitaires sécurisées anti-NaN
 function getDebtRemaining(debt?: Sale | null): number {
   if (!debt) return 0;
-  if (debt.paymentStatus === "paid") return 0;
-  if (typeof debt.remainingAmount === "number" && Number.isFinite(debt.remainingAmount)) {
-    return Math.max(0, debt.remainingAmount);
-  }
   const total = Number.isFinite(Number(debt.total)) ? Number(debt.total) : 0;
   const paid = (typeof debt.amountPaid === "number" && Number.isFinite(debt.amountPaid)) ? debt.amountPaid : 0;
+  if (debt.paymentStatus === "paid" && paid >= total) return 0;
+  if (typeof debt.remainingAmount === "number" && Number.isFinite(debt.remainingAmount) && debt.remainingAmount > 0) {
+    return Math.max(0, debt.remainingAmount);
+  }
   return Math.max(0, total - paid);
 }
 

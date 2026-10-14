@@ -163,11 +163,21 @@ export default function Dashboard() {
 
     // Crédits & recouvrement sur la période
     const creditSalesPeriod = filteredSales.filter(
-      (s) => s.paymentMethod === "credit" || (s.remainingAmount !== undefined && s.remainingAmount > 0)
+      (s) => s && (s.paymentMethod === "credit" || (s.remainingAmount !== undefined && s.remainingAmount > 0))
     );
     const periodCreditAmount = creditSalesPeriod.reduce((acc, s) => acc + (Number(s.total) || 0), 0);
     const periodRemainingDebts = creditSalesPeriod.reduce(
-      (acc, s) => acc + (s.remainingAmount ?? (s.paymentStatus === "paid" ? 0 : s.total)),
+      (acc, s) => {
+        if (!s) return acc;
+        const total = Number.isFinite(Number(s.total)) ? Number(s.total) : 0;
+        const paid = Number.isFinite(Number(s.amountPaid)) ? Number(s.amountPaid) : 0;
+        const calculatedRem = Math.max(0, total - paid);
+        const rem = (typeof s.remainingAmount === "number" && Number.isFinite(s.remainingAmount) && s.remainingAmount > 0)
+          ? s.remainingAmount
+          : calculatedRem;
+        const isPaid = (s.paymentStatus === "paid" && paid >= total) || rem <= 0;
+        return acc + (isPaid ? 0 : rem);
+      },
       0
     );
     const periodCollected = Math.max(0, revenue - periodRemainingDebts);

@@ -196,6 +196,7 @@ type Action =
   | { type: "REALTIME_PRODUCT_DELETE"; payload: string }
   | { type: "REALTIME_PRODUCT_COST_UPDATE"; payload: { productId: string; cost: number } }
   | { type: "REALTIME_SALE_INSERT"; payload: Sale }
+  | { type: "REALTIME_SALE_UPDATE"; payload: Partial<Sale> & { id: string } }
   | { type: "LOAD_STATE"; payload: StoreState };
 
 // ─── Demo seed data ──────────────────────────────────────────
@@ -509,6 +510,13 @@ function storeReducer(state: StoreState, action: Action): StoreState {
         sales: [sale, ...state.sales],
       };
     }
+    case "REALTIME_SALE_UPDATE": {
+      const updated = action.payload;
+      return {
+        ...state,
+        sales: state.sales.map((s) => (s.id === updated.id ? { ...s, ...updated } : s)),
+      };
+    }
     case "LOAD_STATE":
       return { 
         ...action.payload, 
@@ -618,9 +626,13 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     return (state.sales || []).filter((s) => {
       if (!s || s.paymentMethod !== "credit") return false;
       const total = Number.isFinite(Number(s.total)) ? Number(s.total) : 0;
-      const paid = Number.isFinite(Number(s.amountPaid)) ? Number(s.amountPaid) : (s.paymentStatus === "paid" ? total : 0);
-      const rem = Number.isFinite(Number(s.remainingAmount)) ? Number(s.remainingAmount) : Math.max(0, total - paid);
-      return rem > 0 && s.paymentStatus !== "paid";
+      const paid = Number.isFinite(Number(s.amountPaid)) ? Number(s.amountPaid) : 0;
+      const calculatedRem = Math.max(0, total - paid);
+      const rem = (s.remainingAmount !== undefined && s.remainingAmount !== null && s.remainingAmount > 0)
+        ? Number(s.remainingAmount)
+        : calculatedRem;
+      const isPaid = (s.paymentStatus === "paid" && paid >= total) || rem <= 0;
+      return !isPaid && rem > 0;
     });
   }, [state.sales]);
 
@@ -628,8 +640,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     return (unpaidDebts || []).reduce((sum, s) => {
       if (!s) return sum;
       const total = Number.isFinite(Number(s.total)) ? Number(s.total) : 0;
-      const paid = Number.isFinite(Number(s.amountPaid)) ? Number(s.amountPaid) : (s.paymentStatus === "paid" ? total : 0);
-      const rem = Number.isFinite(Number(s.remainingAmount)) ? Number(s.remainingAmount) : Math.max(0, total - paid);
+      const paid = Number.isFinite(Number(s.amountPaid)) ? Number(s.amountPaid) : 0;
+      const calculatedRem = Math.max(0, total - paid);
+      const rem = (s.remainingAmount !== undefined && s.remainingAmount !== null && s.remainingAmount > 0)
+        ? Number(s.remainingAmount)
+        : calculatedRem;
       return sum + rem;
     }, 0);
   }, [unpaidDebts]);
@@ -681,15 +696,26 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
     if (typeof window !== "undefined" && navigator.onLine && activeStore?.id) {
       try {
-        await supabase
-          .from("sales")
-          .update({
-            amount_paid: newPaid,
-            remaining_amount: newRemaining,
-            payment_status: newStatus,
-          })
-          .eq("id", saleId)
-          .eq("store_id", activeStore.id);
+        const { error: rpcErr } = await supabase.rpc("record_debt_payment", {
+          p_store_id: activeStore.id,
+          p_sale_id: saleId,
+          p_payment_amount: paymentAmount,
+          p_payment_method: method,
+          p_note: note || null,
+          p_cashier_name: cashierName || user?.email?.split("@")[0] || "Caissier"
+        });
+
+        if (rpcErr) {
+          await supabase
+            .from("sales")
+            .update({
+              amount_paid: newPaid,
+              remaining_amount: newRemaining,
+              payment_status: newStatus,
+            })
+            .eq("id", saleId)
+            .eq("store_id", activeStore.id);
+        }
       } catch (err) {
         console.warn("Erreur mise à jour Supabase dette:", err);
       }
@@ -824,7 +850,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           p_payment_method: sale.paymentMethod,
           p_customer_name: sale.customerName || null,
           p_created_at: sale.createdAt,
-          p_items: sale.items
+          p_items: sale.items,
+          p_customer_phone: sale.customerPhone || null,
+          p_amount_paid: sale.amountPaid,
+          p_remaining_amount: sale.remainingAmount,
+          p_payment_status: sale.paymentStatus,
+          p_due_date: sale.dueDate || null,
         });
 
         if (saleError) {
@@ -845,13 +876,15 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             created_at: sale.createdAt
           }]);
         } else {
-          await supabase.from("sales").update({
-            customer_phone: sale.customerPhone,
-            amount_paid: sale.amountPaid,
-            remaining_amount: sale.remainingAmount,
-            payment_status: sale.paymentStatus,
-            due_date: sale.dueDate
-          }).eq("id", sale.id).eq("store_id", activeStore.id);
+          try {
+            await supabase.from("sales").update({
+              customer_phone: sale.customerPhone,
+              amount_paid: sale.amountPaid,
+              remaining_amount: sale.remainingAmount,
+              payment_status: sale.paymentStatus,
+              due_date: sale.dueDate
+            }).eq("id", sale.id).eq("store_id", activeStore.id);
+          } catch (e) {}
         }
       } catch (err) {
         console.warn("Basculement offline pour créance:", err);
@@ -885,6 +918,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             p_customer_name: s.customerName || null,
             p_created_at: s.createdAt,
             p_items: s.items,
+            p_customer_phone: s.customerPhone || null,
+            p_amount_paid: s.amountPaid ?? (s.paymentMethod === 'credit' ? 0 : s.total),
+            p_remaining_amount: s.remainingAmount ?? (s.paymentMethod === 'credit' ? s.total : 0),
+            p_payment_status: s.paymentStatus || (s.paymentMethod === 'credit' ? 'unpaid' : 'paid'),
+            p_due_date: s.dueDate || null,
           });
 
           // Succès ou vente déjà présente (idempotent code 23505)
@@ -1026,49 +1064,80 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       .on(
         "postgres_changes",
         {
-          event: "INSERT",
+          event: "*",
           schema: "public",
           table: "sales",
           filter: `store_id=eq.${activeStore.id}`,
         },
         async (payload: any) => {
-          const s = payload.new;
-          if (!s?.id) return;
+          if (payload.eventType === "INSERT") {
+            const s = payload.new;
+            if (!s?.id) return;
 
-          try {
-            const { data: items } = await supabase
-              .from("sale_items")
-              .select("*")
-              .eq("sale_id", s.id);
+            try {
+              const { data: items } = await supabase
+                .from("sale_items")
+                .select("*")
+                .eq("sale_id", s.id);
 
-            const sale: Sale = {
-              id: s.id,
-              items: (items || []).map((i: any) => ({
-                productId: i.product_id,
-                productName: i.product_name,
-                quantity: Number(i.quantity) || 1,
-                unitPrice: Number(i.unit_price) || 0,
-                total: Number(i.total) || 0,
-              })),
-              subtotal: Number(s.subtotal) || 0,
-              tax: Number(s.tax) || 0,
-              discount: Number(s.discount) || 0,
-              total: Number(s.total) || 0,
-              paymentMethod: s.payment_method || "cash",
-              amountGiven: s.amount_given ? Number(s.amount_given) : undefined,
-              change: s.change ? Number(s.change) : undefined,
-              customerName: s.customer_name || undefined,
-              createdAt: s.created_at || new Date().toISOString(),
-              userId: s.user_id,
-              storeId: s.store_id,
-            };
+              const isCredit = s.payment_method === "credit";
+              const totalAmt = Number(s.total) || 0;
+              const rawPaid = Number.isFinite(Number(s.amount_paid)) ? Number(s.amount_paid) : (isCredit ? 0 : totalAmt);
+              const calculatedRem = isCredit ? Math.max(0, totalAmt - rawPaid) : 0;
+              const rawRem = (Number.isFinite(Number(s.remaining_amount)) && Number(s.remaining_amount) > 0)
+                ? Number(s.remaining_amount)
+                : calculatedRem;
+
+              const sale: Sale = {
+                id: s.id,
+                items: (items || []).map((i: any) => ({
+                  productId: i.product_id,
+                  productName: i.product_name,
+                  quantity: Number(i.quantity) || 1,
+                  unitPrice: Number(i.unit_price) || 0,
+                  total: Number(i.total) || 0,
+                })),
+                subtotal: Number(s.subtotal) || 0,
+                tax: Number(s.tax) || 0,
+                discount: Number(s.discount) || 0,
+                total: totalAmt,
+                paymentMethod: s.payment_method || "cash",
+                amountGiven: s.amount_given ? Number(s.amount_given) : undefined,
+                change: s.change ? Number(s.change) : undefined,
+                customerName: s.customer_name || undefined,
+                customerPhone: s.customer_phone || undefined,
+                amountPaid: rawPaid,
+                remainingAmount: rawRem,
+                paymentStatus: s.payment_status || (isCredit ? (rawRem === 0 ? "paid" : rawPaid > 0 ? "partial" : "unpaid") : "paid"),
+                dueDate: s.due_date || undefined,
+                createdAt: s.created_at || new Date().toISOString(),
+                userId: s.user_id,
+                storeId: s.store_id,
+              };
+
+              dispatchBase({
+                type: "REALTIME_SALE_INSERT",
+                payload: sale,
+              });
+            } catch (e) {
+              console.warn("Notice Realtime sale items:", e);
+            }
+          } else if (payload.eventType === "UPDATE") {
+            const s = payload.new;
+            if (!s?.id) return;
 
             dispatchBase({
-              type: "REALTIME_SALE_INSERT",
-              payload: sale,
+              type: "REALTIME_SALE_UPDATE",
+              payload: {
+                id: s.id,
+                customerName: s.customer_name || undefined,
+                customerPhone: s.customer_phone || undefined,
+                amountPaid: Number.isFinite(Number(s.amount_paid)) ? Number(s.amount_paid) : undefined,
+                remainingAmount: Number.isFinite(Number(s.remaining_amount)) ? Number(s.remaining_amount) : undefined,
+                paymentStatus: s.payment_status || undefined,
+                dueDate: s.due_date || undefined,
+              },
             });
-          } catch (e) {
-            console.warn("Notice Realtime sale items:", e);
           }
         }
       );
@@ -1229,10 +1298,18 @@ export function StoreProvider({ children }: { children: ReactNode }) {
               remainingAmount = isCreditSale ? Math.max(0, total - amountPaid) : 0;
             }
 
-            const paymentStatus = s.payment_status || (isCreditSale ? (remainingAmount === 0 ? 'paid' : amountPaid > 0 ? 'partial' : 'unpaid') : 'paid');
+            // PROTECTION CRITIQUE : Si c'est une vente à crédit et total > amountPaid,
+            // la dette ne peut jamais être 0 ou 'paid' par erreur de valeur par défaut SQL
+            if (isCreditSale && total > amountPaid && (remainingAmount <= 0 || s.payment_status === 'paid')) {
+              remainingAmount = Math.max(0, total - amountPaid);
+            }
+
+            const paymentStatus = isCreditSale
+              ? (remainingAmount === 0 ? 'paid' : amountPaid > 0 ? 'partial' : 'unpaid')
+              : (s.payment_status || 'paid');
 
             // Réparation en arrière-plan Supabase si nécessaire
-            if (isCreditSale && (rawRemaining === null || !Number.isFinite(Number(s.remaining_amount)) || !Number.isFinite(Number(s.amount_paid)))) {
+            if (isCreditSale && (s.remaining_amount !== remainingAmount || s.payment_status !== paymentStatus || s.amount_paid !== amountPaid)) {
               if (activeStore?.id) {
                 supabase
                   .from("sales")
@@ -1565,15 +1642,40 @@ export function StoreProvider({ children }: { children: ReactNode }) {
               p_payment_method: s.paymentMethod,
               p_customer_name: s.customerName || null,
               p_created_at: s.createdAt,
-              p_items: s.items
+              p_items: s.items,
+              p_customer_phone: s.customerPhone || null,
+              p_amount_paid: s.amountPaid ?? (s.paymentMethod === 'credit' ? 0 : s.total),
+              p_remaining_amount: s.remainingAmount ?? (s.paymentMethod === 'credit' ? s.total : 0),
+              p_payment_status: s.paymentStatus || (s.paymentMethod === 'credit' ? 'unpaid' : 'paid'),
+              p_due_date: s.dueDate || null,
             });
 
             if (saleError) {
-              console.warn("Erreur serveur Supabase, basculement en sauvegarde hors-ligne sécurisée:", saleError);
-              await saveOfflineSale(activeStore.id, s);
-              setPendingSyncCount((prev) => prev + 1);
+              console.warn("Erreur serveur Supabase create_sale, tentative insert direct:", saleError);
+              const { error: directInsertError } = await supabase.from("sales").insert([{
+                id: s.id,
+                store_id: activeStore.id,
+                subtotal: s.subtotal,
+                tax: s.tax || 0,
+                discount: s.discount || 0,
+                total: s.total,
+                payment_method: s.paymentMethod,
+                customer_name: s.customerName || null,
+                customer_phone: s.customerPhone || null,
+                amount_paid: s.amountPaid ?? (s.paymentMethod === 'credit' ? 0 : s.total),
+                remaining_amount: s.remainingAmount ?? (s.paymentMethod === 'credit' ? s.total : 0),
+                payment_status: s.paymentStatus || (s.paymentMethod === 'credit' ? 'unpaid' : 'paid'),
+                due_date: s.dueDate || null,
+                created_at: s.createdAt
+              }]);
+
+              if (directInsertError) {
+                console.warn("Basculement en sauvegarde hors-ligne sécurisée:", directInsertError);
+                await saveOfflineSale(activeStore.id, s);
+                setPendingSyncCount((prev) => prev + 1);
+              }
             } else {
-              // Si la vente est à crédit ou comporte des métadonnées (acompte, reste dû, téléphone, échéance), mettre à jour la table sales
+              // Si la vente comporte des métadonnées de crédit, garantir la mise à jour
               try {
                 await supabase
                   .from("sales")
