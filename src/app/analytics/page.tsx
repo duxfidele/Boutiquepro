@@ -41,6 +41,13 @@ import {
   DateFilterOptions
 } from "@/lib/accountingExport";
 import { ProductAvatar } from "@/components/ui/ProductAvatar";
+import {
+  DatePeriodFilter,
+  PeriodType,
+  toLocalDateString,
+  formatDayDisplay,
+  formatDayShort
+} from "@/components/ui/DatePeriodFilter";
 
 const paymentLabels: Record<string, string> = {
   cash: "Espèces",
@@ -80,7 +87,46 @@ export default function AnalyticsPage() {
     discrepantSessionsCount,
     totalPhysicalCashAndBank
   } = useStore();
-  const [period, setPeriod] = useState<"all" | "today" | "week" | "month">("all");
+  const [period, setPeriod] = useState<PeriodType>("today");
+  const [selectedDate, setSelectedDate] = useState<string>(() => {
+    const y = new Date();
+    y.setDate(y.getDate() - 1);
+    return toLocalDateString(y);
+  });
+  const [startDate, setStartDate] = useState<string>(() => {
+    const d = new Date();
+    d.setDate(d.getDate() - 7);
+    return toLocalDateString(d);
+  });
+  const [endDate, setEndDate] = useState<string>(() => toLocalDateString(new Date()));
+
+  const periodLabel = useMemo(() => {
+    if (period === "today") return "Aujourd'hui";
+    if (period === "week") return "Cette Semaine";
+    if (period === "month") return "Ce Mois-ci";
+    if (period === "all") return "Tout l'historique";
+    if (period === "custom_day") {
+      if (!selectedDate) return "Jour sélectionné";
+      const now = new Date();
+      const todayStr = toLocalDateString(now);
+      const yesterday = new Date();
+      yesterday.setDate(yesterday.getDate() - 1);
+      const yesterdayStr = toLocalDateString(yesterday);
+      if (selectedDate === todayStr) return "Aujourd'hui";
+      if (selectedDate === yesterdayStr) return `Hier (${formatDayDisplay(selectedDate)})`;
+      return formatDayDisplay(selectedDate);
+    }
+    if (period === "custom_range") {
+      if (startDate && endDate) {
+        if (startDate === endDate) return formatDayDisplay(startDate);
+        return `Du ${formatDayShort(startDate)} au ${formatDayShort(endDate)}`;
+      }
+      if (startDate) return `Depuis le ${formatDayShort(startDate)}`;
+      if (endDate) return `Jusqu'au ${formatDayShort(endDate)}`;
+      return "Période personnalisée";
+    }
+    return "Période";
+  }, [period, selectedDate, startDate, endDate]);
   
   // Modal Export Comptable
   const [showExportModal, setShowExportModal] = useState(false);
@@ -117,31 +163,45 @@ export default function AnalyticsPage() {
   // Computed analytics (Concordance stricte avec le tableau de bord et prise en compte des remises)
   const analytics = useMemo(() => {
     const now = new Date();
-    const today = now.toISOString().split("T")[0];
+    const today = toLocalDateString(now);
     
     // Semaine calendaire stricte : Lundi 00:00:00 -> Dimanche 23:59:59
     const currentDay = now.getDay();
     const diffToMonday = (currentDay + 6) % 7;
     const monday = new Date(now.getFullYear(), now.getMonth(), now.getDate() - diffToMonday, 0, 0, 0, 0);
-    const mondayStr = monday.toISOString().split("T")[0];
+    const mondayStr = toLocalDateString(monday);
+    const sunday = new Date(monday);
+    sunday.setDate(monday.getDate() + 6);
+    sunday.setHours(23, 59, 59, 999);
+    const sundayStr = toLocalDateString(sunday);
     const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+
+    const matchDate = (d: string) => {
+      if (!d) return false;
+      if (period === "today") return d === today;
+      if (period === "week") return d >= mondayStr && d <= sundayStr;
+      if (period === "month") return d.startsWith(currentMonth);
+      if (period === "all") return true;
+      if (period === "custom_day") return d === selectedDate;
+      if (period === "custom_range") {
+        if (startDate && endDate) return d >= startDate && d <= endDate;
+        if (startDate) return d >= startDate;
+        if (endDate) return d <= endDate;
+        return true;
+      }
+      return true;
+    };
 
     const filteredSales = state.sales.filter((s) => {
       if (!s || !s.createdAt) return false;
-      const d = s.createdAt.split("T")[0];
-      if (period === "today") return d === today;
-      if (period === "week") return d >= mondayStr;
-      if (period === "month") return d.startsWith(currentMonth);
-      return true;
+      const d = toLocalDateString(new Date(s.createdAt));
+      return matchDate(d);
     });
 
     const filteredExpenses = (state.expenses || []).filter((e) => {
       if (!e || !e.date) return false;
-      const d = e.date.split("T")[0];
-      if (period === "today") return d === today;
-      if (period === "week") return d >= mondayStr;
-      if (period === "month") return d.startsWith(currentMonth);
-      return true;
+      const d = toLocalDateString(new Date(e.date));
+      return matchDate(d);
     });
 
     // CA net encaissé
@@ -257,11 +317,8 @@ export default function AnalyticsPage() {
     const filteredCashSessions = (closedCashSessions || []).filter((cs) => {
       const sessionDate = cs.closedAt || cs.openedAt;
       if (!sessionDate) return false;
-      const d = sessionDate.split("T")[0];
-      if (period === "today") return d === today;
-      if (period === "week") return d >= mondayStr;
-      if (period === "month") return d.startsWith(currentMonth);
-      return true;
+      const d = toLocalDateString(new Date(sessionDate));
+      return matchDate(d);
     });
 
     const periodCashDifference = filteredCashSessions.reduce((sum, cs) => sum + (Number(cs.difference) || 0), 0);
@@ -306,7 +363,7 @@ export default function AnalyticsPage() {
       periodCashRate,
       periodPhysicalCash
     };
-  }, [state.sales, state.products, state.expenses, closedCashSessions, period]);
+  }, [state.sales, state.products, state.expenses, closedCashSessions, period, selectedDate, startDate, endDate]);
 
   const categoryEntries = Object.entries(categorySales).sort((a, b) => b[1] - a[1]);
   const maxCategory = categoryEntries.length > 0 ? categoryEntries[0][1] : 1;
@@ -350,25 +407,18 @@ export default function AnalyticsPage() {
             <span>Export Comptable (Excel / CSV)</span>
           </button>
 
-          {/* Period selector (Journalier, Hebdo, Mensuel, Tout) */}
-          <div className="flex items-center gap-1 bg-secondary/40 rounded-xl p-1">
-            {[
-              { id: "today" as const, label: "Aujourd'hui" },
-              { id: "week" as const, label: "Cette semaine" },
-              { id: "month" as const, label: "Ce mois-ci" },
-              { id: "all" as const, label: "Tout l'historique" },
-            ].map((p) => (
-              <button
-                key={p.id}
-                onClick={() => setPeriod(p.id)}
-                className={`rounded-lg px-3 py-1.5 text-xs font-medium transition-all ${
-                  period === p.id ? "bg-background shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground"
-                }`}
-              >
-                {p.label}
-              </button>
-            ))}
-          </div>
+          {/* Sélecteur de Période & Calendrier */}
+          <DatePeriodFilter
+            period={period}
+            setPeriod={setPeriod}
+            selectedDate={selectedDate}
+            setSelectedDate={setSelectedDate}
+            startDate={startDate}
+            setStartDate={setStartDate}
+            endDate={endDate}
+            setEndDate={setEndDate}
+            periodLabel={periodLabel}
+          />
         </div>
       </div>
 
@@ -706,7 +756,7 @@ export default function AnalyticsPage() {
               {analytics.filteredCashSessions.length === 0 ? (
                 <tr>
                   <td colSpan={8} className="py-8 text-center text-muted-foreground">
-                    Aucune session de caisse clôturée pour la période sélectionnée ({period === "today" ? "Aujourd'hui" : period === "week" ? "Cette Semaine" : "Tout l'historique"}).
+                    Aucune session de caisse clôturée pour la période sélectionnée ({periodLabel}).
                   </td>
                 </tr>
               ) : (

@@ -32,6 +32,13 @@ import {
   Calendar
 } from "lucide-react";
 import { ProductAvatar } from "@/components/ui/ProductAvatar";
+import {
+  DatePeriodFilter,
+  PeriodType,
+  toLocalDateString,
+  formatDayDisplay,
+  formatDayShort
+} from "@/components/ui/DatePeriodFilter";
 
 const paymentIcons: Record<string, React.ReactNode> = {
   cash: <Banknote className="h-3.5 w-3.5" />,
@@ -86,52 +93,77 @@ export default function Dashboard() {
     currentSessionSales,
   } = useStore();
 
-  const [period, setPeriod] = useState<"today" | "week" | "month" | "all">("today");
+  const [period, setPeriod] = useState<PeriodType>("today");
+  const [selectedDate, setSelectedDate] = useState<string>(() => {
+    const y = new Date();
+    y.setDate(y.getDate() - 1);
+    return toLocalDateString(y);
+  });
+  const [startDate, setStartDate] = useState<string>(() => {
+    const d = new Date();
+    d.setDate(d.getDate() - 7);
+    return toLocalDateString(d);
+  });
+  const [endDate, setEndDate] = useState<string>(() => toLocalDateString(new Date()));
 
   const periodStats = useMemo(() => {
     const now = new Date();
-    const todayStr = now.toISOString().split("T")[0];
+    const todayStr = toLocalDateString(now);
 
     // Semaine calendaire stricte : Lundi 00:00:00 -> Dimanche 23:59:59
     const currentDay = now.getDay(); // 0 = Dimanche, 1 = Lundi, ...
     const diffToMonday = (currentDay + 6) % 7;
     const monday = new Date(now.getFullYear(), now.getMonth(), now.getDate() - diffToMonday, 0, 0, 0, 0);
-    const mondayStr = monday.toISOString().split("T")[0];
+    const mondayStr = toLocalDateString(monday);
     const sunday = new Date(monday);
     sunday.setDate(monday.getDate() + 6);
     sunday.setHours(23, 59, 59, 999);
+    const sundayStr = toLocalDateString(sunday);
 
     const currentMonthStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+
+    const matchDate = (dStr: string) => {
+      if (!dStr) return false;
+      if (period === "today") return dStr === todayStr;
+      if (period === "week") return dStr >= mondayStr && dStr <= sundayStr;
+      if (period === "month") return dStr.startsWith(currentMonthStr);
+      if (period === "all") return true;
+      if (period === "custom_day") return dStr === selectedDate;
+      if (period === "custom_range") {
+        if (startDate && endDate) return dStr >= startDate && dStr <= endDate;
+        if (startDate) return dStr >= startDate;
+        if (endDate) return dStr <= endDate;
+        return true;
+      }
+      return true;
+    };
 
     // Ventes de la période sélectionnée
     const filteredSales = (state.sales || []).filter((s) => {
       if (!s || !s.createdAt) return false;
-      const dStr = s.createdAt.split("T")[0];
-      if (period === "today") return dStr === todayStr;
-      if (period === "week") return dStr >= mondayStr;
-      if (period === "month") return dStr.startsWith(currentMonthStr);
-      return true;
+      const d = new Date(s.createdAt);
+      if (isNaN(d.getTime())) return false;
+      const dStr = toLocalDateString(d);
+      return matchDate(dStr);
     });
 
     // Dépenses de la période sélectionnée
     const filteredExpenses = (state.expenses || []).filter((e) => {
       if (!e || !e.date) return false;
-      const dStr = e.date.split("T")[0];
-      if (period === "today") return dStr === todayStr;
-      if (period === "week") return dStr >= mondayStr;
-      if (period === "month") return dStr.startsWith(currentMonthStr);
-      return true;
+      const d = new Date(e.date);
+      if (isNaN(d.getTime())) return false;
+      const dStr = toLocalDateString(d);
+      return matchDate(dStr);
     });
 
     // Clôtures de caisse de la période sélectionnée
     const filteredSessions = (closedCashSessions || []).filter((cs) => {
-      const d = cs.closedAt || cs.openedAt;
-      if (!d) return false;
-      const dStr = d.split("T")[0];
-      if (period === "today") return dStr === todayStr;
-      if (period === "week") return dStr >= mondayStr;
-      if (period === "month") return dStr.startsWith(currentMonthStr);
-      return true;
+      const rawDate = cs.closedAt || cs.openedAt;
+      if (!rawDate) return false;
+      const d = new Date(rawDate);
+      if (isNaN(d.getTime())) return false;
+      const dStr = toLocalDateString(d);
+      return matchDate(dStr);
     });
 
     const revenue = filteredSales.reduce((acc, s) => acc + (Number(s.total) || 0), 0);
@@ -209,16 +241,35 @@ export default function Dashboard() {
       monday,
       sunday,
     };
-  }, [state.sales, state.expenses, state.products, closedCashSessions, period]);
+  }, [state.sales, state.expenses, state.products, closedCashSessions, period, selectedDate, startDate, endDate]);
 
-  const periodLabel = 
-    period === "today" 
-      ? "Aujourd'hui" 
-      : period === "week" 
-      ? "Cette Semaine" 
-      : period === "month" 
-      ? "Ce Mois-ci" 
-      : "Tout l'historique";
+  const periodLabel = useMemo(() => {
+    if (period === "today") return "Aujourd'hui";
+    if (period === "week") return "Cette Semaine";
+    if (period === "month") return "Ce Mois-ci";
+    if (period === "all") return "Tout l'historique";
+    if (period === "custom_day") {
+      if (!selectedDate) return "Jour sélectionné";
+      const now = new Date();
+      const todayStr = toLocalDateString(now);
+      const yesterday = new Date();
+      yesterday.setDate(yesterday.getDate() - 1);
+      const yesterdayStr = toLocalDateString(yesterday);
+      if (selectedDate === todayStr) return "Aujourd'hui";
+      if (selectedDate === yesterdayStr) return `Hier (${formatDayDisplay(selectedDate)})`;
+      return formatDayDisplay(selectedDate);
+    }
+    if (period === "custom_range") {
+      if (startDate && endDate) {
+        if (startDate === endDate) return formatDayDisplay(startDate);
+        return `Du ${formatDayShort(startDate)} au ${formatDayShort(endDate)}`;
+      }
+      if (startDate) return `Depuis le ${formatDayShort(startDate)}`;
+      if (endDate) return `Jusqu'au ${formatDayShort(endDate)}`;
+      return "Période personnalisée";
+    }
+    return "Période";
+  }, [period, selectedDate, startDate, endDate]);
 
   const adminKpis = [
     {
@@ -399,56 +450,18 @@ export default function Dashboard() {
         </div>
 
         <div className="flex items-center gap-2.5 flex-wrap">
-          {/* Sélecteur de Période 1-Clic */}
-          <div className="inline-flex items-center p-1 rounded-2xl bg-secondary/80 border border-border/60 shadow-inner">
-            <button
-              type="button"
-              onClick={() => setPeriod("today")}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
-                period === "today"
-                  ? "bg-primary text-primary-foreground shadow-sm scale-[1.02]"
-                  : "text-muted-foreground hover:text-foreground hover:bg-background/50"
-              }`}
-            >
-              <Clock className="w-3.5 h-3.5" />
-              Aujourd&apos;hui
-            </button>
-            <button
-              type="button"
-              onClick={() => setPeriod("week")}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
-                period === "week"
-                  ? "bg-primary text-primary-foreground shadow-sm scale-[1.02]"
-                  : "text-muted-foreground hover:text-foreground hover:bg-background/50"
-              }`}
-            >
-              <Calendar className="w-3.5 h-3.5" />
-              Cette Semaine
-            </button>
-            <button
-              type="button"
-              onClick={() => setPeriod("month")}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
-                period === "month"
-                  ? "bg-primary text-primary-foreground shadow-sm scale-[1.02]"
-                  : "text-muted-foreground hover:text-foreground hover:bg-background/50"
-              }`}
-            >
-              <BarChart3 className="w-3.5 h-3.5" />
-              Ce Mois-ci
-            </button>
-            <button
-              type="button"
-              onClick={() => setPeriod("all")}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
-                period === "all"
-                  ? "bg-primary text-primary-foreground shadow-sm scale-[1.02]"
-                  : "text-muted-foreground hover:text-foreground hover:bg-background/50"
-              }`}
-            >
-              Tout
-            </button>
-          </div>
+          {/* Sélecteur de Période & Calendrier */}
+          <DatePeriodFilter
+            period={period}
+            setPeriod={setPeriod}
+            selectedDate={selectedDate}
+            setSelectedDate={setSelectedDate}
+            startDate={startDate}
+            setStartDate={setStartDate}
+            endDate={endDate}
+            setEndDate={setEndDate}
+            periodLabel={periodLabel}
+          />
 
           <div className="flex gap-2">
             <Link href="/debts" className="flex items-center gap-2 rounded-xl border border-amber-500/40 bg-amber-500/10 text-amber-500 px-3.5 py-2 text-sm font-semibold hover:bg-amber-500/20 transition-colors">
@@ -819,15 +832,22 @@ export default function Dashboard() {
         <div className="lg:col-span-2 rounded-2xl border border-border/40 bg-card p-6">
           <div className="flex items-center justify-between mb-4">
             <div>
-              <h2 className="text-base font-semibold">Transactions & Ventes récentes</h2>
-              <p className="text-xs text-muted-foreground mt-0.5">Dernières opérations enregistrées</p>
+              <h2 className="text-base font-semibold">Transactions & Ventes ({periodLabel})</h2>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                {periodStats.filteredSales.length} opération(s) enregistrée(s)
+              </p>
             </div>
             <Link href="/debts" className="text-xs text-primary hover:underline font-medium">
               Voir carnet de dettes →
             </Link>
           </div>
           <div className="space-y-3">
-            {state.sales.slice(0, 5).map((sale) => {
+            {periodStats.filteredSales.length === 0 ? (
+              <div className="py-8 text-center text-xs text-muted-foreground italic rounded-xl bg-secondary/20 border border-dashed border-border/50">
+                Aucune transaction enregistrée pour {periodLabel.toLowerCase()}.
+              </div>
+            ) : (
+              periodStats.filteredSales.slice(0, 8).map((sale) => {
               const isCredit = sale.paymentMethod === "credit";
               const remaining = sale.remainingAmount ?? (isCredit ? sale.total : 0);
               const isSold = remaining <= 0;
@@ -870,7 +890,7 @@ export default function Dashboard() {
                   </div>
                 </div>
               );
-            })}
+            }))}
           </div>
         </div>
 
