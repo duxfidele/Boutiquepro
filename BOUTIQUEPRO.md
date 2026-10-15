@@ -112,12 +112,20 @@ Les données sont strictement cloisonnées grâce aux **Row Level Security (RLS)
 - **Indicateurs financiers réconciliés :**
   - CA théorique vs CA encaissé réel, taux de recouvrement, montant total des dettes en cours et bénéfice net encaissé.
 
-### 4. Clôture de Caisse Journalière (Rapport Z & Rapport X)
-- Bandeau dynamique sur la caisse : état d'ouverture, fond initial, cumul des espèces en temps réel.
-- Point d'étape provisoire en cours de journée (Rapport X).
-- Modal de clôture de shift : comptage physique des espèces avec détection et calcul instantané des écarts de caisse (Caisse juste, Excédent, ou Manquant).
-- Impression thermique 80mm et PDF certifié du Rapport Z officiel avec visas du caissier et du gérant.
-- Historique complet des clôtures antérieures.
+### 4. Clôture de Caisse Journalière & Réconciliation des Espèces (Rapports X & Z)
+- **Bandeau dynamique en temps réel :** État d'ouverture de caisse, nom de l'opérateur, fond de caisse initial et espèces théoriques attendues dans le tiroir.
+- **Réconciliation intégrale des flux d'espèces :**
+  - **Ventes au comptant (Espèces) :** Additionnées à 100% au tiroir.
+  - **Acomptes initiaux sur ventes à crédit (`creditDeposits`) :** L'acompte physique versé au moment de la vente entre directement dans le tiroir de la session.
+  - **Remboursements et recouvrements de dettes (`debtRecoveries`) :** Tout règlement de dette perçu en espèces durant le shift est intégré à la caisse du jour.
+  - **Dédoublonnage comptable infaillible (`getInitialCreditDeposit`) :** Lorsqu'un client solde sa dette plus tard dans la journée, le système sépare l'acompte d'origine du recouvrement ultérieur, éliminant tout risque de double comptage.
+  - **Protection du Chiffre d'Affaires :** Le recouvrement d'une créance n'augmente pas artificiellement le CA facturé (qui reste celui de la vente).
+- **Point d'étape provisoire (Rapport X) :** Consultation à tout moment du shift des recettes détaillées par mode de paiement et du contrôle théorique du tiroir.
+- **Modal de clôture certifiée (Rapport Z) :**
+  - Décomposition détaillée : Fond initial + Ventes espèces + Acomptes crédits + Recouvrements dettes - Monnaie.
+  - Comptage physique des billets et pièces avec calcul immédiat de l'écart de caisse (Conforme, Manquant/Déficit, ou Excédent).
+- **Impression thermique 80mm/58mm & PDF certifié :** Ticket officiel certifié avec visas du caissier et du gérant pour la traçabilité comptable.
+- **Historique Z complet :** Consultation et réimpression des clôtures passées à tout moment.
 
 ### 5. Mode Hors-Ligne (Offline Queue) & Supabase Realtime
 - Sauvegarde instantanée des ventes en cache local (LocalStorage / IndexedDB) en cas d'interruption du réseau internet.
@@ -151,6 +159,33 @@ Les données sont strictement cloisonnées grâce aux **Row Level Security (RLS)
 
 ---
 
+### 8. Sécurisation RLS & Isolation Stricte des Coûts (`product_costs`)
+- **Découplage étanche du prix d'achat :**
+  - Le coût d'achat (`cost`) a été totalement extrait de la table publique `products` vers une table dédiée `product_costs` (`product_id`, `store_id`, `cost`).
+  - **Row Level Security (RLS) stricte :** Seul l'administrateur/gérant de la boutique possède les droits de lecture (`SELECT`) et d'écriture (`INSERT`/`UPDATE`) sur `product_costs`.
+  - **Requêtes caissiers sanctuarisées :** Les requêtes des caissiers sélectionnent explicitement les colonnes autorisées (`id, name, sku, category, price, stock, min_stock, image, created_at, user_id, store_id`) sans jamais faire de `SELECT *` ni de jointure sur `product_costs`.
+- **Protection des marges et bénéfices :**
+  - Les calculs de bénéfice net, de marge commerciale et de valorisation de stock s'exécutent exclusivement côté admin.
+  - L'écran du caissier n'affiche ni ne permet la saisie du prix d'achat.
+- **Verrouillage des privilèges administrateur :**
+  - Neutralisation des failles d'élévation de privilèges sur `store_members` et `stores` : un caissier ne peut en aucun cas modifier son propre rôle ni altérer la configuration d'une boutique.
+
+### 9. Filtre Temporel Intelligent & Calendrier Personnalisé (`DatePeriodFilter`)
+- **Intégration universelle :** Disponible sur le Tableau de bord (`/`) et la page Analytique (`/analytics`).
+- **Préservation des 4 sélections en 1 clic :**
+  - `Aujourd'hui`, `Cette Semaine` (cycle strict du Lundi au Dimanche), `Ce Mois-ci`, `Tout l'historique`.
+- **Nouveau sélecteur interactif « 📅 Calendrier / Période » :**
+  - **Mode « Jour précis » :**
+    - Raccourcis immédiats : `Hier`, `Avant-hier`, `Il y a 3 jours`, `Il y a 4 jours`, `Il y a 7 jours`.
+    - Sélecteur de date natif permettant de remonter à n'importe quelle journée historique de la boutique.
+  - **Mode « Plage de dates » (Du ... Au ...) :**
+    - Raccourcis de plage : `7 derniers jours`, `14 derniers jours`, `30 derniers jours`, `Mois précédent`.
+    - Sélecteurs de date de début et de fin.
+- **Recalcul dynamique instantané :**
+  - Chiffre d'affaires, trésorerie encaissée, bénéfice net réel, écarts de caisse, encaissements de dettes et liste des transactions recalculés spécifiquement pour la journée ou la période sélectionnée.
+
+---
+
 ## 💼 Modèles d'Exploitation Commerciale
 
 1. **SaaS B2B par Abonnement sur `maboutiquepro.app` (Principal) :**
@@ -174,6 +209,7 @@ Les données sont strictement cloisonnées grâce aux **Row Level Security (RLS)
 | `src/components/auth/Login.tsx` | Connexion, inscription et demande de réinitialisation par e-mail |
 | `src/app/debts/page.tsx` | Carnet de crédits, historique des versements, quittances PDF et relances WhatsApp Togo |
 | `src/components/pos/CashRegisterSessionModal.tsx` | Gestion des ouvertures et clôtures de caisse (Rapports X et Z) |
+| `src/components/ui/DatePeriodFilter.tsx` | Sélecteur temporel intelligent (presets, raccourcis jour précis & plage calendrier) |
 | `src/components/layout/AppWrapper.tsx` | Routage, protection d'accès selon les rôles et exception pour `/reset-password` |
 | `src/context/StoreContext.tsx` | État global réactif, calculs financiers anti-NaN, synchronisation Supabase et actions par lot |
 | `src/lib/pdf.ts` | Moteur d'export PDF haute fidélité pour factures et quittances sans page blanche |
