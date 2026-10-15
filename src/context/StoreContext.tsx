@@ -311,6 +311,31 @@ export interface SessionStats {
   expectedCashInDrawer: number;
 }
 
+export function getInitialCreditDeposit(s: Sale): { amount: number; method: "cash" | "mobile_money" | "card" } {
+  if (s.paymentMethod !== "credit") return { amount: 0, method: "cash" };
+
+  if (Array.isArray(s.payments) && s.payments.length > 0) {
+    const initPayment = s.payments.find(
+      (p) => p && (p.note?.toLowerCase().includes("initial") || p.id?.startsWith("init-") || p.id?.startsWith("legacy-"))
+    );
+    if (initPayment && Number.isFinite(Number(initPayment.amount))) {
+      const m = initPayment.paymentMethod === "mobile_money" || initPayment.paymentMethod === "card"
+        ? initPayment.paymentMethod
+        : "cash";
+      return { amount: Math.max(0, Number(initPayment.amount)), method: m };
+    }
+    // Si aucun paiement n'est explicitement nommé 'initial',
+    // l'acompte initial correspond au total payé moins tous les paiements ultérieurs de dettes
+    const subsequentSum = s.payments
+      .filter((p) => p && !p.note?.toLowerCase().includes("initial") && !p.id?.startsWith("init-") && !p.id?.startsWith("legacy-"))
+      .reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
+    const calculated = (Number(s.amountPaid) || 0) - subsequentSum;
+    return { amount: Math.max(0, calculated), method: "cash" };
+  }
+
+  return { amount: Math.max(0, Number(s.amountPaid) || 0), method: "cash" };
+}
+
 export function getSessionStats(
   session: CashSession | null,
   allSales: Sale[],
@@ -359,15 +384,23 @@ export function getSessionStats(
     } else if (s.paymentMethod === "card") {
       cardSales += saleTotal;
     } else if (s.paymentMethod === "credit") {
-      const deposit = Number.isFinite(Number(s.amountPaid)) ? Number(s.amountPaid) : 0;
-      const rem = Number.isFinite(Number(s.remainingAmount)) ? Number(s.remainingAmount) : Math.max(0, saleTotal - deposit);
-      creditDeposits += deposit;
+      const initDeposit = getInitialCreditDeposit(s);
+      if (initDeposit.method === "mobile_money") {
+        mmSales += initDeposit.amount;
+      } else if (initDeposit.method === "card") {
+        cardSales += initDeposit.amount;
+      } else {
+        creditDeposits += initDeposit.amount;
+      }
       creditTotal += saleTotal;
+      const rem = Number.isFinite(Number(s.remainingAmount))
+        ? Math.max(0, Number(s.remainingAmount))
+        : Math.max(0, saleTotal - (Number(s.amountPaid) || initDeposit.amount));
       creditRemaining += rem;
     }
   });
 
-  // Recouvrements de dettes perçus en caisse durant la session
+  // Recouvrements de dettes perçus durant la session
   let debtRecoveriesCash = 0;
   let debtRecoveriesMM = 0;
   let debtRecoveriesCard = 0;
@@ -379,18 +412,22 @@ export function getSessionStats(
       const pTime = new Date(p.paidAt).getTime();
       if (isNaN(pTime)) return;
       if (pTime >= sessionOpenedTime && pTime <= sessionClosedTime) {
-        const isInitialOfSessionSale = sessionSales.some(
-          (ss) => ss.id === sale.id && (p.note?.toLowerCase().includes("initial") || p.id.startsWith("init-"))
-        );
-        if (!isInitialOfSessionSale) {
-          const amt = Number(p.amount) || 0;
-          if (p.paymentMethod === "mobile_money") {
-            debtRecoveriesMM += amt;
-          } else if (p.paymentMethod === "card") {
-            debtRecoveriesCard += amt;
-          } else {
-            debtRecoveriesCash += amt;
-          }
+        const isSessionSale = sessionSales.some((ss) => ss.id === sale.id);
+        const isInitialPayment = p.note?.toLowerCase().includes("initial") || p.id?.startsWith("init-") || p.id?.startsWith("legacy-");
+
+        // Si c'est l'acompte initial d'une vente réalisée pendant cette même session,
+        // il est déjà compté dans creditDeposits / mmSales / cardSales ci-dessus.
+        if (isSessionSale && isInitialPayment) {
+          return;
+        }
+
+        const amt = Number(p.amount) || 0;
+        if (p.paymentMethod === "mobile_money") {
+          debtRecoveriesMM += amt;
+        } else if (p.paymentMethod === "card") {
+          debtRecoveriesCard += amt;
+        } else {
+          debtRecoveriesCash += amt;
         }
       }
     });
@@ -464,24 +501,15 @@ function storeReducer(state: StoreState, action: Action): StoreState {
       let updatedCashSessions = state.cashSessions;
 
       if (updatedActiveSession) {
-        const isCash = action.payload.paymentMethod === "cash";
-        const isMM = action.payload.paymentMethod === "mobile_money";
-        const isCard = action.payload.paymentMethod === "card";
-        const isCredit = action.payload.paymentMethod === "credit";
-        const downPayment = isCredit ? (action.payload.amountPaid || 0) : 0;
-        const cashEntry = isCredit ? downPayment : (isCash ? action.payload.total : 0);
-        const effectiveAmount = isCredit ? downPayment : action.payload.total;
-
-        const newCash = updatedActiveSession.totalCashSales + cashEntry;
-        const newExpected = updatedActiveSession.openingAmount + newCash;
+        const stats = getSessionStats(updatedActiveSession, [action.payload, ...state.sales], updatedCashSessions);
         updatedActiveSession = {
           ...updatedActiveSession,
-          totalCashSales: newCash,
-          totalMobileMoneySales: updatedActiveSession.totalMobileMoneySales + (isMM ? action.payload.total : 0),
-          totalCardSales: updatedActiveSession.totalCardSales + (isCard ? action.payload.total : 0),
-          totalSalesCount: updatedActiveSession.totalSalesCount + 1,
-          totalSalesAmount: updatedActiveSession.totalSalesAmount + action.payload.total,
-          expectedAmount: newExpected
+          totalCashSales: stats.cash,
+          totalMobileMoneySales: stats.mm,
+          totalCardSales: stats.card,
+          totalSalesCount: stats.count,
+          totalSalesAmount: stats.total,
+          expectedAmount: stats.expectedCashInDrawer
         };
 
         updatedCashSessions = updatedCashSessions.map((cs) =>
@@ -515,12 +543,16 @@ function storeReducer(state: StoreState, action: Action): StoreState {
       let updatedActiveSession = state.activeCashSession;
       let updatedCashSessions = state.cashSessions;
 
-      if (updatedActiveSession && method === "cash") {
+      if (updatedActiveSession) {
+        const stats = getSessionStats(updatedActiveSession, updatedSales, updatedCashSessions);
         updatedActiveSession = {
           ...updatedActiveSession,
-          totalCashSales: updatedActiveSession.totalCashSales + paymentAmount,
-          totalSalesAmount: updatedActiveSession.totalSalesAmount + paymentAmount,
-          expectedAmount: (updatedActiveSession.expectedAmount || 0) + paymentAmount,
+          totalCashSales: stats.cash,
+          totalMobileMoneySales: stats.mm,
+          totalCardSales: stats.card,
+          totalSalesCount: stats.count,
+          totalSalesAmount: stats.total,
+          expectedAmount: stats.expectedCashInDrawer,
         };
         updatedCashSessions = updatedCashSessions.map((cs) =>
           cs.id === updatedActiveSession?.id ? updatedActiveSession : cs
@@ -840,17 +872,25 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         console.warn("Erreur mise à jour Supabase dette:", err);
       }
 
-      if (method === "cash" && state.activeCashSession?.id) {
+      if (state.activeCashSession?.id) {
         try {
-          const newCash = state.activeCashSession.totalCashSales + paymentAmount;
-          const newTotal = state.activeCashSession.totalSalesAmount + paymentAmount;
-          const newExpected = state.activeCashSession.openingAmount + newCash;
+          const updatedSalesForStats = state.sales.map((s) => s.id === saleId ? {
+            ...s,
+            amountPaid: newPaid,
+            remainingAmount: newRemaining,
+            paymentStatus: newStatus,
+            payments: [paymentRecord, ...(s.payments || [])]
+          } : s);
+          const stats = getSessionStats(state.activeCashSession, updatedSalesForStats, state.cashSessions);
           await supabase
             .from("cash_sessions")
             .update({
-              total_cash_sales: newCash,
-              total_sales_amount: newTotal,
-              expected_amount: newExpected,
+              total_cash_sales: stats.cash,
+              total_mobile_money_sales: stats.mm,
+              total_card_sales: stats.card,
+              total_sales_count: stats.count,
+              total_sales_amount: stats.total,
+              expected_amount: stats.expectedCashInDrawer,
             })
             .eq("id", state.activeCashSession.id);
         } catch (err) {

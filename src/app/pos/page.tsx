@@ -149,7 +149,7 @@ export default function POSPage() {
     const saleId = "s" + Date.now();
 
     const initialPayments: DebtPayment[] = (isCredit && deposit > 0) ? [{
-      id: "rec-" + Date.now(),
+      id: "init-" + Date.now(),
       saleId,
       amount: deposit,
       paymentMethod: "cash",
