@@ -294,6 +294,132 @@ export function getSalesForSession(
     return saleTime >= sessionOpenedTime && saleTime <= sessionClosedTime;
   });
 }
+
+export interface SessionStats {
+  opening: number;
+  cashSalesOnly: number;
+  creditDeposits: number;
+  debtRecoveries: number;
+  cash: number;
+  mm: number;
+  card: number;
+  creditTotal: number;
+  creditRemaining: number;
+  total: number;
+  totalCollected: number;
+  count: number;
+  expectedCashInDrawer: number;
+}
+
+export function getSessionStats(
+  session: CashSession | null,
+  allSales: Sale[],
+  allSessions: CashSession[] = []
+): SessionStats {
+  const empty: SessionStats = {
+    opening: 0,
+    cashSalesOnly: 0,
+    creditDeposits: 0,
+    debtRecoveries: 0,
+    cash: 0,
+    mm: 0,
+    card: 0,
+    creditTotal: 0,
+    creditRemaining: 0,
+    total: 0,
+    totalCollected: 0,
+    count: 0,
+    expectedCashInDrawer: 0,
+  };
+  if (!session || !session.openedAt) return empty;
+
+  const sessionOpenedTime = new Date(session.openedAt).getTime();
+  if (isNaN(sessionOpenedTime)) return empty;
+  const sessionClosedTime = session.closedAt ? new Date(session.closedAt).getTime() : Infinity;
+
+  const sessionSales = getSalesForSession(session, allSales, allSessions);
+
+  let cashSalesOnly = 0;
+  let creditDeposits = 0;
+  let mmSales = 0;
+  let cardSales = 0;
+  let creditTotal = 0;
+  let creditRemaining = 0;
+  let totalSales = 0;
+
+  sessionSales.forEach((s) => {
+    if (!s) return;
+    const saleTotal = Number(s.total) || 0;
+    totalSales += saleTotal;
+
+    if (s.paymentMethod === "cash") {
+      cashSalesOnly += saleTotal;
+    } else if (s.paymentMethod === "mobile_money") {
+      mmSales += saleTotal;
+    } else if (s.paymentMethod === "card") {
+      cardSales += saleTotal;
+    } else if (s.paymentMethod === "credit") {
+      const deposit = Number.isFinite(Number(s.amountPaid)) ? Number(s.amountPaid) : 0;
+      const rem = Number.isFinite(Number(s.remainingAmount)) ? Number(s.remainingAmount) : Math.max(0, saleTotal - deposit);
+      creditDeposits += deposit;
+      creditTotal += saleTotal;
+      creditRemaining += rem;
+    }
+  });
+
+  // Recouvrements de dettes perçus en caisse durant la session
+  let debtRecoveriesCash = 0;
+  let debtRecoveriesMM = 0;
+  let debtRecoveriesCard = 0;
+
+  (allSales || []).forEach((sale) => {
+    if (!sale || !sale.payments || !Array.isArray(sale.payments)) return;
+    sale.payments.forEach((p) => {
+      if (!p || !p.paidAt || !p.amount) return;
+      const pTime = new Date(p.paidAt).getTime();
+      if (isNaN(pTime)) return;
+      if (pTime >= sessionOpenedTime && pTime <= sessionClosedTime) {
+        const isInitialOfSessionSale = sessionSales.some(
+          (ss) => ss.id === sale.id && (p.note?.toLowerCase().includes("initial") || p.id.startsWith("init-"))
+        );
+        if (!isInitialOfSessionSale) {
+          const amt = Number(p.amount) || 0;
+          if (p.paymentMethod === "mobile_money") {
+            debtRecoveriesMM += amt;
+          } else if (p.paymentMethod === "card") {
+            debtRecoveriesCard += amt;
+          } else {
+            debtRecoveriesCash += amt;
+          }
+        }
+      }
+    });
+  });
+
+  const totalCash = cashSalesOnly + creditDeposits + debtRecoveriesCash;
+  const totalMM = mmSales + debtRecoveriesMM;
+  const totalCard = cardSales + debtRecoveriesCard;
+  const opening = Number(session.openingAmount) || 0;
+  const expectedCashInDrawer = opening + totalCash;
+  const totalCollected = totalCash + totalMM + totalCard;
+
+  return {
+    opening,
+    cashSalesOnly,
+    creditDeposits,
+    debtRecoveries: debtRecoveriesCash,
+    cash: totalCash,
+    mm: totalMM,
+    card: totalCard,
+    creditTotal,
+    creditRemaining,
+    total: totalSales,
+    totalCollected,
+    count: sessionSales.length,
+    expectedCashInDrawer,
+  };
+}
+
 // ─── Reducer ─────────────────────────────────────────────────
 function storeReducer(state: StoreState, action: Action): StoreState {
   switch (action.type) {
@@ -346,14 +472,16 @@ function storeReducer(state: StoreState, action: Action): StoreState {
         const cashEntry = isCredit ? downPayment : (isCash ? action.payload.total : 0);
         const effectiveAmount = isCredit ? downPayment : action.payload.total;
 
+        const newCash = updatedActiveSession.totalCashSales + cashEntry;
+        const newExpected = updatedActiveSession.openingAmount + newCash;
         updatedActiveSession = {
           ...updatedActiveSession,
-          totalCashSales: updatedActiveSession.totalCashSales + cashEntry,
+          totalCashSales: newCash,
           totalMobileMoneySales: updatedActiveSession.totalMobileMoneySales + (isMM ? action.payload.total : 0),
           totalCardSales: updatedActiveSession.totalCardSales + (isCard ? action.payload.total : 0),
           totalSalesCount: updatedActiveSession.totalSalesCount + 1,
-          totalSalesAmount: updatedActiveSession.totalSalesAmount + effectiveAmount,
-          expectedAmount: updatedActiveSession.openingAmount + updatedActiveSession.totalCashSales + cashEntry
+          totalSalesAmount: updatedActiveSession.totalSalesAmount + action.payload.total,
+          expectedAmount: newExpected
         };
 
         updatedCashSessions = updatedCashSessions.map((cs) =>
@@ -557,15 +685,7 @@ interface StoreContextType {
   activeCashSession: CashSession | null;
   cashSessions: CashSession[];
   currentSessionSales: Sale[];
-  currentSessionStats: {
-    cash: number;
-    mm: number;
-    card: number;
-    total: number;
-    count: number;
-    opening: number;
-    expectedCashInDrawer: number;
-  };
+  currentSessionStats: SessionStats;
   openCashSession: (openingAmount: number, cashierName?: string) => Promise<CashSession>;
   closeCashSession: (closingAmount: number, notes?: string) => Promise<CashSession | null>;
   isOnline: boolean;
@@ -1445,18 +1565,14 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         payload.cashSessions = mergedSessions;
         const currentOpen = mergedSessions.find((cs: any) => cs.status === "open");
         if (currentOpen) {
-          const sessionSales = getSalesForSession(currentOpen, payload.sales, mergedSessions);
-          const cash = sessionSales.filter((s: any) => s.paymentMethod === "cash").reduce((sum: number, s: any) => sum + s.total, 0);
-          const mm = sessionSales.filter((s: any) => s.paymentMethod === "mobile_money").reduce((sum: number, s: any) => sum + s.total, 0);
-          const card = sessionSales.filter((s: any) => s.paymentMethod === "card").reduce((sum: number, s: any) => sum + s.total, 0);
-          const totalAmount = sessionSales.reduce((sum: number, s: any) => sum + s.total, 0);
+          const stats = getSessionStats(currentOpen, payload.sales, mergedSessions);
 
-          currentOpen.totalCashSales = cash;
-          currentOpen.totalMobileMoneySales = mm;
-          currentOpen.totalCardSales = card;
-          currentOpen.totalSalesCount = sessionSales.length;
-          currentOpen.totalSalesAmount = totalAmount;
-          currentOpen.expectedAmount = currentOpen.openingAmount + cash;
+          currentOpen.totalCashSales = stats.cash;
+          currentOpen.totalMobileMoneySales = stats.mm;
+          currentOpen.totalCardSales = stats.card;
+          currentOpen.totalSalesCount = stats.count;
+          currentOpen.totalSalesAmount = stats.total;
+          currentOpen.expectedAmount = stats.expectedCashInDrawer;
 
           payload.activeCashSession = currentOpen;
         } else {
@@ -1951,16 +2067,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   }, [state.activeCashSession, state.sales, state.cashSessions]);
 
   const currentSessionStats = useMemo(() => {
-    const sales = currentSessionSales || [];
-    const cash = sales.filter((s) => s && s.paymentMethod === "cash").reduce((sum, s) => sum + (Number(s.total) || 0), 0);
-    const mm = sales.filter((s) => s && s.paymentMethod === "mobile_money").reduce((sum, s) => sum + (Number(s.total) || 0), 0);
-    const card = sales.filter((s) => s && s.paymentMethod === "card").reduce((sum, s) => sum + (Number(s.total) || 0), 0);
-    const total = sales.reduce((sum, s) => sum + (Number(s.total) || 0), 0);
-    const count = sales.length;
-    const opening = Number(state.activeCashSession?.openingAmount) || 0;
-    const expectedCashInDrawer = opening + cash;
-    return { cash, mm, card, total, count, opening, expectedCashInDrawer };
-  }, [currentSessionSales, state.activeCashSession]);
+    return getSessionStats(state.activeCashSession, state.sales || [], state.cashSessions || []);
+  }, [state.activeCashSession, state.sales, state.cashSessions]);
 
   const openCashSession = async (openingAmount: number, cashierName?: string): Promise<CashSession> => {
     const openedAt = new Date().toISOString();
@@ -2039,15 +2147,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     if (!state.activeCashSession) return null;
     const cur = state.activeCashSession;
 
-    // Recalculer dynamiquement depuis state.sales pour garantir l'exactitude absolue
-    const sessionSales = getSalesForSession(cur, state.sales, state.cashSessions);
-    const cashSales = sessionSales.filter((s) => s.paymentMethod === "cash").reduce((sum, s) => sum + s.total, 0);
-    const mmSales = sessionSales.filter((s) => s.paymentMethod === "mobile_money").reduce((sum, s) => sum + s.total, 0);
-    const cardSales = sessionSales.filter((s) => s.paymentMethod === "card").reduce((sum, s) => sum + s.total, 0);
-    const totalAmount = sessionSales.reduce((sum, s) => sum + s.total, 0);
-    const count = sessionSales.length;
-
-    const expected = cur.openingAmount + cashSales;
+    // Recalculer dynamiquement depuis getSessionStats pour garantir l'exactitude absolue
+    const stats = getSessionStats(cur, state.sales, state.cashSessions);
+    const expected = stats.expectedCashInDrawer;
     const diff = closingAmount - expected;
     const closedAt = new Date().toISOString();
 
@@ -2056,11 +2158,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       closingAmount,
       expectedAmount: expected,
       difference: diff,
-      totalCashSales: cashSales,
-      totalMobileMoneySales: mmSales,
-      totalCardSales: cardSales,
-      totalSalesCount: count,
-      totalSalesAmount: totalAmount,
+      totalCashSales: stats.cash,
+      totalMobileMoneySales: stats.mm,
+      totalCardSales: stats.card,
+      totalSalesCount: stats.count,
+      totalSalesAmount: stats.total,
       status: "closed",
       closedAt,
       notes: notes || undefined
@@ -2087,11 +2189,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           closing_amount: closingAmount,
           expected_amount: expected,
           difference: diff,
-          total_cash_sales: cashSales,
-          total_mobile_money_sales: mmSales,
-          total_card_sales: cardSales,
-          total_sales_count: count,
-          total_sales_amount: totalAmount,
+          total_cash_sales: stats.cash,
+          total_mobile_money_sales: stats.mm,
+          total_card_sales: stats.card,
+          total_sales_count: stats.count,
+          total_sales_amount: stats.total,
           status: "closed",
           closed_at: closedAt,
           notes: notes || null

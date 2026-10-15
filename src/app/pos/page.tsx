@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useMemo, useRef } from "react";
-import { useStore, Sale, CashSession, getSalesForSession, DebtPayment } from "@/context/StoreContext";
+import { useStore, Sale, CashSession, getSalesForSession, getSessionStats, SessionStats, DebtPayment } from "@/context/StoreContext";
 import { ProductAvatar } from "@/components/ui/ProductAvatar";
 import {
   ShoppingCart,
@@ -291,16 +291,13 @@ export default function POSPage() {
   }, [activeCashSession, state?.sales, cashSessions]);
 
   const currentSessionStats = useMemo(() => {
-    const sales = currentSessionSales || [];
-    const cash = sales.filter((s) => s && s.paymentMethod === "cash").reduce((sum, s) => sum + (Number(s.total) || 0), 0);
-    const mm = sales.filter((s) => s && s.paymentMethod === "mobile_money").reduce((sum, s) => sum + (Number(s.total) || 0), 0);
-    const card = sales.filter((s) => s && s.paymentMethod === "card").reduce((sum, s) => sum + (Number(s.total) || 0), 0);
-    const total = sales.reduce((sum, s) => sum + (Number(s.total) || 0), 0);
-    const count = sales.length;
-    const opening = Number(activeCashSession?.openingAmount) || 0;
-    const expectedCashInDrawer = opening + cash;
-    return { cash, mm, card, total, count, opening, expectedCashInDrawer };
-  }, [currentSessionSales, activeCashSession]);
+    return getSessionStats(activeCashSession, state?.sales || [], cashSessions || []);
+  }, [activeCashSession, state?.sales, cashSessions]);
+
+  const selectedZStats = useMemo(() => {
+    if (!selectedZSession) return null;
+    return getSessionStats(selectedZSession, state?.sales || [], cashSessions || []);
+  }, [selectedZSession, state?.sales, cashSessions]);
 
   const calculatedDifference = useMemo(() => {
     if (!activeCashSession || closingAmountInput === "") return 0;
@@ -1445,8 +1442,24 @@ export default function POSPage() {
                 <span className="font-semibold text-foreground">{formatPrice(currentSessionStats.opening)}</span>
               </div>
               <div className="flex justify-between text-muted-foreground">
-                <span>Ventes en Espèces</span>
-                <span className="font-semibold text-foreground">{formatPrice(currentSessionStats.cash)}</span>
+                <span>Ventes Espèces (Comptant)</span>
+                <span className="font-semibold text-foreground">{formatPrice(currentSessionStats.cashSalesOnly)}</span>
+              </div>
+              {currentSessionStats.creditDeposits > 0 && (
+                <div className="flex justify-between text-amber-600 dark:text-amber-400 font-medium">
+                  <span>Acomptes Ventes à Crédit (Espèces)</span>
+                  <span className="font-bold">+{formatPrice(currentSessionStats.creditDeposits)}</span>
+                </div>
+              )}
+              {currentSessionStats.debtRecoveries > 0 && (
+                <div className="flex justify-between text-emerald-600 dark:text-emerald-400 font-medium">
+                  <span>Recouvrements Dettes (Espèces)</span>
+                  <span className="font-bold">+{formatPrice(currentSessionStats.debtRecoveries)}</span>
+                </div>
+              )}
+              <div className="flex justify-between text-muted-foreground font-semibold pt-1 border-t border-border/20">
+                <span>Total Espèces Encaissées au Tiroir</span>
+                <span className="font-bold text-foreground">+{formatPrice(currentSessionStats.cash)}</span>
               </div>
               <div className="flex justify-between text-muted-foreground">
                 <span>Ventes Mobile Money</span>
@@ -1456,6 +1469,12 @@ export default function POSPage() {
                 <span>Ventes Carte</span>
                 <span className="font-semibold text-foreground">{formatPrice(currentSessionStats.card)}</span>
               </div>
+              {currentSessionStats.creditRemaining > 0 && (
+                <div className="flex justify-between text-purple-600 dark:text-purple-400 text-[11px] pt-1 border-t border-border/20">
+                  <span>Crédits en attente (Reste dû non perçu)</span>
+                  <span className="font-bold">{formatPrice(currentSessionStats.creditRemaining)}</span>
+                </div>
+              )}
               <div className="pt-2 border-t border-border/40 flex justify-between font-bold text-sm">
                 <span>Espèces Théoriques Attendues dans le tiroir</span>
                 <span className="text-primary font-black">
@@ -1610,8 +1629,24 @@ export default function POSPage() {
               <div className="py-3 border-b border-dashed border-gray-400 space-y-1.5 text-[11px]">
                 <p className="font-bold text-[10px] uppercase text-gray-500">Recettes par Mode :</p>
                 <div className="flex justify-between">
-                  <span>Espèces :</span>
-                  <span className="font-bold">{formatPrice(selectedZSession.totalCashSales)}</span>
+                  <span>Espèces (Comptant) :</span>
+                  <span className="font-bold">{formatPrice(selectedZStats ? selectedZStats.cashSalesOnly : selectedZSession.totalCashSales)}</span>
+                </div>
+                {selectedZStats && selectedZStats.creditDeposits > 0 && (
+                  <div className="flex justify-between text-amber-700 font-medium">
+                    <span>Acomptes Crédits (Espèces) :</span>
+                    <span className="font-bold">+{formatPrice(selectedZStats.creditDeposits)}</span>
+                  </div>
+                )}
+                {selectedZStats && selectedZStats.debtRecoveries > 0 && (
+                  <div className="flex justify-between text-emerald-700 font-medium">
+                    <span>Recouvrements Dettes :</span>
+                    <span className="font-bold">+{formatPrice(selectedZStats.debtRecoveries)}</span>
+                  </div>
+                )}
+                <div className="flex justify-between font-bold text-gray-900 pt-1 border-t border-gray-200">
+                  <span>Total Espèces Tiroir :</span>
+                  <span className="font-black">{formatPrice(selectedZSession.totalCashSales)}</span>
                 </div>
                 <div className="flex justify-between">
                   <span>Mobile Money :</span>
@@ -1621,10 +1656,22 @@ export default function POSPage() {
                   <span>Carte Bancaire :</span>
                   <span className="font-bold">{formatPrice(selectedZSession.totalCardSales)}</span>
                 </div>
+                {selectedZStats && selectedZStats.creditTotal > 0 && (
+                  <div className="flex justify-between text-purple-700 text-[10px]">
+                    <span>Ventes à Crédit (Total) :</span>
+                    <span className="font-semibold">{formatPrice(selectedZStats.creditTotal)}</span>
+                  </div>
+                )}
                 <div className="pt-1.5 border-t border-gray-200 flex justify-between font-black text-sm">
                   <span>TOTAL VENTES :</span>
                   <span>{formatPrice(selectedZSession.totalSalesAmount)}</span>
                 </div>
+                {selectedZStats && (
+                  <div className="flex justify-between text-[10px] text-gray-600">
+                    <span>Total Réellement Encaissé :</span>
+                    <span className="font-bold">{formatPrice(selectedZStats.totalCollected)}</span>
+                  </div>
+                )}
               </div>
 
               {/* Rapprochement de caisse */}
@@ -1635,7 +1682,7 @@ export default function POSPage() {
                   <span>{formatPrice(selectedZSession.openingAmount)}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span>+ Ventes espèces :</span>
+                  <span>+ Total Espèces encaissées :</span>
                   <span>{formatPrice(selectedZSession.totalCashSales)}</span>
                 </div>
                 <div className="flex justify-between font-bold">
@@ -1756,8 +1803,24 @@ export default function POSPage() {
                 <span className="font-semibold text-foreground">{formatPrice(currentSessionStats.opening)}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-muted-foreground">Ventes Espèces :</span>
-                <span className="font-semibold text-foreground">{formatPrice(currentSessionStats.cash)}</span>
+                <span className="text-muted-foreground">Ventes Espèces (Comptant) :</span>
+                <span className="font-semibold text-foreground">{formatPrice(currentSessionStats.cashSalesOnly)}</span>
+              </div>
+              {currentSessionStats.creditDeposits > 0 && (
+                <div className="flex justify-between text-amber-600 dark:text-amber-400 font-medium">
+                  <span>Acomptes Crédits (Espèces) :</span>
+                  <span className="font-bold">+{formatPrice(currentSessionStats.creditDeposits)}</span>
+                </div>
+              )}
+              {currentSessionStats.debtRecoveries > 0 && (
+                <div className="flex justify-between text-emerald-600 dark:text-emerald-400 font-medium">
+                  <span>Recouvrements Dettes :</span>
+                  <span className="font-bold">+{formatPrice(currentSessionStats.debtRecoveries)}</span>
+                </div>
+              )}
+              <div className="flex justify-between font-semibold text-foreground pt-1 border-t border-border/20">
+                <span>Total Espèces Tiroir :</span>
+                <span className="font-bold text-primary">+{formatPrice(currentSessionStats.cash)}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Ventes Mobile Money :</span>
@@ -1767,9 +1830,19 @@ export default function POSPage() {
                 <span className="text-muted-foreground">Ventes Carte :</span>
                 <span className="font-semibold text-foreground">{formatPrice(currentSessionStats.card)}</span>
               </div>
+              {currentSessionStats.creditTotal > 0 && (
+                <div className="flex justify-between text-purple-600 dark:text-purple-400 text-xs">
+                  <span>Ventes à Crédit (Total facturé) :</span>
+                  <span className="font-semibold">{formatPrice(currentSessionStats.creditTotal)}</span>
+                </div>
+              )}
               <div className="pt-2 border-t border-border/40 flex justify-between font-bold text-sm">
-                <span>Total Encaissé ({currentSessionStats.count} ventes) :</span>
+                <span>Total Chiffre d'Affaires ({currentSessionStats.count} ventes) :</span>
                 <span className="text-primary font-black">{formatPrice(currentSessionStats.total)}</span>
+              </div>
+              <div className="flex justify-between text-xs text-muted-foreground font-medium">
+                <span>Total Réellement Encaissé :</span>
+                <span className="font-bold text-foreground">{formatPrice(currentSessionStats.totalCollected)}</span>
               </div>
               <div className="p-3 bg-emerald-500/10 border border-emerald-500/20 rounded-xl flex justify-between items-center text-emerald-600 dark:text-emerald-400 font-bold">
                 <span>Espèces théoriques dans le tiroir :</span>
