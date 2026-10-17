@@ -82,12 +82,80 @@ const AuthContext = createContext<AuthContextType>({
 });
 
 export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
-  const [user, setUser] = useState<User | null>(null);
-  const [role, setRole] = useState<"admin" | "cashier" | null>(null);
-  const [stores, setStores] = useState<any[]>([]);
-  const [activeStore, setActiveStore] = useState<any | null>(null);
-  const [subscription, setSubscription] = useState<StoreSubscription | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [user, setUser] = useState<User | null>(() => {
+    if (typeof window === "undefined") return null;
+    try {
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (key && key.startsWith("sb-") && key.endsWith("-auth-token")) {
+          const raw = localStorage.getItem(key);
+          if (raw) {
+            const parsed = JSON.parse(raw);
+            if (parsed?.user) return parsed.user;
+          }
+        }
+      }
+    } catch {}
+    return null;
+  });
+
+  const [activeStore, setActiveStore] = useState<any | null>(() => {
+    if (typeof window === "undefined") return null;
+    try {
+      const raw = localStorage.getItem("activeStoreObj");
+      if (raw) return JSON.parse(raw);
+    } catch {}
+    return null;
+  });
+
+  const [role, setRole] = useState<"admin" | "cashier" | null>(() => {
+    if (typeof window === "undefined") return null;
+    try {
+      const raw = localStorage.getItem("activeStoreObj");
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        return parsed.role || "admin";
+      }
+    } catch {}
+    return null;
+  });
+
+  const [stores, setStores] = useState<any[]>(() => {
+    if (typeof window === "undefined") return [];
+    try {
+      const raw = localStorage.getItem("cachedStores");
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) return parsed;
+      }
+    } catch {}
+    return [];
+  });
+
+  const [subscription, setSubscription] = useState<StoreSubscription | null>(() => {
+    if (typeof window === "undefined") return null;
+    try {
+      const raw = localStorage.getItem("activeStoreObj");
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        return computeSubscription(parsed);
+      }
+    } catch {}
+    return null;
+  });
+
+  const [loading, setLoading] = useState<boolean>(() => {
+    if (typeof window === "undefined") return true;
+    try {
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (key && key.startsWith("sb-") && key.endsWith("-auth-token")) {
+          return false; // Token déjà en cache : zéro attente !
+        }
+      }
+    } catch {}
+    return false;
+  });
 
   const fetchStores = async (userId: string) => {
     // Si nous sommes hors ligne, ne pas tenter la requête réseau
