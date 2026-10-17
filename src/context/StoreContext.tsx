@@ -249,6 +249,27 @@ const initialState: StoreState = {
   settings: { name: "MaBoutiquePro", logo: "/logo.png", currency: "FCFA", taxRate: 0, city: "Lomé", country: "Togo", email: "contact@maboutiquepro.app", phone: "+228 98 37 61 01" },
 };
 
+const getInitialStoreState = (defaultState: StoreState): StoreState => {
+  if (typeof window !== "undefined") {
+    try {
+      const activeId = localStorage.getItem("activeStoreId");
+      const key = activeId ? `boutiquepro-state-${activeId}` : "boutiquepro-state";
+      const saved = localStorage.getItem(key) || localStorage.getItem("boutiquepro-state");
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed && Array.isArray(parsed.products) && parsed.products.length > 0) {
+          return {
+            ...defaultState,
+            ...parsed,
+            cart: Array.isArray(parsed.cart) ? parsed.cart : [],
+          };
+        }
+      }
+    } catch (e) {}
+  }
+  return defaultState;
+};
+
 
 // ─── Fonctions d'agrégation des ventes de caisse ──────────────
 function generateUUID(): string {
@@ -764,12 +785,24 @@ interface StoreContextType {
 
 const StoreContext = createContext<StoreContextType | undefined>(undefined);
 
+
+export const isSubscriptionExpiredError = (err: any): boolean => {
+  if (!err) return false;
+  const msg = (err.message || err.details || '').toLowerCase();
+  return (
+    err.code === 'P0001' ||
+    msg.includes('abonnement expiré') ||
+    msg.includes('sub_gate') ||
+    msg.includes('subscription_ends_at')
+  );
+};
+
 export function StoreProvider({ children }: { children: ReactNode }) {
   const { activeStore, user, role } = useAuth();
   const isAdmin = role === 'admin' || activeStore?.role === 'admin';
-  const [state, dispatchBase] = useReducer(storeReducer, initialState);
+  const [state, dispatchBase] = useReducer(storeReducer, initialState, getInitialStoreState);
   const [isInitialized, setIsInitialized] = useState(false);
-  const [isOnline, setIsOnline] = useState<boolean>(true);
+  const [isOnline, setIsOnline] = useState<boolean>(() => (typeof window !== "undefined" ? navigator.onLine : true));
   const [pendingSyncCount, setPendingSyncCount] = useState<number>(0);
   const [isSyncing, setIsSyncing] = useState<boolean>(false);
 
@@ -1342,7 +1375,25 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!activeStore) return;
 
+    // Immédiatement restaurer le cache spécifique à cette boutique si disponible
+    if (typeof window !== "undefined" && activeStore.id) {
+      try {
+        const storeCache = localStorage.getItem(`boutiquepro-state-${activeStore.id}`) || localStorage.getItem("boutiquepro-state");
+        if (storeCache) {
+          const parsed = JSON.parse(storeCache);
+          if (parsed && Array.isArray(parsed.products) && parsed.products.length > 0) {
+            dispatchBase({ type: "LOAD_STATE", payload: parsed });
+          }
+        }
+      } catch (e) {}
+    }
+
     async function loadData() {
+      // Si l'utilisateur est hors-ligne, ne pas lancer 10 requêtes vouées à échouer
+      if (typeof window !== "undefined" && !navigator.onLine) {
+        setIsInitialized(true);
+        return;
+      }
       try {
         const isAdminUser = role === 'admin' || activeStore?.role === 'admin';
 
@@ -1633,9 +1684,14 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         }
 
         dispatchBase({ type: "LOAD_STATE", payload });
+        if (typeof window !== "undefined" && activeStore?.id) {
+          try {
+            localStorage.setItem(`boutiquepro-state-${activeStore.id}`, JSON.stringify(payload));
+            localStorage.setItem("boutiquepro-state", JSON.stringify(payload));
+          } catch (e) {}
+        }
       } catch (err) {
-        console.error("Error loading data from Supabase:", err);
-        dispatchBase({ type: "LOAD_STATE", payload: initialState });
+        console.warn("Échec du rafraîchissement depuis Supabase (hors-ligne ou réseau): conservation du cache local.", err);
       } finally {
         setIsInitialized(true);
       }
@@ -1643,12 +1699,15 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     loadData();
   }, [activeStore?.id, role, activeStore?.role]);
 
-  // Sync to local storage for unmigrated data (sales, inventory) just so it doesn't break
+  // Sync to local storage for offline resilience
   useEffect(() => {
-    if (isInitialized) {
-      localStorage.setItem("boutiquepro-state", JSON.stringify(state));
+    if (isInitialized && activeStore?.id) {
+      try {
+        localStorage.setItem(`boutiquepro-state-${activeStore.id}`, JSON.stringify(state));
+        localStorage.setItem("boutiquepro-state", JSON.stringify(state));
+      } catch (e) {}
     }
-  }, [state, isInitialized]);
+  }, [state, isInitialized, activeStore?.id]);
 
   // Async Dispatch Wrapper
   const dispatch = async (action: Action) => {
@@ -1807,6 +1866,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             });
 
             if (saleError) {
+              if (isSubscriptionExpiredError(saleError)) {
+                alert("Abonnement expiré : impossible d'enregistrer la vente. Veuillez renouveler votre formule Moneriz.");
+                return;
+              }
               console.warn("Erreur serveur Supabase create_sale, tentative insert direct:", saleError);
               const { error: directInsertError } = await supabase.from("sales").insert([{
                 id: s.id,
@@ -1826,6 +1889,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
               }]);
 
               if (directInsertError) {
+                if (isSubscriptionExpiredError(directInsertError)) {
+                  alert("Abonnement expiré : impossible d'enregistrer la vente. Veuillez renouveler votre formule Moneriz.");
+                  return;
+                }
                 console.warn("Basculement en sauvegarde hors-ligne sécurisée:", directInsertError);
                 await saveOfflineSale(activeStore.id, s);
                 setPendingSyncCount((prev) => prev + 1);
@@ -1848,7 +1915,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
                 console.warn("Erreur mise à jour métadonnées crédit vente:", upErr);
               }
             }
-          } catch (netErr) {
+          } catch (netErr: any) {
+            if (isSubscriptionExpiredError(netErr)) {
+              alert("Abonnement expiré : impossible d'enregistrer la vente.");
+              return;
+            }
             console.warn("Réseau indisponible, basculement en file d'attente hors-ligne:", netErr);
             await saveOfflineSale(activeStore.id, s);
             setPendingSyncCount((prev) => prev + 1);
@@ -2116,11 +2187,15 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     // S'assurer qu'aucune ancienne session ne reste "open" par accident
     if (activeStore?.id) {
       try {
-        await supabase
+        let orphanQuery = supabase
           .from("cash_sessions")
           .update({ status: "closed", closed_at: openedAt })
           .eq("store_id", activeStore.id)
           .eq("status", "open");
+        if (user?.id && role !== "admin") {
+          orphanQuery = orphanQuery.eq("user_id", user.id);
+        }
+        await orphanQuery;
       } catch (e) {
         console.warn("Fermeture sessions orphelines:", e);
       }

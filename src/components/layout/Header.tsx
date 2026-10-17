@@ -37,7 +37,7 @@ export default function Header({ onMenuClick }: { onMenuClick?: () => void }) {
 
   const { user, role, signOut } = useAuth();
   const [showProfile, setShowProfile] = useState(false);
-  const { lowStockProducts, state, formatPrice, todayRevenue, todayOrders, dispatch } = useStore();
+  const { lowStockProducts, state, formatPrice, todayRevenue, todayOrders, dispatch, isOnline, pendingSyncCount } = useStore();
   const pathname = usePathname();
   const [showNotif, setShowNotif] = useState(false);
   const [showSearch, setShowSearch] = useState(false);
@@ -70,10 +70,17 @@ export default function Header({ onMenuClick }: { onMenuClick?: () => void }) {
           </button>
         )}
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
-          <span className="inline-flex items-center gap-1.5 rounded-lg bg-accent/10 px-2.5 py-1 text-xs font-medium text-accent">
-            <span className="h-1.5 w-1.5 rounded-full bg-accent animate-pulse" />
-            En ligne
-          </span>
+          {isOnline ? (
+            <span className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-500/10 px-2.5 py-1 text-xs font-semibold text-emerald-600 border border-emerald-500/20">
+              <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+              En ligne
+            </span>
+          ) : (
+            <span className="inline-flex items-center gap-1.5 rounded-lg bg-amber-500/15 px-2.5 py-1 text-xs font-bold text-amber-600 border border-amber-500/30 animate-pulse">
+              <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
+              Hors-ligne {pendingSyncCount > 0 ? `(${pendingSyncCount} en attente)` : ""}
+            </span>
+          )}
         </div>
       </div>
 
@@ -138,6 +145,7 @@ export default function Header({ onMenuClick }: { onMenuClick?: () => void }) {
         {/* Quick sale */}
         <Link
           href="/pos"
+          prefetch={true}
           onClick={() => {
             if (pathname === '/pos') dispatch({ type: 'CLEAR_CART' });
           }}

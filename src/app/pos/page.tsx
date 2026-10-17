@@ -62,7 +62,7 @@ export default function POSPage() {
     syncOfflineSales,
     isRealtimeActive
   } = useStore();
-  const { user, role } = useAuth();
+  const { user, role, subscription } = useAuth();
 
   // Cash Session States
   const [showOpenModal, setShowOpenModal] = useState(false);
@@ -185,6 +185,10 @@ export default function POSPage() {
       userId: user?.id,
     };
 
+    if (subscription?.isExpired) {
+      alert("L'abonnement de votre boutique est expiré. L'encaissement est bloqué jusqu'au renouvellement.");
+      return;
+    }
     dispatch({ type: "COMPLETE_SALE", payload: sale });
     setLastSale(sale);
     setDiscountValue("");

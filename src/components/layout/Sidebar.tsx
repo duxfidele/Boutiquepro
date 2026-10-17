@@ -50,6 +50,7 @@ export default function Sidebar({ isOpen, onClose }: { isOpen?: boolean, onClose
 
   useEffect(() => {
     const fetchCashier = async () => {
+      if (typeof navigator !== "undefined" && !navigator.onLine) return;
       if (activeStore && activeStore.role === 'admin') {
         try {
           const { data: member } = await supabase
@@ -139,6 +140,7 @@ export default function Sidebar({ isOpen, onClose }: { isOpen?: boolean, onClose
               <Link
                 key={item.href}
                 href={item.href}
+                prefetch={true}
                 onClick={onClose}
                 className={`group relative flex flex-row items-center justify-start gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-all duration-200 ${
                   isActive
@@ -231,6 +233,7 @@ export default function Sidebar({ isOpen, onClose }: { isOpen?: boolean, onClose
       <div className="flex flex-col border-t border-border/50 p-3 gap-2">
         <Link
           href="/profile"
+          prefetch={true}
           className="flex w-full items-center gap-3 rounded-xl py-2 px-3 hover:bg-secondary transition-colors group"
         >
           <div className="h-8 w-8 rounded-full bg-primary/20 text-primary flex items-center justify-center font-bold uppercase shrink-0">

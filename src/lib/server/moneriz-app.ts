@@ -1,4 +1,4 @@
-import { supabase } from '@/lib/supabase';
+import { supabaseServer as supabase } from './supabase-server';
 import type { BrowserCheckout, CheckoutAttempt } from './moneriz-checkout';
 import fs from 'node:fs';
 import path from 'node:path';
