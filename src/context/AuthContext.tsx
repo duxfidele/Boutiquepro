@@ -30,9 +30,11 @@ export const computeSubscription = (store: any): StoreSubscription | null => {
 
   const plan = (store.subscription_plan || "TRIAL").toUpperCase();
   const status = (store.subscription_status || "trial").toLowerCase();
+  const isTrial = status === "trial" || plan === "TRIAL";
 
   let endsAtStr: string | null = store.subscription_ends_at || null;
-  if (!endsAtStr && store.created_at) {
+  // Ne replier sur created_at + 14 jours QUE si c est un essai sans date explicite
+  if (isTrial && !endsAtStr && store.created_at) {
     try {
       endsAtStr = new Date(new Date(store.created_at).getTime() + 14 * 24 * 60 * 60 * 1000).toISOString();
     } catch {
@@ -40,24 +42,35 @@ export const computeSubscription = (store: any): StoreSubscription | null => {
     }
   }
 
-  let daysRemaining = 0;
+  let daysRemaining = 999;
   let isExpired = false;
-
-  if (endsAtStr) {
-    const endsAtTime = new Date(endsAtStr).getTime();
-    const nowTime = Date.now();
-    const diffMs = endsAtTime - nowTime;
-    daysRemaining = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
-    if (diffMs <= 0) {
-      isExpired = true;
-    }
-  }
 
   if (status === "expired" || status === "canceled") {
     isExpired = true;
+    daysRemaining = 0;
+  } else if (isTrial) {
+    if (endsAtStr) {
+      const endsAtTime = new Date(endsAtStr).getTime();
+      const diffMs = endsAtTime - Date.now();
+      daysRemaining = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
+      if (diffMs <= 0) {
+        isExpired = true;
+      }
+    }
+  } else if (status === "active") {
+    // Si abonnement actif : uniquement expiré si une date de fin est fixée ET dépassée
+    if (endsAtStr) {
+      const endsAtTime = new Date(endsAtStr).getTime();
+      const diffMs = endsAtTime - Date.now();
+      daysRemaining = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
+      if (diffMs <= 0) {
+        isExpired = true;
+      }
+    } else {
+      isExpired = false;
+      daysRemaining = 999;
+    }
   }
-
-  const isTrial = status === "trial" || plan === "TRIAL";
 
   return {
     plan,
@@ -174,7 +187,8 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         const valid = data
           .map((d: any) => {
             const st = Array.isArray(d.stores) ? d.stores[0] : d.stores;
-            const fallbackEndsAt = st?.created_at
+            const isStTrial = (st?.subscription_status || "trial").toLowerCase() === "trial" || (st?.subscription_plan || "TRIAL").toUpperCase() === "TRIAL";
+            const fallbackEndsAt = isStTrial && st?.created_at
               ? new Date(new Date(st.created_at).getTime() + 14 * 24 * 60 * 60 * 1000).toISOString()
               : null;
 
