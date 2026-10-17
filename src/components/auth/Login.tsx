@@ -39,13 +39,20 @@ export default function Login({ initialIsSignUp = false, onBack }: { initialIsSi
         setMessage({ type: 'success', text: "Compte créé ! Veuillez vérifier votre boîte mail pour confirmer votre inscription." });
       }
     } else {
+      const cleanEmail = email.trim().toLowerCase();
       const { error } = await supabase.auth.signInWithPassword({
-        email,
+        email: cleanEmail,
         password,
       });
 
       if (error) {
-        setMessage({ type: 'error', text: "Email ou mot de passe incorrect." });
+        if (error.message?.includes("Email not confirmed")) {
+          setMessage({ type: 'error', text: "Votre adresse e-mail n'a pas encore été confirmée. Vérifiez vos emails." });
+        } else if (error.message?.toLowerCase().includes("rate limit") || error.status === 429) {
+          setMessage({ type: 'error', text: "Trop de tentatives de connexion. Veuillez patienter une minute avant de réessayer." });
+        } else {
+          setMessage({ type: 'error', text: "Email ou mot de passe incorrect." });
+        }
       }
     }
     setLoading(false);
