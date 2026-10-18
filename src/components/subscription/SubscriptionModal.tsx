@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
-import { X, Check, Shield, Sparkles, Loader2, AlertCircle, Lock, LogOut } from "lucide-react";
+import { X, Check, Shield, Sparkles, Loader2, AlertCircle, Lock, LogOut, ArrowRight, ShieldCheck, Smartphone, CreditCard, Zap } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import MonerizCheckoutModal from "./MonerizCheckoutModal";
 
@@ -180,44 +180,67 @@ export default function SubscriptionModal({
               {/* PLAN PRO */}
               <div
                 onClick={() => setSelectedTier("PRO")}
-                className={`cursor-pointer p-5 rounded-2xl border-2 transition-all flex flex-col justify-between ${
+                className={`relative cursor-pointer p-5 rounded-2xl border-2 transition-all duration-200 flex flex-col justify-between group ${
                   selectedTier === "PRO"
-                    ? "border-primary bg-primary/5 shadow-md shadow-primary/10"
-                    : "border-outline-variant/30 hover:border-outline-variant/60 bg-surface-container-lowest"
+                    ? "border-emerald-500 bg-gradient-to-b from-emerald-500/10 via-emerald-500/[0.03] to-transparent shadow-lg shadow-emerald-500/10 ring-2 ring-emerald-500/20"
+                    : "border-outline-variant/30 hover:border-outline-variant/70 bg-surface-container-lowest hover:bg-surface-container-low/40"
                 }`}
               >
+                {selectedTier === "PRO" && (
+                  <div className="absolute -top-3 left-4 px-2.5 py-0.5 rounded-full bg-gradient-to-r from-emerald-600 to-teal-600 text-white text-[10px] font-black uppercase tracking-wider shadow-sm flex items-center gap-1">
+                    <Sparkles className="w-3 h-3 text-amber-300" />
+                    <span>Recommandé</span>
+                  </div>
+                )}
                 <div>
-                  <div className="flex justify-between items-start mb-2">
-                    <span className="px-2.5 py-0.5 rounded-full bg-primary/10 text-primary text-[10px] font-black uppercase">
+                  <div className="flex justify-between items-start mb-2.5">
+                    <span className="px-2.5 py-0.5 rounded-full bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 text-[10px] font-black uppercase">
                       Boutique Individuelle
                     </span>
-                    <input
-                      type="radio"
-                      checked={selectedTier === "PRO"}
-                      onChange={() => setSelectedTier("PRO")}
-                      className="accent-primary w-4 h-4"
-                    />
+                    <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all ${
+                      selectedTier === "PRO" ? "border-emerald-600 bg-emerald-600 text-white scale-110" : "border-outline-variant"
+                    }`}>
+                      {selectedTier === "PRO" && <Check className="w-3 h-3 stroke-[3]" />}
+                    </div>
                   </div>
-                  <h4 className="text-xl font-black text-on-surface mb-1">PRO</h4>
-                  <div className="text-2xl font-black text-on-surface mb-3">
+                  <h4 className="text-xl font-black text-on-surface mb-1 flex items-center gap-1.5">
+                    <span>PRO</span>
+                    <Zap className="w-4 h-4 text-emerald-500" />
+                  </h4>
+                  <div className="text-2xl sm:text-3xl font-black text-on-surface mb-3">
                     {isAnnual ? "50 000" : "5 000"}{" "}
                     <span className="text-xs font-bold text-outline">FCFA / {isAnnual ? "an" : "mois"}</span>
                   </div>
                   <ul className="space-y-2 text-xs text-on-surface-variant font-medium">
                     <li className="flex items-center gap-2">
-                      <Check className="w-3.5 h-3.5 text-primary shrink-0" /> 1 Boutique &amp; Ventes illimitées
+                      <div className="w-4 h-4 rounded-full bg-emerald-500/10 flex items-center justify-center shrink-0">
+                        <Check className="w-3 h-3 text-emerald-600 font-bold" />
+                      </div>
+                      <span><b>1 Boutique</b> &amp; Ventes illimitées</span>
                     </li>
                     <li className="flex items-center gap-2">
-                      <Check className="w-3.5 h-3.5 text-primary shrink-0" /> Sessions de Caisse &amp; Rapport Z
+                      <div className="w-4 h-4 rounded-full bg-emerald-500/10 flex items-center justify-center shrink-0">
+                        <Check className="w-3 h-3 text-emerald-600 font-bold" />
+                      </div>
+                      <span>Sessions de Caisse &amp; Rapport Z</span>
                     </li>
                     <li className="flex items-center gap-2">
-                      <Check className="w-3.5 h-3.5 text-primary shrink-0" /> Carnet de Dettes &amp; Relances WhatsApp
+                      <div className="w-4 h-4 rounded-full bg-emerald-500/10 flex items-center justify-center shrink-0">
+                        <Check className="w-3 h-3 text-emerald-600 font-bold" />
+                      </div>
+                      <span>Carnet de Dettes &amp; Relances WhatsApp</span>
                     </li>
                     <li className="flex items-center gap-2">
-                      <Check className="w-3.5 h-3.5 text-primary shrink-0" /> Mode Hors-ligne (PWA)
+                      <div className="w-4 h-4 rounded-full bg-emerald-500/10 flex items-center justify-center shrink-0">
+                        <Check className="w-3 h-3 text-emerald-600 font-bold" />
+                      </div>
+                      <span>Mode Hors-ligne (PWA installable)</span>
                     </li>
                     <li className="flex items-center gap-2">
-                      <Check className="w-3.5 h-3.5 text-primary shrink-0" /> Reçus thermiques &amp; Factures A4
+                      <div className="w-4 h-4 rounded-full bg-emerald-500/10 flex items-center justify-center shrink-0">
+                        <Check className="w-3 h-3 text-emerald-600 font-bold" />
+                      </div>
+                      <span>Reçus thermiques &amp; Factures A4</span>
                     </li>
                   </ul>
                 </div>
@@ -226,44 +249,61 @@ export default function SubscriptionModal({
               {/* PLAN BUSINESS */}
               <div
                 onClick={() => setSelectedTier("BUSINESS")}
-                className={`cursor-pointer p-5 rounded-2xl border-2 transition-all flex flex-col justify-between ${
+                className={`relative cursor-pointer p-5 rounded-2xl border-2 transition-all duration-200 flex flex-col justify-between group ${
                   selectedTier === "BUSINESS"
-                    ? "border-primary bg-primary/5 shadow-md shadow-primary/10"
-                    : "border-outline-variant/30 hover:border-outline-variant/60 bg-surface-container-lowest"
+                    ? "border-primary bg-gradient-to-b from-primary/10 via-primary/[0.03] to-transparent shadow-lg shadow-primary/10 ring-2 ring-primary/20"
+                    : "border-outline-variant/30 hover:border-outline-variant/70 bg-surface-container-lowest hover:bg-surface-container-low/40"
                 }`}
               >
                 <div>
-                  <div className="flex justify-between items-start mb-2">
-                    <span className="px-2.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-700 text-[10px] font-black uppercase">
+                  <div className="flex justify-between items-start mb-2.5">
+                    <span className="px-2.5 py-0.5 rounded-full bg-primary/15 text-primary text-[10px] font-black uppercase">
                       Multi-points de vente
                     </span>
-                    <input
-                      type="radio"
-                      checked={selectedTier === "BUSINESS"}
-                      onChange={() => setSelectedTier("BUSINESS")}
-                      className="accent-primary w-4 h-4"
-                    />
+                    <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all ${
+                      selectedTier === "BUSINESS" ? "border-primary bg-primary text-white scale-110" : "border-outline-variant"
+                    }`}>
+                      {selectedTier === "BUSINESS" && <Check className="w-3 h-3 stroke-[3]" />}
+                    </div>
                   </div>
-                  <h4 className="text-xl font-black text-on-surface mb-1">BUSINESS</h4>
-                  <div className="text-2xl font-black text-on-surface mb-3">
+                  <h4 className="text-xl font-black text-on-surface mb-1 flex items-center gap-1.5">
+                    <span>BUSINESS</span>
+                    <Sparkles className="w-4 h-4 text-primary" />
+                  </h4>
+                  <div className="text-2xl sm:text-3xl font-black text-on-surface mb-3">
                     {isAnnual ? "150 000" : "15 000"}{" "}
                     <span className="text-xs font-bold text-outline">FCFA / {isAnnual ? "an" : "mois"}</span>
                   </div>
                   <ul className="space-y-2 text-xs text-on-surface-variant font-medium">
-                    <li className="flex items-center gap-2 font-bold text-emerald-700">
-                      <Check className="w-3.5 h-3.5 text-emerald-600 shrink-0" /> Tout ce qui est inclus dans PRO
+                    <li className="flex items-center gap-2 font-bold text-primary">
+                      <div className="w-4 h-4 rounded-full bg-primary/15 flex items-center justify-center shrink-0">
+                        <Check className="w-3 h-3 text-primary font-bold" />
+                      </div>
+                      <span>Tout ce qui est inclus dans PRO</span>
                     </li>
                     <li className="flex items-center gap-2">
-                      <Check className="w-3.5 h-3.5 text-primary shrink-0" /> <b>Multi-boutiques</b> &amp; Caissiers
+                      <div className="w-4 h-4 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
+                        <Check className="w-3 h-3 text-primary font-bold" />
+                      </div>
+                      <span><b>Multi-boutiques</b> &amp; Caissiers</span>
                     </li>
                     <li className="flex items-center gap-2">
-                      <Check className="w-3.5 h-3.5 text-primary shrink-0" /> Gestion multi-magasins centralisée
+                      <div className="w-4 h-4 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
+                        <Check className="w-3 h-3 text-primary font-bold" />
+                      </div>
+                      <span>Gestion multi-magasins centralisée</span>
                     </li>
                     <li className="flex items-center gap-2">
-                      <Check className="w-3.5 h-3.5 text-primary shrink-0" /> Rôles et permissions avancés
+                      <div className="w-4 h-4 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
+                        <Check className="w-3 h-3 text-primary font-bold" />
+                      </div>
+                      <span>Rôles et permissions avancés</span>
                     </li>
                     <li className="flex items-center gap-2">
-                      <Check className="w-3.5 h-3.5 text-primary shrink-0" /> Support prioritaire VIP WhatsApp
+                      <div className="w-4 h-4 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
+                        <Check className="w-3 h-3 text-primary font-bold" />
+                      </div>
+                      <span>Support prioritaire VIP WhatsApp</span>
                     </li>
                   </ul>
                 </div>
@@ -279,11 +319,14 @@ export default function SubscriptionModal({
           </div>
 
           {/* Footer CTA */}
-          <div className="p-6 border-t border-outline-variant/20 bg-surface-container-low/40 flex flex-col sm:flex-row items-center justify-between gap-4">
+          <div className="p-6 border-t border-outline-variant/20 bg-surface-container-low/60 flex flex-col sm:flex-row items-center justify-between gap-4">
             <div className="flex items-center gap-4 w-full sm:w-auto justify-between sm:justify-start">
               <div>
-                <span className="text-xs text-outline font-medium">Total à payer :</span>
-                <div className="text-lg font-black text-on-surface">{priceFormatted}</div>
+                <span className="text-xs text-outline font-medium flex items-center gap-1">
+                  <span>Montant total :</span>
+                  <span className="text-[10px] px-1.5 py-0.2 rounded bg-emerald-500/10 text-emerald-600 font-bold uppercase">Sans frais cachés</span>
+                </span>
+                <div className="text-2xl font-black text-on-surface tracking-tight">{priceFormatted}</div>
               </div>
               {isLocked && (
                 <button
@@ -309,25 +352,58 @@ export default function SubscriptionModal({
                 </button>
               )}
 
+              {/* BOUTON ULTRA-PREMIUM AVEC SHIMMER ET DÉGRADÉ VIBRANT */}
               <button
                 type="button"
                 onClick={handleStartPayment}
                 disabled={loading}
-                className="w-full sm:w-auto inline-flex items-center justify-center gap-2.5 px-6 py-3.5 rounded-xl bg-primary text-on-primary font-bold text-sm hover:bg-primary-container active:scale-[0.98] transition-all shadow-md shadow-primary/20 disabled:opacity-50"
+                className="relative group overflow-hidden w-full sm:w-auto inline-flex items-center justify-center gap-3.5 px-8 py-4 rounded-2xl bg-gradient-to-r from-emerald-600 via-teal-600 to-indigo-600 hover:from-emerald-500 hover:via-teal-500 hover:to-indigo-500 text-white font-black text-sm sm:text-base tracking-wide shadow-xl shadow-emerald-600/30 hover:shadow-2xl hover:shadow-emerald-500/50 hover:-translate-y-0.5 active:translate-y-0 active:scale-[0.98] transition-all duration-300 disabled:opacity-50 border border-white/20 cursor-pointer"
               >
+                {/* Effet reflet de lumière Shimmer dynamique */}
+                <span className="absolute inset-0 w-1/2 h-full bg-white/25 skew-x-12 -translate-x-full group-hover:translate-x-[300%] transition-transform duration-1000 ease-out" />
+
                 {loading ? (
                   <>
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                    <span>Connexion à Moneriz...</span>
+                    <Loader2 className="w-5 h-5 animate-spin" />
+                    <span>Sécurisation de la commande...</span>
                   </>
                 ) : (
                   <>
-                    <Shield className="w-4 h-4" />
-                    <span>Payer avec Moneriz (Mobile Money / Carte)</span>
+                    <div className="w-8 h-8 rounded-xl bg-white/20 flex items-center justify-center backdrop-blur-sm border border-white/30 shadow-inner group-hover:rotate-6 group-hover:scale-110 transition-all shrink-0">
+                      <Sparkles className="w-4 h-4 text-amber-300 animate-pulse" />
+                    </div>
+                    <div className="text-left">
+                      <div className="text-[10px] font-black uppercase tracking-wider text-emerald-200 flex items-center gap-1.5">
+                        <span>Paiement Instantané</span>
+                        <span className="inline-block w-1.5 h-1.5 rounded-full bg-emerald-300 animate-ping" />
+                      </div>
+                      <div className="text-sm sm:text-base font-black flex items-center gap-1.5 leading-tight">
+                        <span>Payer &amp; Débloquer</span>
+                        <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
+                      </div>
+                    </div>
+                    <div className="ml-2 pl-3 border-l border-white/20 hidden md:flex items-center gap-1 text-[11px] text-white/90">
+                      <ShieldCheck className="w-4 h-4 text-emerald-200" />
+                      <span>100% Sécurisé</span>
+                    </div>
                   </>
                 )}
               </button>
             </div>
+          </div>
+
+          {/* Bandeau de réassurance des moyens de paiement africains */}
+          <div className="px-6 py-2.5 bg-surface-container-low/90 border-t border-outline-variant/15 flex items-center justify-center gap-3 text-[11px] text-on-surface-variant font-medium flex-wrap">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-outline">Moyens acceptés :</span>
+            <span className="flex items-center gap-1 font-semibold text-on-surface"><Smartphone className="w-3.5 h-3.5 text-emerald-600" /> T-Money</span>
+            <span>•</span>
+            <span className="flex items-center gap-1 font-semibold text-on-surface"><Smartphone className="w-3.5 h-3.5 text-blue-600" /> Moov Flooz</span>
+            <span>•</span>
+            <span className="flex items-center gap-1 font-semibold text-on-surface"><Smartphone className="w-3.5 h-3.5 text-cyan-600" /> Wave</span>
+            <span>•</span>
+            <span className="flex items-center gap-1 font-semibold text-on-surface"><Smartphone className="w-3.5 h-3.5 text-orange-600" /> Orange Money</span>
+            <span>•</span>
+            <span className="flex items-center gap-1 font-semibold text-on-surface"><CreditCard className="w-3.5 h-3.5 text-indigo-600" /> Cartes Bancaires</span>
           </div>
         </div>
       </div>

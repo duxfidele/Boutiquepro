@@ -110,9 +110,11 @@ export default function AppWrapper({ children }: { children: React.ReactNode }) 
                   <button
                     type="button"
                     onClick={() => setShowUpgradeModal(true)}
-                    className="px-3 py-1 rounded-lg bg-primary text-primary-foreground text-xs font-bold hover:opacity-90 transition-all shrink-0 shadow-sm"
+                    className="relative group overflow-hidden px-4 py-1.5 rounded-full bg-gradient-to-r from-emerald-600 via-teal-600 to-indigo-600 hover:from-emerald-500 hover:to-indigo-500 text-white text-xs font-black hover:scale-105 active:scale-95 transition-all shrink-0 shadow-md shadow-emerald-600/25 flex items-center gap-1.5 border border-white/20"
                   >
-                    Activer mon abonnement
+                    <span className="absolute inset-0 w-1/2 h-full bg-white/20 skew-x-12 -translate-x-full group-hover:translate-x-[300%] transition-transform duration-700 ease-out" />
+                    <Sparkles className="w-3.5 h-3.5 text-amber-300 animate-pulse" />
+                    <span>Passer à la formule Pro</span>
                   </button>
                 </div>
               )}

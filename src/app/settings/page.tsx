@@ -3,7 +3,7 @@ import SubscriptionModal from "@/components/subscription/SubscriptionModal";
 
 import React, { useState } from "react";
 import { useStore } from "@/context/StoreContext";
-import { Save, Image as ImageIcon, CreditCard, Store, DollarSign, Percent, MapPin, Mail, Phone } from "lucide-react";
+import { Save, Sparkles, Image as ImageIcon, CreditCard, Store, DollarSign, Percent, MapPin, Mail, Phone } from "lucide-react";
 import { useRouter } from "next/navigation";
 
 export default function SettingsPage() {
@@ -226,9 +226,11 @@ export default function SettingsPage() {
           <button
             type="button"
             onClick={() => setShowSubModal(true)}
-            className="px-5 py-2.5 rounded-xl bg-primary text-primary-foreground text-xs font-bold hover:opacity-90 transition-all shadow-sm flex items-center gap-2 shrink-0"
+            className="relative group overflow-hidden px-6 py-3 rounded-2xl bg-gradient-to-r from-emerald-600 via-teal-600 to-indigo-600 hover:from-emerald-500 hover:to-indigo-500 text-white text-xs sm:text-sm font-black shadow-lg shadow-emerald-600/20 hover:shadow-xl hover:shadow-emerald-500/30 hover:-translate-y-0.5 active:translate-y-0 transition-all flex items-center gap-2.5 border border-white/20 shrink-0 cursor-pointer"
           >
-            <span>Souscrire / Renouveler</span>
+            <span className="absolute inset-0 w-1/2 h-full bg-white/20 skew-x-12 -translate-x-full group-hover:translate-x-[300%] transition-transform duration-1000 ease-out" />
+            <Sparkles className="w-4 h-4 text-amber-300 animate-pulse" />
+            <span>Souscrire / Renouveler mon abonnement</span>
           </button>
         </div>
       </div>
