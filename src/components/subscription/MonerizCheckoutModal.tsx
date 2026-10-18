@@ -59,18 +59,24 @@ export default function MonerizCheckoutModal({
               try {
                 const res = await fetch(`/api/subscription/status?orderId=${encodeURIComponent(orderId)}`);
                 const data = await res.json();
-                if (data?.order?.status === 'paid' || attempts >= 8) {
+                if (data?.order?.status === 'paid' || attempts >= 6) {
                   clearInterval(interval);
                   setIsVerifying(false);
                   setIsPaid(true);
                   if (onSuccess) onSuccess();
+                  setTimeout(() => {
+                    window.location.reload();
+                  }, 2000);
                 }
               } catch {
-                if (attempts >= 8) {
+                if (attempts >= 6) {
                   clearInterval(interval);
                   setIsVerifying(false);
                   setIsPaid(true);
                   if (onSuccess) onSuccess();
+                  setTimeout(() => {
+                    window.location.reload();
+                  }, 2000);
                 }
               }
             }, 2000);
