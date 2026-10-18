@@ -278,6 +278,8 @@ export async function prepareAuthorizedCheckout(
       embedOrigin,
       metadata: {
         orderId: stored.orderId,
+        storeId: stored.storeId,
+        planKey: stored.planKey,
       },
     },
     session: stored.session || null,
@@ -396,6 +398,58 @@ export async function commitMonerizInbox(event: MonerizEvent): Promise<void> {
           targetOrder = ord;
           break;
         }
+      }
+
+      // Vercel serverless: interroger Supabase si la commande n'est pas en mémoire locale
+      if (!targetOrder && (orderId || reference)) {
+        try {
+          let query = supabase.from('moneriz_checkout_attempts').select('*');
+          if (orderId) {
+            query = query.eq('order_id', orderId);
+          } else if (reference) {
+            query = query.eq('reference', reference);
+          }
+          const { data: dbOrder } = await query.maybeSingle();
+          if (dbOrder) {
+            targetOrder = {
+              orderId: dbOrder.order_id,
+              storeId: dbOrder.store_id,
+              planKey: dbOrder.plan_id as PlanKey,
+              amount: Number(dbOrder.amount),
+              currency: dbOrder.currency || 'XOF',
+              mode: dbOrder.mode,
+              reference: dbOrder.reference,
+              idempotencyKey: dbOrder.idempotency_key,
+              status: dbOrder.status,
+              customerEmail: dbOrder.customer_email,
+              session: null,
+              createdAt: dbOrder.created_at,
+              updatedAt: dbOrder.updated_at || dbOrder.created_at,
+            };
+          }
+        } catch (dbErr) {
+          console.error("Erreur interrogation moneriz_checkout_attempts:", dbErr);
+        }
+      }
+
+      // Secours ultime : si non trouvée mais que les métadonnées de Moneriz ont storeId
+      if (!targetOrder && (payment.metadata?.storeId || payment.metadata?.orderId)) {
+        const metaStoreId = payment.metadata?.storeId;
+        const metaPlanKey = (payment.metadata?.planKey as PlanKey) || 'pro_monthly';
+        targetOrder = {
+          orderId: orderId || payment.id,
+          storeId: metaStoreId,
+          planKey: metaPlanKey,
+          amount: payment.amount,
+          currency: (payment.currency as 'XOF') || 'XOF',
+          mode: 'live',
+          reference: reference || payment.id,
+          idempotencyKey: payment.id,
+          status: 'pending',
+          session: null,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        };
       }
 
       if (targetOrder) {
