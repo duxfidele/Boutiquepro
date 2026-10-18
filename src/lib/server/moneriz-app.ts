@@ -19,9 +19,9 @@ export const SAAS_PLANS: Record<PlanKey, PlanConfig> = {
     id: 'pro_monthly',
     planName: 'PRO',
     durationMonths: 1,
-    amount: 5000,
+    amount: 200,
     currency: 'XOF',
-    title: 'Abonnement Pro (1 Mois) - MaBoutiquePro',
+    title: 'Abonnement Pro (1 Mois - Test) - MaBoutiquePro',
   },
   pro_annual: {
     id: 'pro_annual',

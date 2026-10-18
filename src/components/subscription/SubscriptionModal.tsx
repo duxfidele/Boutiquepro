@@ -36,7 +36,7 @@ export default function SubscriptionModal({
     : (isAnnual ? "business_annual" : "business_monthly");
 
   const priceFormatted = selectedTier === "PRO"
-    ? (isAnnual ? "50 000 FCFA / an" : "5 000 FCFA / mois")
+    ? (isAnnual ? "50 000 FCFA / an" : "200 FCFA / mois")
     : (isAnnual ? "150 000 FCFA / an" : "15 000 FCFA / mois");
 
   const handleStartPayment = async () => {
@@ -200,7 +200,7 @@ export default function SubscriptionModal({
                   </div>
                   <h4 className="text-xl font-black text-on-surface mb-1">PRO</h4>
                   <div className="text-2xl font-black text-on-surface mb-3">
-                    {isAnnual ? "50 000" : "5 000"}{" "}
+                    {isAnnual ? "50 000" : "200"}{" "}
                     <span className="text-xs font-bold text-outline">FCFA / {isAnnual ? "an" : "mois"}</span>
                   </div>
                   <ul className="space-y-2 text-xs text-on-surface-variant font-medium">
