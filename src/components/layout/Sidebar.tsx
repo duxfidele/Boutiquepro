@@ -235,6 +235,12 @@ export default function Sidebar({ isOpen, onClose }: { isOpen?: boolean; onClose
                   <select
                     value={activeStore?.id || ""}
                     onChange={(e) => {
+                      const selectedIndex = stores.findIndex((x) => x.id === e.target.value);
+                      if (!hasMultiStore && selectedIndex > 0) {
+                        setSubModalDefaultPlan("BUSINESS");
+                        setSubModalOpen(true);
+                        return;
+                      }
                       const s = stores.find((x) => x.id === e.target.value);
                       if (s) {
                         setActiveStore(s);
@@ -243,11 +249,14 @@ export default function Sidebar({ isOpen, onClose }: { isOpen?: boolean; onClose
                     }}
                     className="w-full bg-transparent text-xs font-bold truncate outline-none cursor-pointer appearance-none text-foreground"
                   >
-                    {stores.map((s) => (
-                      <option key={s.id} value={s.id}>
-                        {s.name}
-                      </option>
-                    ))}
+                    {stores.map((s, idx) => {
+                      const isStoreLocked = !hasMultiStore && idx > 0;
+                      return (
+                        <option key={s.id} value={s.id} disabled={isStoreLocked} className={isStoreLocked ? "text-muted-foreground bg-muted" : ""}>
+                          {s.name} {isStoreLocked ? " (🔒 Requis Business)" : ""}
+                        </option>
+                      );
+                    })}
                   </select>
                   <p className="text-[10px] text-muted-foreground truncate">
                     <span className="text-primary font-medium">{cashierName ? `Caisse: ${cashierName}` : "Gérant"}</span>

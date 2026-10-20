@@ -81,7 +81,34 @@ export default function AppWrapper({ children }: { children: React.ReactNode }) 
       );
     }
 
-    // B. Utilisateur avec abonnement ou essai actif
+    // B. Si l'utilisateur est un caissier mais que la formule actuelle ne permet aucun caissier (ex: formule Starter)
+    if (role === "cashier" && (subscription?.limits?.maxCashiers ?? 0) === 0) {
+      return (
+        <ErrorBoundary>
+          <div className="min-h-screen flex flex-col items-center justify-center bg-background p-6 text-center select-none">
+            <div className="max-w-md w-full p-8 rounded-3xl bg-card border border-border/60 shadow-2xl flex flex-col items-center animate-in zoom-in-95 duration-200">
+              <div className="w-16 h-16 rounded-2xl bg-amber-500/10 text-amber-600 dark:text-amber-400 flex items-center justify-center mb-5 ring-8 ring-amber-500/5">
+                <Lock className="w-8 h-8" />
+              </div>
+              <h2 className="text-2xl font-black text-foreground mb-2">Accès Caissier Non Autorisé</h2>
+              <p className="text-sm text-muted-foreground leading-relaxed mb-6 font-medium">
+                La formule actuelle de votre boutique (<b>Starter</b>) ne comprend aucun accès caissier. Veuillez contacter l&apos;administrateur pour passer à la formule <b>Pro</b> ou <b>Business</b>.
+              </p>
+              <button
+                type="button"
+                onClick={signOut}
+                className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-secondary text-foreground hover:bg-secondary/80 font-bold text-sm transition-all"
+              >
+                <LogOut className="w-4 h-4" />
+                <span>Se déconnecter</span>
+              </button>
+            </div>
+          </div>
+        </ErrorBoundary>
+      );
+    }
+
+    // C. Utilisateur avec abonnement ou essai actif
     return (
       <ErrorBoundary>
         <StoreProvider>

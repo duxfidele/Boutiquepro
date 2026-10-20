@@ -327,9 +327,20 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
           localStorage.setItem("cachedStores", JSON.stringify(valid));
         } catch {}
 
+        const initialSub = computeSubscription(valid[0], adminSub);
+        const hasMultiStore = initialSub?.limits?.hasMultiStore ?? false;
+
         const savedStoreId = localStorage.getItem("activeStoreId");
         let selected = valid.find((s: any) => s.id === savedStoreId);
-        if (!selected) selected = valid[0];
+
+        // Si la formule actuelle ne permet pas le multi-boutique (ex: Pro ou Starter),
+        // on impose STRICTEMENT la boutique principale (valid[0])
+        if (!hasMultiStore || !selected) {
+          selected = valid[0];
+          try {
+            localStorage.setItem("activeStoreId", valid[0].id);
+          } catch {}
+        }
 
         setActiveStore(selected);
         setSubscription(computeSubscription(selected, adminSub));

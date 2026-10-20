@@ -39,7 +39,12 @@ export default function Login({ initialIsSignUp = false, onBack }: { initialIsSi
         setMessage({ type: 'success', text: "Compte créé ! Veuillez vérifier votre boîte mail pour confirmer votre inscription." });
       }
     } else {
-      const cleanEmail = email.trim().toLowerCase();
+      const cleanInput = email.trim().toLowerCase();
+      // Supporte l'email direct (admin/caissier) OU l'identifiant caissier (ex: caisse1)
+      const cleanEmail = cleanInput.includes("@")
+        ? cleanInput
+        : `${cleanInput}@caisse.maboutique.app`;
+
       const { error } = await supabase.auth.signInWithPassword({
         email: cleanEmail,
         password,
@@ -142,17 +147,19 @@ export default function Login({ initialIsSignUp = false, onBack }: { initialIsSi
         {isForgotPassword ? (
           <form onSubmit={handleResetPassword} className="space-y-5">
             <div className="space-y-2">
-              <label className="text-sm font-medium text-foreground ml-1">Adresse Email</label>
+              <label className="text-sm font-medium text-foreground ml-1">
+                {isSignUp ? "Adresse Email" : "Adresse Email ou Identifiant"}
+              </label>
               <div className="relative">
                 <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
                 <input
-                  type="email"
+                  type={isSignUp ? "email" : "text"}
                   required
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   className="w-full pl-10 pr-4 py-3 bg-background border border-border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 transition-all placeholder:text-muted-foreground/50"
-                  placeholder="admin@boutique.com"
-                  autoComplete="email"
+                  placeholder={isSignUp ? "admin@boutique.com" : "admin@boutique.com ou caisse1"}
+                  autoComplete={isSignUp ? "email" : "username"}
                 />
               </div>
             </div>
@@ -190,17 +197,19 @@ export default function Login({ initialIsSignUp = false, onBack }: { initialIsSi
         ) : (
           <form onSubmit={handleAuth} className="space-y-5">
             <div className="space-y-2">
-              <label className="text-sm font-medium text-foreground ml-1">Adresse Email</label>
+              <label className="text-sm font-medium text-foreground ml-1">
+                {isSignUp ? "Adresse Email" : "Adresse Email ou Identifiant"}
+              </label>
               <div className="relative">
                 <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
                 <input
-                  type="email"
+                  type={isSignUp ? "email" : "text"}
                   required
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   className="w-full pl-10 pr-4 py-3 bg-background border border-border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 transition-all placeholder:text-muted-foreground/50"
-                  placeholder="admin@boutique.com"
-                  autoComplete="email"
+                  placeholder={isSignUp ? "admin@boutique.com" : "admin@boutique.com ou caisse1"}
+                  autoComplete={isSignUp ? "email" : "username"}
                 />
               </div>
             </div>

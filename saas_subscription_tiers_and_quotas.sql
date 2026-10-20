@@ -33,10 +33,21 @@ CREATE TABLE IF NOT EXISTS public.admin_subscriptions (
 ALTER TABLE public.admin_subscriptions ENABLE ROW LEVEL SECURITY;
 
 DROP POLICY IF EXISTS "admin_subscriptions_read_own" ON public.admin_subscriptions;
-CREATE POLICY "admin_subscriptions_read_own"
+DROP POLICY IF EXISTS "admin_subscriptions_read_own" ON public.admin_subscriptions;
+DROP POLICY IF EXISTS "admin_subscriptions_read_member" ON public.admin_subscriptions;
+
+CREATE POLICY "admin_subscriptions_read_member"
     ON public.admin_subscriptions
     FOR SELECT TO authenticated
-    USING (user_id = auth.uid());
+    USING (
+        user_id = auth.uid()
+        OR user_id IN (
+            SELECT s.owner_id 
+            FROM public.stores s
+            JOIN public.store_members sm ON sm.store_id = s.id
+            WHERE sm.user_id = auth.uid()
+        )
+    );
 
 -- Interdire toute modification client directe sur admin_subscriptions
 REVOKE INSERT, UPDATE, DELETE ON public.admin_subscriptions FROM authenticated, anon;

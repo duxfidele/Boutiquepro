@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
-import { X, Check, Sparkles, Loader2, AlertCircle, Lock, LogOut, ArrowRight, ShieldCheck, Smartphone, CreditCard, Zap, Store, Minus } from "lucide-react";
+import { X, Check, Sparkles, Loader2, AlertCircle, AlertTriangle, Lock, LogOut, ArrowRight, ShieldCheck, Smartphone, CreditCard, Zap, Store, Minus } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { supabase } from "@/lib/supabase";
 import { SubscriptionTier, SUBSCRIPTION_PLANS, formatFCFA, PlanKey } from "@/lib/subscriptionPlans";
@@ -39,6 +39,18 @@ export default function SubscriptionModal({
       : selectedTier === "BUSINESS"
       ? (isAnnual ? "business_annual" : "business_monthly")
       : (isAnnual ? "pro_annual" : "pro_monthly")
+  );
+
+  const currentTier = subscription?.tier || "PRO";
+  const tierWeight: Record<SubscriptionTier, number> = {
+    STARTER: 1,
+    PRO: 2,
+    BUSINESS: 3,
+  };
+  const isDowngrade = Boolean(
+    !subscription?.isTrial &&
+    subscription?.status === "active" &&
+    tierWeight[selectedTier] < tierWeight[currentTier]
   );
 
   const planConfig = SUBSCRIPTION_PLANS[planKey];
@@ -408,6 +420,37 @@ export default function SubscriptionModal({
                 <span>{errorMessage}</span>
               </div>
             )}
+
+            {/* Avertissement explicite en cas de rétrogradation (Downgrade) */}
+            {isDowngrade && (
+              <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-900 dark:text-amber-200 text-xs space-y-2 animate-fade-in shadow-xs">
+                <div className="flex items-center gap-2 font-black text-amber-800 dark:text-amber-300 text-sm">
+                  <AlertTriangle className="w-4 h-4 shrink-0 text-amber-600 dark:text-amber-400" />
+                  <span>Avertissement : Rétrogradation de formule ({currentTier} ➔ {selectedTier})</span>
+                </div>
+                <p className="leading-relaxed font-medium">
+                  Attention : En choisissant la formule <b>{selectedTier}</b>, vos accès seront immédiatement et strictement restreints à ses seules fonctionnalités :
+                </p>
+                <ul className="list-disc list-inside space-y-1 text-[11px] font-semibold pl-1">
+                  {selectedTier === "PRO" && (
+                    <>
+                      <li><b>1 seule boutique autorisée :</b> Vos 2ème et 3ème boutiques créées en Business seront temporairement verrouillées.</li>
+                      <li><b>1 seul caissier :</b> Seul le 1er caissier pourra opérer, les autres seront suspendus.</li>
+                    </>
+                  )}
+                  {selectedTier === "STARTER" && (
+                    <>
+                      <li><b>0 caissier (aucun caissier) :</b> Tous les accès caissiers seront immédiatement suspendus.</li>
+                      <li><b>Fonctionnalités bloquées :</b> Carnet de dettes, factures A4, inventaires et commandes fournisseurs seront inaccessibles.</li>
+                      <li><b>1 seule boutique autorisée :</b> Accès restreint à votre boutique principale uniquement.</li>
+                    </>
+                  )}
+                </ul>
+                <p className="text-[10px] text-muted-foreground italic pt-0.5">
+                  Vos données historiques restent sauvegardées, mais leur utilisation sera bloquée jusqu&apos;à réabonnement à la formule requise.
+                </p>
+              </div>
+            )}
           </div>
 
           {/* Footer CTA */}
@@ -469,7 +512,7 @@ export default function SubscriptionModal({
                         <span className="inline-block w-1.5 h-1.5 rounded-full bg-emerald-300 animate-ping" />
                       </div>
                       <div className="text-sm sm:text-base font-black flex items-center gap-1.5 leading-tight">
-                        <span>Payer &amp; Débloquer</span>
+                        <span>{isDowngrade ? `Confirmer & Rétrograder (${selectedTier})` : "Payer & Débloquer"}</span>
                         <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
                       </div>
                     </div>

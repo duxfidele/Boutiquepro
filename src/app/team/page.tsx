@@ -113,10 +113,13 @@ export default function TeamPage() {
     setMessage(null);
 
     try {
+      const cleanInput = cashierEmail.trim().toLowerCase();
+      const targetEmail = cleanInput.includes('@') ? cleanInput : `${cleanInput}@caisse.maboutique.app`;
+
       const { data, error } = await supabase.rpc('admin_create_cashier', {
         p_store_id: selectedStoreId,
-        p_name: cashierName.trim() || cashierEmail.split('@')[0],
-        p_email: cashierEmail.trim().toLowerCase(),
+        p_name: cashierName.trim() || cleanInput.split('@')[0],
+        p_email: targetEmail,
         p_password: cashierPassword
       });
 
@@ -392,18 +395,21 @@ export default function TeamPage() {
               </div>
 
               <div>
-                <label className="text-xs font-semibold text-muted-foreground mb-1 block">Adresse Email / Identifiant</label>
+                <label className="text-xs font-semibold text-muted-foreground mb-1 block">Adresse Email ou Identifiant</label>
                 <div className="relative">
                   <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                   <input
-                    type="email"
-                    placeholder="Ex: caissier@maboutique.com"
+                    type="text"
+                    placeholder="Ex: caisse1 ou caissier@maboutique.com"
                     value={cashierEmail}
                     onChange={(e) => setCashierEmail(e.target.value)}
                     className="w-full pl-9 pr-4 py-2.5 rounded-xl border border-border/60 bg-background text-sm focus:ring-2 focus:ring-primary outline-none"
                     required
                   />
                 </div>
+                <p className="text-[10px] text-muted-foreground mt-1">
+                  Astuce : Vous pouvez saisir un simple identifiant (ex: <b>caisse1</b>) ou un email complet.
+                </p>
               </div>
 
               <div>
@@ -549,7 +555,9 @@ export default function TeamPage() {
                       </div>
                       <p className="text-xs text-muted-foreground flex items-center gap-1.5 mt-0.5">
                         <Mail className="h-3 w-3" />
-                        {member.email}
+                        {member.email?.endsWith('@caisse.maboutique.app')
+                          ? `Identifiant: ${member.email.replace('@caisse.maboutique.app', '')}`
+                          : member.email}
                       </p>
                     </div>
                   </div>
