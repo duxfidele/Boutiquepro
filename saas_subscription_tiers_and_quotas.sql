@@ -11,6 +11,8 @@
 -- 7. Révocation des accès directs pour sécurisation 100% RPC
 
 -- ------------------------------------------------------------------------------
+CREATE EXTENSION IF NOT EXISTS pgcrypto;
+
 -- 1. TABLE admin_subscriptions
 -- ------------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS public.admin_subscriptions (
@@ -116,6 +118,7 @@ SELECT DISTINCT ON (sm.user_id)
 FROM public.store_members sm
 JOIN public.stores s ON s.id = sm.store_id
 WHERE sm.role = 'admin'
+ORDER BY sm.user_id, s.created_at DESC
 ON CONFLICT (user_id) DO NOTHING;
 
 -- ------------------------------------------------------------------------------
@@ -127,7 +130,7 @@ LANGUAGE plpgsql
 SECURITY DEFINER
 STABLE
 SET search_path = public, pg_temp
-AS 6503
+AS $$
 DECLARE
     v_owner_id UUID;
     v_sub RECORD;
@@ -171,7 +174,7 @@ BEGIN
 
     RETURN FALSE;
 END;
-6503;
+$$;
 
 GRANT EXECUTE ON FUNCTION public.is_store_subscription_active(UUID) TO authenticated;
 
@@ -183,7 +186,7 @@ RETURNS UUID
 LANGUAGE plpgsql
 SECURITY DEFINER
 SET search_path = public, pg_temp
-AS 6503
+AS $$
 DECLARE
     v_user_id UUID := auth.uid();
     v_clean_name TEXT;
@@ -256,7 +259,7 @@ BEGIN
 
     RETURN v_new_store_id;
 END;
-6503;
+$$;
 
 GRANT EXECUTE ON FUNCTION public.create_new_store(TEXT) TO authenticated;
 
@@ -272,8 +275,8 @@ CREATE OR REPLACE FUNCTION public.admin_create_cashier(
 RETURNS JSONB
 LANGUAGE plpgsql
 SECURITY DEFINER
-SET search_path = public, pg_temp
-AS 6503
+SET search_path = public, extensions, pg_temp
+AS $$
 DECLARE
   v_caller_id UUID := auth.uid();
   v_caller_role TEXT;
@@ -383,7 +386,7 @@ BEGIN
     'message', 'Compte caissier créé avec succès pour ' || p_name || ' (' || p_email || '). Le caissier peut se connecter immédiatement !'
   );
 END;
-6503;
+$$;
 
 GRANT EXECUTE ON FUNCTION public.admin_create_cashier(UUID, TEXT, TEXT, TEXT) TO authenticated;
 
@@ -396,7 +399,7 @@ RETURNS TRIGGER
 LANGUAGE plpgsql 
 SECURITY DEFINER 
 SET search_path = public, pg_temp
-AS 6503
+AS $$
 DECLARE
     v_owner_id UUID;
     v_plan TEXT;
@@ -410,7 +413,7 @@ BEGIN
     END IF;
     RETURN NEW;
 END;
-6503;
+$$;
 
 DROP TRIGGER IF EXISTS trg_block_starter_credit ON public.sales;
 CREATE TRIGGER trg_block_starter_credit
@@ -423,7 +426,7 @@ RETURNS TRIGGER
 LANGUAGE plpgsql 
 SECURITY DEFINER 
 SET search_path = public, pg_temp
-AS 6503
+AS $$
 DECLARE
     v_owner_id UUID;
     v_plan TEXT;
@@ -437,7 +440,7 @@ BEGIN
     END IF;
     RETURN NEW;
 END;
-6503;
+$$;
 
 DROP TRIGGER IF EXISTS trg_block_starter_inventory ON public.inventory_sessions;
 CREATE TRIGGER trg_block_starter_inventory
@@ -450,7 +453,7 @@ RETURNS TRIGGER
 LANGUAGE plpgsql 
 SECURITY DEFINER 
 SET search_path = public, pg_temp
-AS 6503
+AS $$
 DECLARE
     v_owner_id UUID;
     v_plan TEXT;
@@ -464,7 +467,7 @@ BEGIN
     END IF;
     RETURN NEW;
 END;
-6503;
+$$;
 
 DROP TRIGGER IF EXISTS trg_block_starter_orders ON public.orders;
 CREATE TRIGGER trg_block_starter_orders
@@ -482,14 +485,14 @@ RETURNS TRIGGER
 LANGUAGE plpgsql 
 SECURITY DEFINER 
 SET search_path = public, pg_temp
-AS 6503
+AS $$
 BEGIN
     IF auth.uid() IS NOT NULL AND (NEW.owner_id IS DISTINCT FROM OLD.owner_id) THEN
         RAISE EXCEPTION 'Modification non autorisée du propriétaire de la boutique' USING ERRCODE = '42501';
     END IF;
     RETURN NEW;
 END;
-6503;
+$$;
 
 DROP TRIGGER IF EXISTS trg_protect_store_owner ON public.stores;
 CREATE TRIGGER trg_protect_store_owner

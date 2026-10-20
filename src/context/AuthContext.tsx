@@ -48,13 +48,13 @@ export const computeSubscription = (store: any, adminSub?: any): StoreSubscripti
   if (!store || !store.id) return null;
 
   // Priorité absolue : abonnement centralisé admin s'il existe, sinon colonnes de la boutique
-  const rawTier = adminSub?.tier || store.subscription_plan || "PRO";
+  const rawTier = adminSub?.plan_tier || store.subscription_plan || "PRO";
   const tier = normalizeTier(rawTier);
-  const plan = (adminSub?.tier || store.subscription_plan || "TRIAL").toUpperCase();
+  const plan = (adminSub?.plan_tier || store.subscription_plan || "TRIAL").toUpperCase();
   const status = (adminSub?.status || store.subscription_status || "trial").toLowerCase();
   const isTrial = status === "trial" || status === "trialing" || plan === "TRIAL";
 
-  let endsAtStr: string | null = adminSub?.current_period_end || store.subscription_ends_at || null;
+  let endsAtStr: string | null = adminSub?.current_period_ends_at || store.subscription_ends_at || null;
   // Ne replier sur created_at + 14 jours QUE si c'est un essai sans date explicite
   if (isTrial && !endsAtStr && store.created_at) {
     try {
@@ -220,8 +220,8 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       try {
         const { data: subData } = await supabase
           .from("admin_subscriptions")
-          .select("tier, status, current_period_end")
-          .eq("admin_id", userId)
+          .select("plan_tier, status, current_period_ends_at, max_stores, max_cashiers")
+          .eq("user_id", userId)
           .maybeSingle();
         if (subData) {
           adminSub = subData;
@@ -251,9 +251,9 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
               id: st?.id || d.store_id,
               name: st?.name || "Ma Boutique",
               created_at: st?.created_at,
-              subscription_plan: adminSub?.tier || st?.subscription_plan || "TRIAL",
+              subscription_plan: adminSub?.plan_tier || st?.subscription_plan || "TRIAL",
               subscription_status: adminSub?.status || st?.subscription_status || "trial",
-              subscription_ends_at: adminSub?.current_period_end || st?.subscription_ends_at || fallbackEndsAt,
+              subscription_ends_at: adminSub?.current_period_ends_at || st?.subscription_ends_at || fallbackEndsAt,
             };
           })
           .filter((d: any) => d.id);
@@ -294,9 +294,9 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
             id: "default",
             name: "Ma Boutique",
             role: "admin",
-            subscription_plan: adminSub?.tier || "TRIAL",
+            subscription_plan: adminSub?.plan_tier || "TRIAL",
             subscription_status: adminSub?.status || "trial",
-            subscription_ends_at: adminSub?.current_period_end || new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString(),
+            subscription_ends_at: adminSub?.current_period_ends_at || new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString(),
           };
           setStores([fallback]);
           setActiveStore(fallback);
