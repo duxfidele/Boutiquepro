@@ -10,10 +10,25 @@ export default function LandingPage({ onLoginClick }: LandingPageProps) {
   return (
     <div className="bg-surface font-sans text-on-surface antialiased">
       <header className="fixed top-0 left-0 right-0 z-50 bg-surface-container-lowest/95 backdrop-blur-md border-b border-surface-container">
-        <div className="h-16 sm:h-20 max-w-7xl mx-auto px-margin-mobile md:px-margin flex items-center justify-between">
-          <div className="flex items-center gap-space-sm">
-            <img alt="MaBoutiquePro Logo" className="h-7 sm:h-8 w-auto object-contain" src="/logo.png"/>
-            <span className="font-headline-sm text-base sm:text-headline-sm text-on-surface tracking-tight font-bold">MaBoutiquePro</span>
+        <div className="h-20 max-w-7xl mx-auto px-4 md:px-8 flex items-center justify-between">
+          <div className="flex flex-col justify-center">
+            <div className="flex items-center gap-2">
+              <img alt="MaBoutiquePro Logo" className="h-7 sm:h-8 w-auto object-contain" src="/logo.png"/>
+              <span className="font-headline-sm text-base sm:text-headline-sm text-on-surface tracking-tight font-bold">MaBoutiquePro</span>
+            </div>
+            {/* Les trois traits de menu positionnés au-dessous de MaBoutiquePro sur mobile */}
+            <button
+              onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+              className="lg:hidden mt-1 flex items-center gap-1.5 px-2 py-0.5 rounded-lg bg-surface-container border border-outline-variant/40 text-on-surface text-xs font-semibold hover:bg-surface-container-high transition-colors w-fit"
+              aria-label="Menu de navigation"
+            >
+              <span className="material-symbols-outlined text-base leading-none text-primary">
+                {isMobileMenuOpen ? 'close' : 'menu'}
+              </span>
+              <span className="text-[11px] text-on-surface-variant font-bold tracking-wide">
+                {isMobileMenuOpen ? 'Fermer' : 'Menu'}
+              </span>
+            </button>
           </div>
           <nav className="hidden lg:flex items-center gap-space-lg">
             <a className="font-title-md text-title-md text-on-surface-variant hover:text-primary transition-colors font-medium" href="#features">Fonctionnalités</a>
@@ -22,9 +37,6 @@ export default function LandingPage({ onLoginClick }: LandingPageProps) {
             <a className="font-title-md text-title-md text-on-surface-variant hover:text-primary transition-colors font-medium" href="#faq-accordion">FAQ</a>
           </nav>
           <div className="flex items-center gap-2 sm:gap-space-md">
-            <button className="lg:hidden text-on-surface p-1.5 sm:p-2 rounded-lg hover:bg-surface-container flex items-center justify-center transition-colors" onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)} aria-label="Menu">
-              <span className="material-symbols-outlined">{isMobileMenuOpen ? 'close' : 'menu'}</span>
-            </button>
             <button onClick={() => onLoginClick(false)} className="font-title-md text-title-md text-on-surface-variant hover:text-on-surface transition-colors hidden sm:inline-flex font-semibold mr-4">
               Se connecter
             </button>
@@ -39,7 +51,7 @@ export default function LandingPage({ onLoginClick }: LandingPageProps) {
           </div>
         </div>
         {isMobileMenuOpen && (
-          <div className="lg:hidden absolute top-16 sm:top-20 left-0 right-0 bg-surface-container-lowest border-b border-surface-container shadow-2xl p-6 flex flex-col gap-6 z-40 animate-in slide-in-from-top-2">
+          <div className="lg:hidden absolute top-20 left-0 right-0 bg-surface-container-lowest border-b border-surface-container shadow-2xl p-6 flex flex-col gap-6 z-40 animate-in slide-in-from-top-2">
             <a onClick={() => setIsMobileMenuOpen(false)} className="font-title-md text-lg text-on-surface-variant hover:text-primary transition-colors font-medium flex items-center gap-3" href="#features">
               <span className="material-symbols-outlined text-primary/70">auto_awesome</span> Fonctionnalités
             </a>
@@ -824,23 +836,40 @@ export default function LandingPage({ onLoginClick }: LandingPageProps) {
 </div>
 </section>
 </div></main><footer className="w-full bg-inverse-surface text-inverse-on-surface"><div className="max-w-7xl mx-auto px-4 md:px-8 pt-10 pb-20 sm:pb-6"><div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-10 pb-10 border-b border-on-surface-variant/20"><div className="lg:col-span-2 flex flex-col gap-4"><div className="flex items-center gap-2"><span className="text-xl font-bold text-inverse-on-surface tracking-tight">MaBoutiquePro</span></div><p className="text-sm text-inverse-on-surface/80 max-w-sm font-medium">Le système d&apos;exploitation commercial nouvelle génération pensé pour les commerçants modernes d'Afrique. Gestion des stocks, caisse tactile et réconciliations instantanées.</p></div><div className="flex flex-col gap-2"><h4 className="font-bold text-base text-inverse-on-surface">Produit</h4><ul className="flex flex-col gap-1 text-sm text-inverse-on-surface/75 font-medium"><li><a className="hover:text-inverse-primary transition-colors" href="#">Fonctionnalités</a></li><li><a className="hover:text-inverse-primary transition-colors" href="#">Tableau de bord</a></li><li><a className="hover:text-inverse-primary transition-colors" href="#">Gestion des stocks</a></li></ul></div><div className="flex flex-col gap-2"><h4 className="font-bold text-base text-inverse-on-surface">Entreprise</h4><ul className="flex flex-col gap-1 text-sm text-inverse-on-surface/75 font-medium"><li><a className="hover:text-inverse-primary transition-colors" href="#">À propos</a></li><li><a className="hover:text-inverse-primary transition-colors" href="#">Contact</a></li></ul></div><div className="flex flex-col gap-2"><h4 className="font-bold text-base text-inverse-on-surface">Légal</h4><ul className="flex flex-col gap-1 text-sm text-inverse-on-surface/75 font-medium"><li><a className="hover:text-inverse-primary transition-colors" href="#">Conditions d&apos;utilisation</a></li><li><a className="hover:text-inverse-primary transition-colors" href="#">Politique de confidentialité</a></li></ul></div></div><div className="pt-6 flex flex-col md:flex-row items-center justify-between gap-4"><p className="text-xs text-inverse-on-surface/60 font-medium">© 2026 MaBoutiquePro. Tous droits réservés.</p><div className="flex items-center gap-1 text-tertiary-fixed font-bold text-sm"><span className="material-symbols-outlined text-[18px]">favorite</span><span>Fait avec fierté pour les entrepreneurs africains.</span></div></div></div></footer>
-      {/* Barre CTA Mobile Sticky — garantit que le CTA n'est JAMAIS masqué sur smartphone */}
+      {/* Barre WhatsApp Sticky en bas (Mobile) — remplace l'ancien bouton Démarrer */}
       <div className="sm:hidden fixed bottom-0 left-0 right-0 z-40 px-4 py-3 bg-surface-container-lowest/95 backdrop-blur-md border-t border-surface-container shadow-2xl flex items-center justify-between gap-3">
         <div className="min-w-0 flex-1">
-          <p className="text-xs font-bold text-on-surface truncate">Essai 14 jours gratuit</p>
-          <p className="text-[10px] text-emerald-700 font-semibold truncate flex items-center gap-1">
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
-            Sans carte • En 2 minutes
+          <p className="text-xs font-bold text-on-surface truncate">Besoin d&apos;aide ou d&apos;informations ?</p>
+          <p className="text-[10px] text-emerald-700 font-semibold truncate flex items-center gap-1.5">
+            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+            Assistance WhatsApp en direct
           </p>
         </div>
-        <button
-          onClick={() => onLoginClick(true)}
-          className="shrink-0 px-4 py-2.5 rounded-xl bg-gradient-to-r from-indigo-600 via-indigo-700 to-violet-700 text-white font-extrabold text-xs shadow-md shadow-indigo-600/30 flex items-center gap-1.5 active:scale-95 transition-all cursor-pointer"
+        <a
+          href="https://wa.me/22898376101?text=Bonjour%20MaBoutiquePro%2C%20je%20souhaite%20des%20renseignements%20sur%20l%27application."
+          target="_blank"
+          rel="noopener noreferrer"
+          className="shrink-0 px-3.5 py-2.5 rounded-xl bg-[#25D366] hover:bg-[#20ba59] active:scale-95 text-white font-extrabold text-xs shadow-md shadow-[#25D366]/30 flex items-center gap-1.5 transition-all cursor-pointer"
         >
-          <span>Démarrer</span>
-          <span className="material-symbols-outlined text-sm">arrow_forward</span>
-        </button>
+          <svg className="w-4 h-4 fill-current shrink-0" viewBox="0 0 24 24">
+            <path d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946.003-6.556 5.338-11.891 11.893-11.891 3.181.001 6.167 1.24 8.413 3.488 2.245 2.248 3.481 5.236 3.48 8.414-.003 6.557-5.338 11.892-11.893 11.892-1.99-.001-3.951-.5-5.688-1.448l-6.305 1.654zm6.597-3.807c1.676.995 3.276 1.591 5.392 1.592 5.448 0 9.886-4.434 9.889-9.885.002-5.462-4.415-9.89-9.881-9.892-5.452 0-9.887 4.434-9.889 9.884-.001 2.225.651 3.891 1.746 5.634l-.999 3.648 3.742-.981zm11.387-5.464c-.074-.124-.272-.198-.57-.347-.297-.149-1.758-.868-2.031-.967-.272-.099-.47-.149-.669.149-.198.297-.768.967-.941 1.165-.173.198-.347.223-.644.074-.297-.149-1.255-.462-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.297-.347.446-.521.151-.172.2-.296.3-.495.099-.198.05-.372-.025-.521-.075-.148-.669-1.611-.916-2.206-.242-.579-.487-.501-.669-.51l-.57-.01c-.198 0-.52.074-.792.372s-1.04 1.016-1.04 2.479 1.065 2.876 1.213 3.074c.149.198 2.095 3.2 5.076 4.487.709.306 1.263.489 1.694.626.712.226 1.36.194 1.872.118.571-.085 1.758-.719 2.006-1.413.248-.695.248-1.29.173-1.414z"/>
+          </svg>
+          <span>WhatsApp (+228)</span>
+        </a>
       </div>
+
+      {/* Bouton WhatsApp flottant sur Desktop */}
+      <a
+        href="https://wa.me/22898376101?text=Bonjour%20MaBoutiquePro%2C%20je%20souhaite%20des%20renseignements%20sur%20l%27application."
+        target="_blank"
+        rel="noopener noreferrer"
+        className="hidden sm:inline-flex fixed bottom-6 right-6 z-40 items-center gap-2.5 px-4 py-3 rounded-full bg-[#25D366] hover:bg-[#20ba59] active:scale-95 text-white font-bold text-sm shadow-xl shadow-[#25D366]/40 transition-all duration-300 hover:shadow-2xl cursor-pointer group"
+      >
+        <svg className="w-5 h-5 fill-current" viewBox="0 0 24 24">
+          <path d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946.003-6.556 5.338-11.891 11.893-11.891 3.181.001 6.167 1.24 8.413 3.488 2.245 2.248 3.481 5.236 3.48 8.414-.003 6.557-5.338 11.892-11.893 11.892-1.99-.001-3.951-.5-5.688-1.448l-6.305 1.654zm6.597-3.807c1.676.995 3.276 1.591 5.392 1.592 5.448 0 9.886-4.434 9.889-9.885.002-5.462-4.415-9.89-9.881-9.892-5.452 0-9.887 4.434-9.889 9.884-.001 2.225.651 3.891 1.746 5.634l-.999 3.648 3.742-.981zm11.387-5.464c-.074-.124-.272-.198-.57-.347-.297-.149-1.758-.868-2.031-.967-.272-.099-.47-.149-.669.149-.198.297-.768.967-.941 1.165-.173.198-.347.223-.644.074-.297-.149-1.255-.462-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.297-.347.446-.521.151-.172.2-.296.3-.495.099-.198.05-.372-.025-.521-.075-.148-.669-1.611-.916-2.206-.242-.579-.487-.501-.669-.51l-.57-.01c-.198 0-.52.074-.792.372s-1.04 1.016-1.04 2.479 1.065 2.876 1.213 3.074c.149.198 2.095 3.2 5.076 4.487.709.306 1.263.489 1.694.626.712.226 1.36.194 1.872.118.571-.085 1.758-.719 2.006-1.413.248-.695.248-1.29.173-1.414z"/>
+        </svg>
+        <span>Discuter sur WhatsApp</span>
+      </a>
     </div>
   );
 }
