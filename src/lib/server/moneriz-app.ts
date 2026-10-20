@@ -428,10 +428,6 @@ export async function commitMonerizInbox(event: MonerizEvent): Promise<void> {
           const plan = SAAS_PLANS[targetOrder.planKey] || SAAS_PLANS.pro_monthly;
           const durationMonths = plan.durationMonths || 1;
 
-          // Calculer la date d'expiration de l'abonnement
-          const endsAt = new Date();
-          endsAt.setMonth(endsAt.getMonth() + durationMonths);
-
           // Si une boutique est rattachée, activer l'abonnement centralisé dans Supabase
           if (targetOrder.storeId) {
             try {
@@ -444,7 +440,35 @@ export async function commitMonerizInbox(event: MonerizEvent): Promise<void> {
 
               const ownerId = stData?.owner_id;
 
+              // Récupérer l'abonnement existant pour calculer la date de fin exacte sans perte de jours (sans décalage)
+              let existingSub: any = null;
               if (ownerId) {
+                const { data } = await supabase
+                  .from('admin_subscriptions')
+                  .select('current_period_ends_at, trial_ends_at, status')
+                  .eq('user_id', ownerId)
+                  .maybeSingle();
+                existingSub = data;
+              }
+
+              let baseDate = new Date();
+              if (existingSub?.current_period_ends_at) {
+                const existingEnd = new Date(existingSub.current_period_ends_at);
+                if (existingEnd > baseDate) {
+                  baseDate = existingEnd; // Prolonge l'abonnement en cours sans perte
+                }
+              } else if (existingSub?.trial_ends_at) {
+                const trialEnd = new Date(existingSub.trial_ends_at);
+                if (trialEnd > baseDate) {
+                  baseDate = trialEnd; // Ajoute les mois achetés à la suite des jours d'essai restants
+                }
+              }
+
+              const endsAt = new Date(baseDate);
+              endsAt.setMonth(endsAt.getMonth() + durationMonths);
+
+              if (ownerId) {
+
                 // A. Mettre à jour l'abonnement centralisé au niveau du compte admin
                 await supabase.from('admin_subscriptions').upsert({
                   user_id: ownerId,

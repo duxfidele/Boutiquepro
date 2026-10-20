@@ -47,50 +47,55 @@ interface AuthContextType {
 export const computeSubscription = (store: any, adminSub?: any): StoreSubscription | null => {
   if (!store || !store.id) return null;
 
-  // Priorité absolue : abonnement centralisé admin s'il existe, sinon colonnes de la boutique
-  const rawTier = adminSub?.plan_tier || store.subscription_plan || "PRO";
-  const tier = normalizeTier(rawTier);
-  const plan = (adminSub?.plan_tier || store.subscription_plan || "TRIAL").toUpperCase();
-  const status = (adminSub?.status || store.subscription_status || "trial").toLowerCase();
-  const isTrial = status === "trial" || status === "trialing" || plan === "TRIAL";
+  // 1. Détermination du statut réel : priorité à l'abonnement centralisé admin
+  const status = (adminSub?.status || store.subscription_status || "trialing").toLowerCase();
+  const isTrial = (status === "trial" || status === "trialing") && status !== "active";
 
-  let endsAtStr: string | null = adminSub?.current_period_ends_at || store.subscription_ends_at || null;
-  // Ne replier sur created_at + 14 jours QUE si c'est un essai sans date explicite
-  if (isTrial && !endsAtStr && store.created_at) {
-    try {
-      endsAtStr = new Date(new Date(store.created_at).getTime() + 14 * 24 * 60 * 60 * 1000).toISOString();
-    } catch {
-      endsAtStr = null;
+  // 2. Formule
+  const rawTier = adminSub?.plan_tier || store.subscription_plan || (isTrial ? "PRO" : "STARTER");
+  const tier = normalizeTier(rawTier);
+  const plan = (adminSub?.plan_tier || store.subscription_plan || (isTrial ? "TRIAL" : tier)).toUpperCase();
+
+  // 3. Date de fin exacte (sans décalage)
+  let endsAtStr: string | null = null;
+  if (isTrial) {
+    endsAtStr = adminSub?.trial_ends_at || adminSub?.current_period_ends_at || store.subscription_ends_at || null;
+    if (!endsAtStr && store.created_at) {
+      try {
+        endsAtStr = new Date(new Date(store.created_at).getTime() + 14 * 24 * 60 * 60 * 1000).toISOString();
+      } catch {
+        endsAtStr = null;
+      }
     }
+  } else {
+    // Abonnement payant (actif ou en fin de période)
+    endsAtStr = adminSub?.current_period_ends_at || store.subscription_ends_at || null;
   }
 
-  let daysRemaining = 999;
+  // 4. Calcul précis du décompte sans décalage
+  let daysRemaining = 0;
   let isExpired = false;
 
   if (status === "expired" || status === "canceled" || status === "cancelled") {
     isExpired = true;
     daysRemaining = 0;
-  } else if (isTrial) {
-    if (endsAtStr) {
-      const endsAtTime = new Date(endsAtStr).getTime();
-      const diffMs = endsAtTime - Date.now();
-      daysRemaining = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
-      if (diffMs <= 0) {
-        isExpired = true;
-      }
-    }
-  } else if (status === "active") {
-    if (endsAtStr) {
-      const endsAtTime = new Date(endsAtStr).getTime();
-      const diffMs = endsAtTime - Date.now();
-      daysRemaining = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
-      if (diffMs <= 0) {
-        isExpired = true;
-      }
+  } else if (endsAtStr) {
+    const endsAtTime = new Date(endsAtStr).getTime();
+    const now = Date.now();
+    const diffMs = endsAtTime - now;
+
+    if (diffMs <= 0) {
+      isExpired = true;
+      daysRemaining = 0;
     } else {
       isExpired = false;
-      daysRemaining = 999;
+      // Arrondi supérieur strict pour décompter chaque tranche de 24h sans décalage
+      daysRemaining = Math.max(1, Math.ceil(diffMs / (1000 * 60 * 60 * 24)));
     }
+  } else {
+    // Forfait sans date de fin explicite
+    daysRemaining = 999;
+    isExpired = false;
   }
 
   // Durant l'essai gratuit de 14 jours, l'utilisateur a toutes les fonctionnalités PRO débloquées
@@ -220,7 +225,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       try {
         const { data: subData } = await supabase
           .from("admin_subscriptions")
-          .select("plan_tier, status, current_period_ends_at, max_stores, max_cashiers")
+          .select("plan_tier, status, billing_cycle, trial_starts_at, trial_ends_at, current_period_starts_at, current_period_ends_at, max_stores, max_cashiers")
           .eq("user_id", userId)
           .maybeSingle();
         if (subData) {
@@ -253,7 +258,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
               created_at: st?.created_at,
               subscription_plan: adminSub?.plan_tier || st?.subscription_plan || "TRIAL",
               subscription_status: adminSub?.status || st?.subscription_status || "trial",
-              subscription_ends_at: adminSub?.current_period_ends_at || st?.subscription_ends_at || fallbackEndsAt,
+              subscription_ends_at: (adminSub?.status === 'active' ? adminSub?.current_period_ends_at : (adminSub?.trial_ends_at || adminSub?.current_period_ends_at)) || st?.subscription_ends_at || fallbackEndsAt,
             };
           })
           .filter((d: any) => d.id);

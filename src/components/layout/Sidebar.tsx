@@ -288,12 +288,7 @@ export default function Sidebar({ isOpen, onClose }: { isOpen?: boolean; onClose
                 <span className="text-lg leading-none">+</span>
                 <span>Créer une boutique</span>
               </div>
-              {isStoreQuotaReached && (
-                <span className="px-1.5 py-0.5 rounded-md bg-primary/20 text-primary text-[9px] font-black uppercase flex items-center gap-1">
-                  <Lock className="w-2.5 h-2.5" />
-                  Business
-                </span>
-              )}
+
             </button>
           </div>
         )}
@@ -337,57 +332,55 @@ export default function Sidebar({ isOpen, onClose }: { isOpen?: boolean; onClose
                   </span>
                 </div>
 
-                {/* Barre de progression dynamique */}
-                {subscription.isTrial && (
-                  <div className="space-y-1.5 mb-2">
-                    <div className="w-full bg-black/10 dark:bg-white/10 h-1.5 rounded-full overflow-hidden">
-                      <div
-                        className={`h-full rounded-full transition-all duration-500 ${subscription.daysRemaining <= 3 ? "bg-amber-500" : "bg-gradient-to-r from-emerald-500 to-teal-500"}`}
-                        style={{
-                          width: `${Math.max(8, Math.min(100, ((14 - subscription.daysRemaining) / 14) * 100))}%`,
-                        }}
-                      />
-                    </div>
-                    <div className="flex justify-between items-center text-[10px] font-semibold text-muted-foreground">
-                      <span className="text-foreground font-bold">
-                        {subscription.daysRemaining} jour{subscription.daysRemaining > 1 ? "s" : ""} restant{subscription.daysRemaining > 1 ? "s" : ""}
-                      </span>
-                    </div>
-                  </div>
-                )}
-
-                {/* BOUTON ULTRA-VISIBLE AVEC ANIMATION : S'ABONNER */}
-                {subscription.isTrial ? (
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setSubModalDefaultPlan("PRO");
-                      setSubModalOpen(true);
-                    }}
-                    className="relative group/btn overflow-hidden w-full flex items-center justify-center gap-2 py-2 px-3 rounded-xl bg-gradient-to-r from-emerald-600 via-teal-600 to-indigo-600 hover:from-emerald-500 hover:to-indigo-500 text-white text-xs font-black shadow-md shadow-emerald-600/25 hover:shadow-lg hover:shadow-emerald-500/35 hover:scale-[1.02] active:scale-[0.98] transition-all duration-300 border border-white/20 cursor-pointer animate-glow-emerald"
-                  >
-                    {/* Effet reflet Shimmer */}
-                    <span className="absolute inset-0 w-1/2 h-full bg-white/25 skew-x-12 -translate-x-full animate-btn-shimmer group-hover/btn:translate-x-[300%] transition-transform duration-1000 ease-out" />
-                    
-                    <Sparkles className="w-3.5 h-3.5 text-yellow-300 animate-pulse shrink-0" />
-                    <span className="tracking-wide">S&apos;abonner</span>
-                    <ArrowRight className="w-3.5 h-3.5 shrink-0 group-hover/btn:translate-x-1 transition-transform" />
-                  </button>
-                ) : (
-                  subscription.endsAt && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setSubModalDefaultPlan(tier);
-                        setSubModalOpen(true);
+                {/* Barre de progression & Décompte dynamique sans décalage */}
+                <div className="space-y-1.5 mb-2">
+                  <div className="w-full bg-black/10 dark:bg-white/10 h-1.5 rounded-full overflow-hidden">
+                    <div
+                      className={`h-full rounded-full transition-all duration-500 ${subscription.daysRemaining <= 3 ? "bg-amber-500" : "bg-gradient-to-r from-emerald-500 to-teal-500"}`}
+                      style={{
+                        width: `${Math.max(
+                          6,
+                          Math.min(
+                            100,
+                            subscription.isTrial
+                              ? ((14 - Math.min(14, subscription.daysRemaining)) / 14) * 100
+                              : ((Math.max(1, (subscription.daysRemaining > 30 ? 365 : 30) - subscription.daysRemaining)) / (subscription.daysRemaining > 30 ? 365 : 30)) * 100
+                          )
+                        )}%`,
                       }}
-                      className="w-full mt-1 py-1.5 px-2 rounded-xl bg-primary/10 hover:bg-primary/20 text-primary text-[11px] font-bold text-center transition-colors flex items-center justify-center gap-1"
-                    >
-                      <span>Renouveler ({subscription.daysRemaining}j)</span>
-                    </button>
-                  )
-                )}
+                    />
+                  </div>
+                  <div className="flex justify-between items-center text-[10px] font-semibold text-muted-foreground">
+                    <span className="text-foreground font-bold">
+                      {subscription.daysRemaining <= 0
+                        ? "Expiré"
+                        : `${subscription.daysRemaining} jour${subscription.daysRemaining > 1 ? "s" : ""} restant${subscription.daysRemaining > 1 ? "s" : ""}`}
+                    </span>
+                    <span className="text-[9px] uppercase font-bold text-muted-foreground">
+                      {subscription.isTrial ? "Essai PRO" : `Plan ${tier}`}
+                    </span>
+                  </div>
+                </div>
+
+                {/* BOUTON ULTRA-VISIBLE S'ABONNER / RENOUVELER */}
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setSubModalDefaultPlan(subscription.isTrial ? "PRO" : tier);
+                    setSubModalOpen(true);
+                  }}
+                  className="relative group/btn overflow-hidden w-full flex items-center justify-center gap-2 py-2 px-3 rounded-xl bg-gradient-to-r from-emerald-600 via-teal-600 to-indigo-600 hover:from-emerald-500 hover:to-indigo-500 text-white text-xs font-black shadow-md shadow-emerald-600/25 hover:shadow-lg hover:shadow-emerald-500/35 hover:scale-[1.02] active:scale-[0.98] transition-all duration-300 border border-white/20 cursor-pointer animate-glow-emerald"
+                >
+                  {/* Effet reflet Shimmer */}
+                  <span className="absolute inset-0 w-1/2 h-full bg-white/25 skew-x-12 -translate-x-full animate-btn-shimmer group-hover/btn:translate-x-[300%] transition-transform duration-1000 ease-out" />
+                  
+                  <Sparkles className="w-3.5 h-3.5 text-yellow-300 animate-pulse shrink-0" />
+                  <span className="tracking-wide">
+                    {subscription.isTrial ? "S'abonner" : "Renouveler / Changer"}
+                  </span>
+                  <ArrowRight className="w-3.5 h-3.5 shrink-0 group-hover/btn:translate-x-1 transition-transform" />
+                </button>
               </div>
             ) : (
               /* Vue repliée (icône seule animée) */

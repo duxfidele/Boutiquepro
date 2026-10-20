@@ -108,12 +108,10 @@ export default function Header({ onMenuClick }: { onMenuClick?: () => void }) {
               ) : (
                 <>
                   <ShieldCheck className="w-3.5 h-3.5 text-primary shrink-0" />
-                  <span>Formule {tier}</span>
-                  {subscription.endsAt && (
-                    <span className="text-[11px] font-normal text-muted-foreground">
-                      ({subscription.daysRemaining}j)
-                    </span>
-                  )}
+                  <span className="text-[11px] font-medium text-muted-foreground">Plan {tier} :</span>
+                  <span className="font-extrabold text-primary">
+                    {subscription.daysRemaining}j restants
+                  </span>
                 </>
               )}
             </button>

@@ -88,20 +88,33 @@ export default function AppWrapper({ children }: { children: React.ReactNode }) 
           <div className="flex min-h-screen">
             <Sidebar isOpen={isMobileMenuOpen} onClose={() => setIsMobileMenuOpen(false)} />
             <div className="flex-1 flex flex-col min-w-0 lg:ml-[260px] ml-0 transition-all duration-300">
-              {/* Bannière de rappel fin d'essai : texte en rose/rouge, sans bouton à droite */}
-              {subscription?.isTrial && role === "admin" && (
-                <div
-                  className="px-4 py-2 text-xs font-semibold flex items-center gap-2 border-b bg-rose-500/5 dark:bg-rose-950/20 border-rose-500/15 text-rose-600 dark:text-rose-400"
-                >
-                  <Sparkles className="w-4 h-4 shrink-0 text-rose-500 animate-pulse" />
-                  <span className="font-bold">
-                    {subscription.daysRemaining <= 0
-                      ? "Période d'essai 14 jours : dernier jour aujourd'hui !"
-                      : `Période d'essai 14 jours : il vous reste ${subscription.daysRemaining} jour${
-                          subscription.daysRemaining > 1 ? "s" : ""
-                        }.`}
-                  </span>
-                </div>
+              {/* Bannière de rappel : Essai (en rose/rouge) ou Renouvellement abonnement actif (si <= 7 jours) */}
+              {role === "admin" && subscription && (
+                subscription.isTrial ? (
+                  <div
+                    className="px-4 py-2 text-xs font-semibold flex items-center gap-2 border-b bg-rose-500/5 dark:bg-rose-950/20 border-rose-500/15 text-rose-600 dark:text-rose-400"
+                  >
+                    <Sparkles className="w-4 h-4 shrink-0 text-rose-500 animate-pulse" />
+                    <span className="font-bold">
+                      {subscription.daysRemaining <= 0
+                        ? "Période d'essai 14 jours : dernier jour aujourd'hui !"
+                        : `Période d'essai 14 jours : il vous reste ${subscription.daysRemaining} jour${
+                            subscription.daysRemaining > 1 ? "s" : ""
+                          }.`}
+                    </span>
+                  </div>
+                ) : (
+                  subscription.daysRemaining <= 7 && (
+                    <div
+                      className="px-4 py-2 text-xs font-semibold flex items-center gap-2 border-b bg-amber-500/10 border-amber-500/20 text-amber-700 dark:text-amber-300"
+                    >
+                      <Sparkles className="w-4 h-4 shrink-0 text-amber-500 animate-pulse" />
+                      <span className="font-bold">
+                        Abonnement {subscription.tier} : il vous reste {subscription.daysRemaining} jour{subscription.daysRemaining > 1 ? "s" : ""} avant renouvellement.
+                      </span>
+                    </div>
+                  )
+                )
               )}
 
               <Header onMenuClick={() => setIsMobileMenuOpen(true)} />
