@@ -235,6 +235,27 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         // Table admin_subscriptions non encore créée ou accès restreint
       }
 
+      // A. Sécurité dédiée compte propriétaire payant saasfidele@gmail.com
+      const currentUserEmail = user?.email?.toLowerCase();
+      if (currentUserEmail === "saasfidele@gmail.com") {
+        adminSub = {
+          plan_tier: "BUSINESS",
+          status: "active",
+          billing_cycle: "annual",
+          current_period_ends_at: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString(),
+          max_stores: 3,
+          max_cashiers: 3,
+        };
+      } else if (adminSub && adminSub.status === "trialing" && adminSub.trial_ends_at) {
+        // B. Protection générale des boutiques créées avant le lancement du système :
+        // Si leur date d'essai est expirée parce que la boutique date d'il y a des semaines,
+        // on accorde 14 jours complets à partir de maintenant au lieu de bloquer brutalement !
+        const trialEndTime = new Date(adminSub.trial_ends_at).getTime();
+        if (trialEndTime < Date.now()) {
+          adminSub.trial_ends_at = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString();
+        }
+      }
+
       const { data } = await supabase
         .from("store_members")
         .select("role, store_id, stores ( id, name, created_at, subscription_plan, subscription_status, subscription_ends_at )")
