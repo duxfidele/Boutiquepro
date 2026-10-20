@@ -93,7 +93,7 @@ export default function Header({ onMenuClick }: { onMenuClick?: () => void }) {
                 subscription.isTrial
                   ? subscription.daysRemaining <= 3
                     ? "bg-amber-500/15 border-amber-500/30 text-amber-700 dark:text-amber-300 hover:bg-amber-500/25"
-                    : "bg-emerald-500/10 border-emerald-500/25 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-500/20"
+                    : "bg-rose-500/10 border-rose-500/25 text-rose-700 dark:text-rose-300 hover:bg-rose-500/20"
                   : "bg-primary/10 border-primary/20 text-primary hover:bg-primary/20"
               }`}
             >
@@ -101,7 +101,7 @@ export default function Header({ onMenuClick }: { onMenuClick?: () => void }) {
                 <>
                   <Sparkles className="w-3.5 h-3.5 text-amber-500 shrink-0 animate-pulse" />
                   <span className="text-[11px] font-medium text-muted-foreground">Essai PRO :</span>
-                  <span className="font-extrabold text-emerald-600 dark:text-emerald-400">
+                  <span className="font-extrabold text-rose-600 dark:text-rose-400">
                     {subscription.daysRemaining}j restants
                   </span>
                 </>

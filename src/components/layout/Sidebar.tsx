@@ -18,7 +18,7 @@ import {
   ShoppingCart,
   BarChart3,
   Settings,
-  Sparkles, ShieldCheck, Clock,
+  Sparkles, ShieldCheck, ArrowRight, Clock,
   ChevronLeft,
   ChevronRight,
   AlertTriangle,
@@ -303,15 +303,9 @@ export default function Sidebar({ isOpen, onClose }: { isOpen?: boolean; onClose
           <div className="px-3 pb-2 animate-fade-in">
             {!collapsed ? (
               <div
-                onClick={() => {
-                  setSubModalDefaultPlan(subscription.isTrial ? "PRO" : tier);
-                  setSubModalOpen(true);
-                }}
-                className={`group relative cursor-pointer p-3 rounded-2xl border transition-all duration-200 overflow-hidden shadow-xs hover:shadow-md ${
+                className={`group relative p-3 rounded-2xl border transition-all duration-200 overflow-hidden shadow-xs hover:shadow-md ${
                   subscription.isTrial
-                    ? subscription.daysRemaining <= 3
-                      ? "bg-amber-500/10 border-amber-500/30 hover:border-amber-500/60 text-amber-900 dark:text-amber-200"
-                      : "bg-emerald-500/10 border-emerald-500/25 hover:border-emerald-500/50 text-foreground"
+                    ? "bg-gradient-to-b from-rose-500/[0.08] via-rose-500/[0.03] to-transparent border-rose-500/25 hover:border-rose-500/40"
                     : "bg-primary/5 border-primary/20 hover:border-primary/40 text-foreground"
                 }`}
               >
@@ -319,11 +313,11 @@ export default function Sidebar({ isOpen, onClose }: { isOpen?: boolean; onClose
                 <div className="flex items-center justify-between gap-1 mb-1.5">
                   <div className="flex items-center gap-1.5 min-w-0">
                     {subscription.isTrial ? (
-                      <Sparkles className="w-3.5 h-3.5 text-amber-500 shrink-0 animate-pulse" />
+                      <Sparkles className="w-3.5 h-3.5 text-rose-500 shrink-0 animate-pulse" />
                     ) : (
                       <ShieldCheck className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
                     )}
-                    <span className="text-[11px] font-black uppercase tracking-wider truncate">
+                    <span className="text-[11px] font-black uppercase tracking-wider truncate text-foreground">
                       {subscription.isTrial ? "Essai 14j (PRO)" : `Formule ${tier}`}
                     </span>
                   </div>
@@ -331,9 +325,7 @@ export default function Sidebar({ isOpen, onClose }: { isOpen?: boolean; onClose
                   <span
                     className={`px-1.5 py-0.5 rounded-md text-[9px] font-black uppercase shrink-0 ${
                       subscription.isTrial
-                        ? subscription.daysRemaining <= 3
-                          ? "bg-amber-500 text-white"
-                          : "bg-emerald-600 text-white"
+                        ? "bg-rose-600 text-white shadow-xs"
                         : "bg-primary/20 text-primary"
                     }`}
                   >
@@ -343,14 +335,10 @@ export default function Sidebar({ isOpen, onClose }: { isOpen?: boolean; onClose
 
                 {/* Barre de progression dynamique */}
                 {subscription.isTrial && (
-                  <div className="space-y-1 mb-1.5">
+                  <div className="space-y-1.5 mb-2">
                     <div className="w-full bg-black/10 dark:bg-white/10 h-1.5 rounded-full overflow-hidden">
                       <div
-                        className={`h-full rounded-full transition-all duration-500 ${
-                          subscription.daysRemaining <= 3
-                            ? "bg-amber-500"
-                            : "bg-gradient-to-r from-emerald-500 to-teal-500"
-                        }`}
+                        className="h-full rounded-full transition-all duration-500 bg-gradient-to-r from-rose-500 to-pink-500"
                         style={{
                           width: `${Math.max(8, Math.min(100, ((14 - subscription.daysRemaining) / 14) * 100))}%`,
                         }}
@@ -360,20 +348,41 @@ export default function Sidebar({ isOpen, onClose }: { isOpen?: boolean; onClose
                       <span className="text-foreground font-bold">
                         {subscription.daysRemaining} jour{subscription.daysRemaining > 1 ? "s" : ""} restant{subscription.daysRemaining > 1 ? "s" : ""}
                       </span>
-                      <span className="text-[9px] uppercase font-black text-primary group-hover:underline">
-                        Activer
-                      </span>
                     </div>
                   </div>
                 )}
 
-                {!subscription.isTrial && subscription.endsAt && (
-                  <div className="text-[10px] font-medium text-muted-foreground flex items-center justify-between">
-                    <span>{subscription.daysRemaining} jours restants</span>
-                    <span className="text-[9px] text-primary font-bold group-hover:underline">
-                      Gérer
-                    </span>
-                  </div>
+                {/* BOUTON ULTRA-VISIBLE AVEC ANIMATION : S'ABONNER */}
+                {subscription.isTrial ? (
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setSubModalDefaultPlan("PRO");
+                      setSubModalOpen(true);
+                    }}
+                    className="relative group/btn overflow-hidden w-full flex items-center justify-center gap-2 py-2 px-3 rounded-xl bg-gradient-to-r from-rose-600 via-pink-600 to-indigo-600 hover:from-rose-500 hover:to-pink-500 text-white text-xs font-black shadow-md shadow-rose-600/30 hover:shadow-lg hover:shadow-rose-500/40 hover:scale-[1.02] active:scale-[0.98] transition-all duration-300 border border-white/20 cursor-pointer animate-glow-rose"
+                  >
+                    {/* Effet reflet Shimmer */}
+                    <span className="absolute inset-0 w-1/2 h-full bg-white/25 skew-x-12 -translate-x-full animate-btn-shimmer group-hover/btn:translate-x-[300%] transition-transform duration-1000 ease-out" />
+                    
+                    <Sparkles className="w-3.5 h-3.5 text-yellow-300 animate-pulse shrink-0" />
+                    <span className="tracking-wide">S&apos;abonner</span>
+                    <ArrowRight className="w-3.5 h-3.5 shrink-0 group-hover/btn:translate-x-1 transition-transform" />
+                  </button>
+                ) : (
+                  subscription.endsAt && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSubModalDefaultPlan(tier);
+                        setSubModalOpen(true);
+                      }}
+                      className="w-full mt-1 py-1.5 px-2 rounded-xl bg-primary/10 hover:bg-primary/20 text-primary text-[11px] font-bold text-center transition-colors flex items-center justify-center gap-1"
+                    >
+                      <span>Renouveler ({subscription.daysRemaining}j)</span>
+                    </button>
+                  )
                 )}
               </div>
             ) : (
@@ -386,13 +395,13 @@ export default function Sidebar({ isOpen, onClose }: { isOpen?: boolean; onClose
                 }}
                 title={
                   subscription.isTrial
-                    ? `Essai gratuit : ${subscription.daysRemaining} jours restants`
+                    ? `Essai gratuit : ${subscription.daysRemaining} jours restants • Cliquez pour vous abonner`
                     : `Formule ${tier}`
                 }
-                className="w-full relative flex items-center justify-center p-2 rounded-xl bg-secondary/60 hover:bg-secondary text-primary transition-colors"
+                className="w-full relative flex items-center justify-center p-2 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-600 transition-colors"
               >
-                <Sparkles className="w-4 h-4 text-amber-500 animate-pulse" />
-                <span className="absolute -top-1 -right-1 px-1 rounded-full bg-emerald-600 text-[8px] font-black text-white">
+                <Sparkles className="w-4 h-4 text-rose-500 animate-pulse" />
+                <span className="absolute -top-1 -right-1 px-1 rounded-full bg-rose-600 text-[8px] font-black text-white">
                   {subscription.daysRemaining}j
                 </span>
               </button>
