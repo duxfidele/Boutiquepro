@@ -3,51 +3,16 @@ import type { BrowserCheckout, CheckoutAttempt } from './moneriz-checkout';
 import fs from 'node:fs';
 import path from 'node:path';
 
-export type PlanKey = 'pro_monthly' | 'pro_annual' | 'business_monthly' | 'business_annual';
+import { 
+  SUBSCRIPTION_PLANS, 
+  PlanKey, 
+  PlanConfig, 
+  SubscriptionTier,
+  TIER_LIMITS 
+} from '@/lib/subscriptionPlans';
 
-export interface PlanConfig {
-  id: PlanKey;
-  planName: 'PRO' | 'BUSINESS';
-  durationMonths: number;
-  amount: number;
-  currency: 'XOF';
-  title: string;
-}
-
-export const SAAS_PLANS: Record<PlanKey, PlanConfig> = {
-  pro_monthly: {
-    id: 'pro_monthly',
-    planName: 'PRO',
-    durationMonths: 1,
-    amount: 5000,
-    currency: 'XOF',
-    title: 'Abonnement Pro (1 Mois) - MaBoutiquePro',
-  },
-  pro_annual: {
-    id: 'pro_annual',
-    planName: 'PRO',
-    durationMonths: 12,
-    amount: 50000,
-    currency: 'XOF',
-    title: 'Abonnement Pro (1 An) - MaBoutiquePro',
-  },
-  business_monthly: {
-    id: 'business_monthly',
-    planName: 'BUSINESS',
-    durationMonths: 1,
-    amount: 15000,
-    currency: 'XOF',
-    title: 'Abonnement Business (1 Mois) - MaBoutiquePro',
-  },
-  business_annual: {
-    id: 'business_annual',
-    planName: 'BUSINESS',
-    durationMonths: 12,
-    amount: 150000,
-    currency: 'XOF',
-    title: 'Abonnement Business (1 An) - MaBoutiquePro',
-  },
-};
+export type { PlanKey, PlanConfig };
+export const SAAS_PLANS = SUBSCRIPTION_PLANS;
 
 export interface StoredOrder {
   orderId: string;
@@ -467,19 +432,65 @@ export async function commitMonerizInbox(event: MonerizEvent): Promise<void> {
           const endsAt = new Date();
           endsAt.setMonth(endsAt.getMonth() + durationMonths);
 
-          // Si une boutique est rattachée, activer l'abonnement dans Supabase
+          // Si une boutique est rattachée, activer l'abonnement centralisé dans Supabase
           if (targetOrder.storeId) {
             try {
-              await supabase
+              // 1. Trouver le propriétaire de la boutique
+              const { data: stData } = await supabase
                 .from('stores')
-                .update({
-                  subscription_plan: plan.planName,
-                  subscription_status: 'active',
-                  subscription_ends_at: endsAt.toISOString(),
-                })
-                .eq('id', targetOrder.storeId);
+                .select('owner_id')
+                .eq('id', targetOrder.storeId)
+                .maybeSingle();
+
+              const ownerId = stData?.owner_id;
+
+              if (ownerId) {
+                // A. Mettre à jour l'abonnement centralisé au niveau du compte admin
+                await supabase.from('admin_subscriptions').upsert({
+                  user_id: ownerId,
+                  plan_tier: plan.tier,
+                  status: 'active',
+                  billing_cycle: plan.cycle,
+                  current_period_starts_at: new Date().toISOString(),
+                  current_period_ends_at: endsAt.toISOString(),
+                  max_stores: plan.limits.maxStores,
+                  max_cashiers: plan.limits.maxCashiers,
+                  updated_at: new Date().toISOString(),
+                });
+
+                // B. Enregistrer la traçabilité dans l'historique d'abonnement
+                await supabase.from('subscription_history').insert({
+                  user_id: ownerId,
+                  new_tier: plan.tier,
+                  new_status: 'active',
+                  reason: 'moneriz_payment',
+                  amount_paid: payment.amount,
+                  currency: payment.currency || 'XOF',
+                  moneriz_event_id: event.id,
+                });
+
+                // C. Mettre à jour toutes les boutiques de cet administrateur
+                await supabase
+                  .from('stores')
+                  .update({
+                    subscription_plan: plan.tier,
+                    subscription_status: 'active',
+                    subscription_ends_at: endsAt.toISOString(),
+                  })
+                  .eq('owner_id', ownerId);
+              } else {
+                // Repli direct par boutique si owner non encore renseigné
+                await supabase
+                  .from('stores')
+                  .update({
+                    subscription_plan: plan.tier,
+                    subscription_status: 'active',
+                    subscription_ends_at: endsAt.toISOString(),
+                  })
+                  .eq('id', targetOrder.storeId);
+              }
             } catch (err) {
-              console.error("Erreur mise à jour boutique suite paiement Moneriz:", err);
+              console.error("Erreur mise à jour abonnement suite paiement Moneriz:", err);
             }
           }
 

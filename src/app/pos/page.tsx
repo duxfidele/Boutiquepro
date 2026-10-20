@@ -38,6 +38,7 @@ import {
   Zap,
 } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
+import SubscriptionModal from "@/components/subscription/SubscriptionModal";
 import { exportElementToPdf } from "@/lib/pdf";
 
 const paymentMethods = [
@@ -62,7 +63,8 @@ export default function POSPage() {
     syncOfflineSales,
     isRealtimeActive
   } = useStore();
-  const { user, role, subscription } = useAuth();
+  const { user, role, subscription, canOfferCredit, canPrintReceipts } = useAuth();
+  const [subModalOpen, setSubModalOpen] = useState(false);
 
   // Cash Session States
   const [showOpenModal, setShowOpenModal] = useState(false);
@@ -133,6 +135,10 @@ export default function POSPage() {
       return;
     }
 
+    if (payMethod === "credit" && !canOfferCredit) {
+      setSubModalOpen(true);
+      return;
+    }
     if (payMethod === "credit" && !customerName.trim()) {
       alert("⚠️ Le nom du client est obligatoire pour enregistrer une vente à crédit.");
       return;
@@ -714,12 +720,19 @@ export default function POSPage() {
               <div className="grid grid-cols-4 gap-1.5">
                 {paymentMethods.map((pm) => {
                   const Icon = pm.icon;
+                  const isCreditLocked = pm.id === "credit" && !canOfferCredit;
                   return (
                     <button
                       key={pm.id}
                       type="button"
-                      onClick={() => setPayMethod(pm.id)}
-                      className={`flex items-center justify-center gap-1.5 rounded-xl border py-2 px-1 text-center transition-all ${
+                      onClick={() => {
+                        if (isCreditLocked) {
+                          setSubModalOpen(true);
+                        } else {
+                          setPayMethod(pm.id);
+                        }
+                      }}
+                      className={`relative flex items-center justify-center gap-1.5 rounded-xl border py-2 px-1 text-center transition-all ${
                         payMethod === pm.id
                           ? `${pm.color} border-current shadow-xs`
                           : "border-border/40 text-muted-foreground hover:bg-secondary"
@@ -727,6 +740,11 @@ export default function POSPage() {
                     >
                       <Icon className="h-3.5 w-3.5 shrink-0" />
                       <span className="text-[10px] font-semibold truncate">{pm.label}</span>
+                      {isCreditLocked && (
+                        <span className="absolute -top-1.5 -right-1 px-1 py-0.2 rounded-full bg-amber-500 text-white text-[8px] font-black uppercase">
+                          PRO
+                        </span>
+                      )}
                     </button>
                   );
                 })}
@@ -1960,6 +1978,12 @@ export default function POSPage() {
         </div>
       )}
       </div>
+      {/* Modal d'abonnement pour mise à niveau PRO */}
+      <SubscriptionModal
+        isOpen={subModalOpen}
+        onClose={() => setSubModalOpen(false)}
+        defaultPlan="PRO"
+      />
     </div>
   );
 }

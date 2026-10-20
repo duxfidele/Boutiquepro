@@ -588,45 +588,53 @@ export default function LandingPage({ onLoginClick }: LandingPageProps) {
   </span>
 </div>
 
-{/* Les 3 Colonnes : 1. Essai Gratuit (0 F) | 2. Pro (5 000 F) | 3. Business (15 000 F) */}
+{/* Bandeau d'information Essai Gratuit */}
+<div className="mb-8 p-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-800 dark:text-emerald-300 text-center max-w-2xl mx-auto flex items-center justify-center gap-2 font-bold text-sm shadow-xs">
+  <span className="text-base">🎁</span>
+  <span><b>14 jours d&apos;essai gratuit</b> offerts à l&apos;inscription • Toutes les fonctionnalités PRO débloquées • Sans carte bancaire</span>
+</div>
+
+{/* Les 3 Colonnes : 1. STARTER (2 500 F) | 2. PRO (5 000 F) | 3. BUSINESS (10 000 F) */}
 <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 items-stretch">
   
-  {/* CARTE 1 : ESSAI DÉCOUVERTE 14 JOURS */}
-  <div className="bg-surface-container-lowest p-8 rounded-3xl border-2 border-emerald-500/30 shadow-md hover:shadow-xl hover:border-emerald-500/60 transition-all duration-300 flex flex-col justify-between relative">
+  {/* CARTE 1 : PLAN STARTER (2 500 F) */}
+  <div className="bg-surface-container-lowest p-8 rounded-3xl border-2 border-blue-500/30 shadow-md hover:shadow-xl hover:border-blue-500/60 transition-all duration-300 flex flex-col justify-between relative">
     <div>
-      <div className="inline-block px-3.5 py-1 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200 text-[11px] font-black uppercase tracking-wider w-fit mb-4">
-        Étape 1 : Découverte
+      <div className="inline-block px-3.5 py-1 rounded-full bg-blue-50 text-blue-800 border border-blue-200 text-[11px] font-black uppercase tracking-wider w-fit mb-4">
+        Solo &amp; Démarrage
       </div>
-      <h3 className="text-2xl font-extrabold text-on-surface mb-1">ESSAI GRATUIT</h3>
-      <p className="text-xs text-on-surface-variant mb-6 font-medium">Testez l&apos;application dans votre magasin pendant 2 semaines sans engagement.</p>
+      <h3 className="text-2xl font-extrabold text-on-surface mb-1">STARTER</h3>
+      <p className="text-xs text-on-surface-variant mb-6 font-medium">Pour commerçants indépendants souhaitant numériser leurs ventes et leurs stocks simplement.</p>
       
       <div className="mb-6">
-        <div className="text-4xl font-black text-on-surface">
-          0 <span className="text-sm font-bold text-outline">FCFA / 14 jours</span>
+        <div className="text-4xl font-black text-blue-600">
+          {isAnnual ? "25 000" : "2 500"}{" "}
+          <span className="text-sm font-bold text-outline">FCFA / {isAnnual ? "an" : "mois"}</span>
         </div>
-        <p className="text-xs text-emerald-700 font-bold mt-1 flex items-center gap-1">
-          <span className="material-symbols-outlined text-sm">check</span>
-          Aucune carte bancaire requise
-        </p>
+        {isAnnual ? (
+          <p className="text-xs text-emerald-700 font-bold mt-1">Soit ~2 083 FCFA / mois (5 000 F d&apos;économie)</p>
+        ) : (
+          <p className="text-xs text-outline font-medium mt-1">Payable par Mobile Money chaque mois</p>
+        )}
       </div>
 
       <ul className="space-y-3.5 text-sm text-on-surface mb-8 font-medium">
-        <li className="flex items-center gap-2.5 font-bold text-emerald-700"><span className="material-symbols-outlined text-emerald-600 text-lg">check_circle</span> <b>14 jours d&apos;accès complet</b></li>
-        <li className="flex items-center gap-2.5"><span className="material-symbols-outlined text-primary text-lg">check_circle</span> Produits &amp; ventes illimités</li>
-        <li className="flex items-center gap-2.5"><span className="material-symbols-outlined text-primary text-lg">check_circle</span> <b>Mode Hors-ligne (PWA)</b> sans internet</li>
-        <li className="flex items-center gap-2.5"><span className="material-symbols-outlined text-primary text-lg">check_circle</span> Tickets thermiques &amp; Factures A4</li>
-        <li className="flex items-center gap-2.5"><span className="material-symbols-outlined text-primary text-lg">check_circle</span> Test de toutes les fonctions VIP</li>
-        <li className="flex items-center gap-2.5"><span className="material-symbols-outlined text-primary text-lg">check_circle</span> Sans engagement • Arrêt libre</li>
+        <li className="flex items-center gap-2.5 font-bold"><span className="material-symbols-outlined text-blue-600 text-lg">check_circle</span> 1 Boutique &amp; 1 Gérant (Admin)</li>
+        <li className="flex items-center gap-2.5"><span className="material-symbols-outlined text-blue-600 text-lg">check_circle</span> Gestion des produits &amp; du stock</li>
+        <li className="flex items-center gap-2.5"><span className="material-symbols-outlined text-blue-600 text-lg">check_circle</span> Ventes directes au comptoir illimitées</li>
+        <li className="flex items-center gap-2.5"><span className="material-symbols-outlined text-blue-600 text-lg">check_circle</span> Calcul des marges &amp; bénéfices nets</li>
+        <li className="flex items-center gap-2.5"><span className="material-symbols-outlined text-blue-600 text-lg">check_circle</span> <b>Mode Hors-ligne (PWA)</b> sans internet</li>
+        <li className="flex items-center gap-2.5"><span className="material-symbols-outlined text-blue-600 text-lg">check_circle</span> Tableau de bord essentiel</li>
       </ul>
     </div>
 
     <button 
       onClick={() => onLoginClick(true)} 
-      className="group relative w-full py-4 px-6 rounded-2xl bg-gradient-to-r from-emerald-50 via-teal-50 to-emerald-100/70 border-2 border-emerald-500/40 text-emerald-800 font-extrabold text-base text-center hover:from-emerald-600 hover:to-teal-600 hover:text-white hover:border-emerald-600 shadow-md hover:shadow-xl hover:shadow-emerald-500/25 active:scale-[0.98] transition-all duration-300 flex items-center justify-center gap-2 cursor-pointer overflow-hidden"
+      className="group relative w-full py-4 px-6 rounded-2xl bg-gradient-to-r from-blue-50 via-indigo-50 to-blue-100/70 border-2 border-blue-500/40 text-blue-800 font-extrabold text-base text-center hover:from-blue-600 hover:to-indigo-600 hover:text-white hover:border-blue-600 shadow-md hover:shadow-xl hover:shadow-blue-500/25 active:scale-[0.98] transition-all duration-300 flex items-center justify-center gap-2 cursor-pointer overflow-hidden"
     >
       <span className="relative z-10 flex items-center justify-center gap-2">
-        <span className="material-symbols-outlined text-emerald-600 text-xl group-hover:text-white transition-colors">rocket_launch</span>
-        <span>Démarrer l&apos;essai 14 jours</span>
+        <span className="material-symbols-outlined text-blue-600 text-xl group-hover:text-white transition-colors">rocket_launch</span>
+        <span>Commencer gratuitement</span>
         <span className="material-symbols-outlined text-xl transition-transform duration-300 group-hover:translate-x-1">arrow_forward</span>
       </span>
       <span className="absolute inset-0 w-full h-full bg-gradient-to-r from-transparent via-white/30 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-700 ease-out pointer-events-none" />
@@ -634,20 +642,20 @@ export default function LandingPage({ onLoginClick }: LandingPageProps) {
   </div>
 
   {/* CARTE 2 : PLAN PRO (5 000 F) - LE PLUS POPULAIRE */}
-  <div className="bg-surface-container-lowest p-8 rounded-3xl border-2 border-indigo-600 shadow-2xl shadow-indigo-600/20 flex flex-col justify-between relative transform lg:-translate-y-2 hover:-translate-y-3 transition-all duration-300 ring-4 ring-indigo-600/10">
-    <div className="absolute -top-4 left-1/2 -translate-x-1/2 px-4 py-1.5 rounded-full bg-gradient-to-r from-indigo-600 to-violet-600 text-white text-[11px] font-black uppercase tracking-wider shadow-lg shadow-indigo-600/30 flex items-center gap-1.5 whitespace-nowrap">
+  <div className="bg-surface-container-lowest p-8 rounded-3xl border-2 border-emerald-600 shadow-2xl shadow-emerald-600/20 flex flex-col justify-between relative transform lg:-translate-y-2 hover:-translate-y-3 transition-all duration-300 ring-4 ring-emerald-600/10">
+    <div className="absolute -top-4 left-1/2 -translate-x-1/2 px-4 py-1.5 rounded-full bg-gradient-to-r from-emerald-600 to-teal-600 text-white text-[11px] font-black uppercase tracking-wider shadow-lg shadow-emerald-600/30 flex items-center gap-1.5 whitespace-nowrap">
       <span className="material-symbols-outlined text-yellow-300 text-sm" style={{ fontVariationSettings: "'FILL' 1" }}>star</span>
-      <span>⭐ Recommandé • Commerçant indépendant</span>
+      <span>⭐ Recommandé • Boutique Complète</span>
     </div>
     <div>
-      <div className="inline-block px-3.5 py-1 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200 text-[11px] font-black uppercase tracking-wider w-fit mb-4 mt-2">
+      <div className="inline-block px-3.5 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 text-[11px] font-black uppercase tracking-wider w-fit mb-4 mt-2">
         Boutique Individuelle
       </div>
       <h3 className="text-2xl font-extrabold text-on-surface mb-1">PRO</h3>
-      <p className="text-xs text-on-surface-variant mb-6 font-medium">Pour commerçants indépendants gérant seuls leur point de vente.</p>
+      <p className="text-xs text-on-surface-variant mb-6 font-medium">Pour boutiques actives avec reçus, dettes clients et 1 caissier inclus.</p>
       
       <div className="mb-6">
-        <div className="text-4xl font-black text-indigo-600">
+        <div className="text-4xl font-black text-emerald-600">
           {isAnnual ? "50 000" : "5 000"}{" "}
           <span className="text-sm font-bold text-outline">FCFA / {isAnnual ? "an" : "mois"}</span>
         </div>
@@ -659,50 +667,49 @@ export default function LandingPage({ onLoginClick }: LandingPageProps) {
       </div>
 
       <ul className="space-y-3.5 text-sm text-on-surface mb-8 font-medium">
-        <li className="flex items-center gap-2.5 font-bold"><span className="material-symbols-outlined text-indigo-600 text-lg">check_circle</span> 1 Boutique &amp; Gestion complète</li>
-        <li className="flex items-center gap-2.5 font-semibold"><span className="material-symbols-outlined text-indigo-600 text-lg">check_circle</span> <b>Sessions de Caisse (Ouverture, Espèces &amp; Rapport Z)</b></li>
-        <li className="flex items-center gap-2.5 font-semibold"><span className="material-symbols-outlined text-indigo-600 text-lg">check_circle</span> <b>Carnet de Crédit &amp; Dettes clients (Relances WhatsApp)</b></li>
-        <li className="flex items-center gap-2.5"><span className="material-symbols-outlined text-indigo-600 text-lg">check_circle</span> Produits et ventes illimités</li>
-        <li className="flex items-center gap-2.5"><span className="material-symbols-outlined text-indigo-600 text-lg">check_circle</span> <b>Mode Hors-ligne (PWA)</b> même sans internet</li>
-        <li className="flex items-center gap-2.5"><span className="material-symbols-outlined text-indigo-600 text-lg">check_circle</span> Reçus thermiques 80mm &amp; Factures A4 (TVA 0% &amp; TTC)</li>
-        <li className="flex items-center gap-2.5"><span className="material-symbols-outlined text-indigo-600 text-lg">check_circle</span> Suivi des charges &amp; Bénéfice Net réel</li>
-        <li className="flex items-center gap-2.5"><span className="material-symbols-outlined text-indigo-600 text-lg">check_circle</span> Alertes stock automatiques &amp; Support WhatsApp</li>
+        <li className="flex items-center gap-2.5 font-bold text-emerald-700"><span className="material-symbols-outlined text-emerald-600 text-lg">verified</span> Tout ce qui est inclus dans Starter</li>
+        <li className="flex items-center gap-2.5 font-semibold"><span className="material-symbols-outlined text-emerald-600 text-lg">check_circle</span> <b>1 Caissier inclus</b> avec compte dédié</li>
+        <li className="flex items-center gap-2.5 font-semibold"><span className="material-symbols-outlined text-emerald-600 text-lg">check_circle</span> <b>Carnet de Crédit &amp; Dettes (Relances WhatsApp)</b></li>
+        <li className="flex items-center gap-2.5 font-semibold"><span className="material-symbols-outlined text-emerald-600 text-lg">check_circle</span> <b>Tickets thermiques 80mm &amp; Factures A4</b></li>
+        <li className="flex items-center gap-2.5"><span className="material-symbols-outlined text-emerald-600 text-lg">check_circle</span> Inventaires physiques tournants &amp; Écarts</li>
+        <li className="flex items-center gap-2.5"><span className="material-symbols-outlined text-emerald-600 text-lg">check_circle</span> Commandes fournisseurs &amp; Analyses complètes</li>
+        <li className="flex items-center gap-2.5"><span className="material-symbols-outlined text-emerald-600 text-lg">check_circle</span> Support WhatsApp réactif</li>
       </ul>
     </div>
 
     <button 
       onClick={() => onLoginClick(true)} 
-      className="group relative w-full py-4 px-6 rounded-2xl bg-gradient-to-r from-indigo-600 via-indigo-700 to-violet-700 text-white font-black text-base text-center shadow-xl shadow-indigo-600/40 hover:shadow-2xl hover:shadow-indigo-600/60 hover:from-indigo-500 hover:to-violet-600 active:scale-[0.98] transition-all duration-300 flex items-center justify-center gap-2 overflow-hidden cursor-pointer"
+      className="group relative w-full py-4 px-6 rounded-2xl bg-gradient-to-r from-emerald-600 via-teal-600 to-indigo-600 text-white font-black text-base text-center shadow-xl shadow-emerald-600/40 hover:shadow-2xl hover:shadow-emerald-600/60 hover:from-emerald-500 hover:to-indigo-500 active:scale-[0.98] transition-all duration-300 flex items-center justify-center gap-2 overflow-hidden cursor-pointer"
     >
       <span className="absolute inset-0 w-full h-full bg-gradient-to-r from-transparent via-white/25 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-1000 ease-out pointer-events-none" />
       <span className="relative z-10 flex items-center justify-center gap-2">
         <span className="material-symbols-outlined text-yellow-300 text-xl" style={{ fontVariationSettings: "'FILL' 1" }}>bolt</span>
-        <span>Choisir Pro après l&apos;essai</span>
+        <span>Essayer gratuitement 14 jours</span>
         <span className="material-symbols-outlined text-xl transition-transform duration-300 group-hover:translate-x-1">arrow_forward</span>
       </span>
     </button>
   </div>
 
-  {/* CARTE 3 : PLAN BUSINESS (15 000 F) */}
+  {/* CARTE 3 : PLAN BUSINESS (10 000 F) */}
   <div className="bg-surface-container-lowest p-8 rounded-3xl border-2 border-purple-500/50 shadow-xl shadow-purple-500/10 hover:border-purple-600 hover:shadow-2xl hover:shadow-purple-500/20 flex flex-col justify-between relative transition-all duration-300">
     <div className="absolute -top-4 left-1/2 -translate-x-1/2 px-4 py-1.5 rounded-full bg-gradient-to-r from-purple-700 to-fuchsia-700 text-white text-[11px] font-black uppercase tracking-wider shadow-lg shadow-purple-700/30 flex items-center gap-1.5 whitespace-nowrap">
       <span className="material-symbols-outlined text-amber-300 text-sm" style={{ fontVariationSettings: "'FILL' 1" }}>workspace_premium</span>
-      <span>💎 Le plus complet • Équipe &amp; Multi-Boutiques</span>
+      <span>💎 Multi-Magasins &amp; Équipe</span>
     </div>
     <div>
       <div className="inline-block px-3.5 py-1 rounded-full bg-purple-50 text-purple-700 border border-purple-200 text-[11px] font-black uppercase tracking-wider w-fit mb-4 mt-2">
-        Multi-Caisses &amp; Équipe
+        Multi-Points de Vente
       </div>
       <h3 className="text-2xl font-extrabold text-on-surface mb-1">BUSINESS</h3>
-      <p className="text-xs text-on-surface-variant mb-6 font-medium">Pour commerces avec caissiers, employés ou plusieurs points de vente.</p>
+      <p className="text-xs text-on-surface-variant mb-6 font-medium">Pour propriétaires gérant plusieurs points de vente avec une équipe de caissiers.</p>
       
       <div className="mb-6">
         <div className="text-4xl font-black text-purple-700">
-          {isAnnual ? "150 000" : "15 000"}{" "}
+          {isAnnual ? "100 000" : "10 000"}{" "}
           <span className="text-sm font-bold text-outline">FCFA / {isAnnual ? "an" : "mois"}</span>
         </div>
         {isAnnual ? (
-          <p className="text-xs text-emerald-700 font-bold mt-1">Soit 12 500 FCFA / mois (30 000 F d&apos;économie)</p>
+          <p className="text-xs text-emerald-700 font-bold mt-1">Soit ~8 333 FCFA / mois (20 000 F d&apos;économie)</p>
         ) : (
           <p className="text-xs text-outline font-medium mt-1">Payable par Mobile Money chaque mois</p>
         )}
@@ -710,11 +717,11 @@ export default function LandingPage({ onLoginClick }: LandingPageProps) {
 
       <ul className="space-y-3.5 text-sm text-on-surface mb-8 font-medium">
         <li className="flex items-center gap-2.5 font-bold text-purple-700"><span className="material-symbols-outlined text-purple-600 text-lg">verified</span> Toutes les fonctionnalités Pro incluses</li>
-        <li className="flex items-center gap-2.5 font-bold"><span className="material-symbols-outlined text-purple-600 text-lg">check_circle</span> <b>Multi-Caissiers illimités avec accès restreints</b></li>
-        <li className="flex items-center gap-2.5 font-bold"><span className="material-symbols-outlined text-purple-600 text-lg">check_circle</span> <b>Multi-Boutiques (jusqu&apos;à 3 magasins indépendants)</b></li>
-        <li className="flex items-center gap-2.5"><span className="material-symbols-outlined text-purple-600 text-lg">check_circle</span> Écran caissier sécurisé (bénéfices et marges masqués)</li>
+        <li className="flex items-center gap-2.5 font-bold"><span className="material-symbols-outlined text-purple-600 text-lg">check_circle</span> <b>Jusqu&apos;à 3 Boutiques actives</b></li>
+        <li className="flex items-center gap-2.5 font-bold"><span className="material-symbols-outlined text-purple-600 text-lg">check_circle</span> <b>Jusqu&apos;à 3 Caissiers au total</b></li>
+        <li className="flex items-center gap-2.5"><span className="material-symbols-outlined text-purple-600 text-lg">check_circle</span> Sélecteur &amp; Affectation par boutique</li>
+        <li className="flex items-center gap-2.5"><span className="material-symbols-outlined text-purple-600 text-lg">check_circle</span> Tableau de bord consolidé multi-magasins</li>
         <li className="flex items-center gap-2.5"><span className="material-symbols-outlined text-purple-600 text-lg">check_circle</span> Clôtures de caisse certifiées &amp; Détection des écarts</li>
-        <li className="flex items-center gap-2.5"><span className="material-symbols-outlined text-purple-600 text-lg">check_circle</span> Supervision à distance en temps réel sur mobile</li>
         <li className="flex items-center gap-2.5"><span className="material-symbols-outlined text-purple-600 text-lg">check_circle</span> Support VIP prioritaire WhatsApp 7j/7</li>
       </ul>
     </div>
@@ -764,7 +771,7 @@ export default function LandingPage({ onLoginClick }: LandingPageProps) {
           <span className="material-symbols-outlined text-outline group-open:rotate-180 transition-transform">expand_more</span>
         </summary>
         <div className="p-6 pt-0 text-on-surface-variant font-medium">
-          Vous bénéficiez de <b>14 jours complets (2 semaines) d&apos;essai gratuit</b> avec un accès total à l&apos;application dès votre inscription, sans carte bancaire requise. Vous pouvez enregistrer vos produits, encaisser vos clients et tester la caisse. À la fin des 14 jours, vous choisissez simplement votre formule (Pro à 5 000 FCFA ou Business à 15 000 FCFA) pour continuer.
+          Vous bénéficiez de <b>14 jours complets (2 semaines) d&apos;essai gratuit</b> avec un accès total à l&apos;application dès votre inscription, sans carte bancaire requise. Vous pouvez enregistrer vos produits, encaisser vos clients et tester la caisse. À la fin des 14 jours, vous choisissez simplement votre formule (Starter à 2 500 FCFA, Pro à 5 000 FCFA ou Business à 10 000 FCFA) pour continuer.
         </div>
       </details>
       <details className="group bg-surface-container-lowest rounded-xl border border-outline-variant/30 shadow-sm overflow-hidden open:ring-2 open:ring-primary/20">

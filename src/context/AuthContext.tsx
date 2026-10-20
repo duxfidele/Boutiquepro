@@ -3,14 +3,23 @@
 import React, { createContext, useContext, useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { User } from "@supabase/supabase-js";
+import {
+  SubscriptionTier,
+  PlanLimits,
+  TIER_LIMITS,
+  normalizeTier,
+  getTierLimits,
+} from "@/lib/subscriptionPlans";
 
 export interface StoreSubscription {
   plan: string;
+  tier: SubscriptionTier;
   status: string;
   endsAt: string | null;
   daysRemaining: number;
   isExpired: boolean;
   isTrial: boolean;
+  limits: PlanLimits;
 }
 
 interface AuthContextType {
@@ -23,17 +32,30 @@ interface AuthContextType {
   refreshSubscription: () => Promise<void>;
   loading: boolean;
   signOut: () => Promise<void>;
+  // Raccourcis de permissions directs
+  tier: SubscriptionTier;
+  limits: PlanLimits;
+  canPrintReceipts: boolean;
+  canOfferCredit: boolean;
+  canUseInventory: boolean;
+  canUseManualOrders: boolean;
+  canUseAdvancedAnalytics: boolean;
+  canManageTeam: boolean;
+  hasMultiStore: boolean;
 }
 
-export const computeSubscription = (store: any): StoreSubscription | null => {
+export const computeSubscription = (store: any, adminSub?: any): StoreSubscription | null => {
   if (!store || !store.id) return null;
 
-  const plan = (store.subscription_plan || "TRIAL").toUpperCase();
-  const status = (store.subscription_status || "trial").toLowerCase();
-  const isTrial = status === "trial" || plan === "TRIAL";
+  // Priorité absolue : abonnement centralisé admin s'il existe, sinon colonnes de la boutique
+  const rawTier = adminSub?.tier || store.subscription_plan || "PRO";
+  const tier = normalizeTier(rawTier);
+  const plan = (adminSub?.tier || store.subscription_plan || "TRIAL").toUpperCase();
+  const status = (adminSub?.status || store.subscription_status || "trial").toLowerCase();
+  const isTrial = status === "trial" || status === "trialing" || plan === "TRIAL";
 
-  let endsAtStr: string | null = store.subscription_ends_at || null;
-  // Ne replier sur created_at + 14 jours QUE si c est un essai sans date explicite
+  let endsAtStr: string | null = adminSub?.current_period_end || store.subscription_ends_at || null;
+  // Ne replier sur created_at + 14 jours QUE si c'est un essai sans date explicite
   if (isTrial && !endsAtStr && store.created_at) {
     try {
       endsAtStr = new Date(new Date(store.created_at).getTime() + 14 * 24 * 60 * 60 * 1000).toISOString();
@@ -45,7 +67,7 @@ export const computeSubscription = (store: any): StoreSubscription | null => {
   let daysRemaining = 999;
   let isExpired = false;
 
-  if (status === "expired" || status === "canceled") {
+  if (status === "expired" || status === "canceled" || status === "cancelled") {
     isExpired = true;
     daysRemaining = 0;
   } else if (isTrial) {
@@ -58,7 +80,6 @@ export const computeSubscription = (store: any): StoreSubscription | null => {
       }
     }
   } else if (status === "active") {
-    // Si abonnement actif : uniquement expiré si une date de fin est fixée ET dépassée
     if (endsAtStr) {
       const endsAtTime = new Date(endsAtStr).getTime();
       const diffMs = endsAtTime - Date.now();
@@ -72,15 +93,23 @@ export const computeSubscription = (store: any): StoreSubscription | null => {
     }
   }
 
+  // Durant l'essai gratuit de 14 jours, l'utilisateur a toutes les fonctionnalités PRO débloquées
+  const effectiveTier: SubscriptionTier = isTrial ? "PRO" : tier;
+  const limits = TIER_LIMITS[effectiveTier] || TIER_LIMITS.PRO;
+
   return {
     plan,
+    tier: effectiveTier,
     status,
     endsAt: endsAtStr,
     daysRemaining,
     isExpired,
     isTrial,
+    limits,
   };
 };
+
+const defaultLimits: PlanLimits = TIER_LIMITS.PRO;
 
 const AuthContext = createContext<AuthContextType>({
   user: null,
@@ -92,6 +121,15 @@ const AuthContext = createContext<AuthContextType>({
   refreshSubscription: async () => {},
   loading: true,
   signOut: async () => {},
+  tier: "PRO",
+  limits: defaultLimits,
+  canPrintReceipts: true,
+  canOfferCredit: true,
+  canUseInventory: true,
+  canUseManualOrders: true,
+  canUseAdvancedAnalytics: true,
+  canManageTeam: true,
+  hasMultiStore: false,
 });
 
 export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
@@ -177,6 +215,21 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     }
 
     try {
+      // 1. Récupération de l'abonnement centralisé admin s'il existe
+      let adminSub: any = null;
+      try {
+        const { data: subData } = await supabase
+          .from("admin_subscriptions")
+          .select("tier, status, current_period_end")
+          .eq("admin_id", userId)
+          .maybeSingle();
+        if (subData) {
+          adminSub = subData;
+        }
+      } catch {
+        // Table admin_subscriptions non encore créée ou accès restreint
+      }
+
       const { data } = await supabase
         .from("store_members")
         .select("role, store_id, stores ( id, name, created_at, subscription_plan, subscription_status, subscription_ends_at )")
@@ -198,9 +251,9 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
               id: st?.id || d.store_id,
               name: st?.name || "Ma Boutique",
               created_at: st?.created_at,
-              subscription_plan: st?.subscription_plan || "TRIAL",
-              subscription_status: st?.subscription_status || "trial",
-              subscription_ends_at: st?.subscription_ends_at || fallbackEndsAt,
+              subscription_plan: adminSub?.tier || st?.subscription_plan || "TRIAL",
+              subscription_status: adminSub?.status || st?.subscription_status || "trial",
+              subscription_ends_at: adminSub?.current_period_end || st?.subscription_ends_at || fallbackEndsAt,
             };
           })
           .filter((d: any) => d.id);
@@ -214,7 +267,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
           setStores(singleStore);
           setRole("cashier");
           setActiveStore(singleStore[0]);
-          setSubscription(computeSubscription(singleStore[0]));
+          setSubscription(computeSubscription(singleStore[0], adminSub));
           try {
             localStorage.setItem("cachedStores", JSON.stringify(singleStore));
             localStorage.setItem("activeStoreObj", JSON.stringify(singleStore[0]));
@@ -234,20 +287,20 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         if (!selected) selected = valid[0];
 
         setActiveStore(selected);
-        setSubscription(computeSubscription(selected));
+        setSubscription(computeSubscription(selected, adminSub));
       } else {
         if (!activeStore) {
           const fallback = {
             id: "default",
             name: "Ma Boutique",
             role: "admin",
-            subscription_plan: "TRIAL",
-            subscription_status: "trial",
-            subscription_ends_at: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString(),
+            subscription_plan: adminSub?.tier || "TRIAL",
+            subscription_status: adminSub?.status || "trial",
+            subscription_ends_at: adminSub?.current_period_end || new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString(),
           };
           setStores([fallback]);
           setActiveStore(fallback);
-          setSubscription(computeSubscription(fallback));
+          setSubscription(computeSubscription(fallback, adminSub));
           setRole("admin");
         }
       }
@@ -385,6 +438,10 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     await supabase.auth.signOut();
   };
 
+  const currentLimits = subscription?.limits || defaultLimits;
+  const currentTier = subscription?.tier || "PRO";
+  const isExpired = Boolean(subscription?.isExpired);
+
   return (
     <AuthContext.Provider
       value={{
@@ -397,6 +454,15 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         refreshSubscription,
         loading,
         signOut,
+        tier: currentTier,
+        limits: currentLimits,
+        canPrintReceipts: currentLimits.canPrintReceipts && !isExpired,
+        canOfferCredit: currentLimits.canOfferCredit && !isExpired,
+        canUseInventory: currentLimits.canUseInventory && !isExpired,
+        canUseManualOrders: currentLimits.canUseManualOrders && !isExpired,
+        canUseAdvancedAnalytics: currentLimits.canUseAdvancedAnalytics && !isExpired,
+        canManageTeam: currentLimits.canManageTeam && !isExpired,
+        hasMultiStore: currentLimits.hasMultiStore && !isExpired,
       }}
     >
       {children}

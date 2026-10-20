@@ -208,7 +208,7 @@ export default function SettingsPage() {
               Abonnement &amp; Facturation (Moneriz)
             </h2>
             <p className="text-xs text-muted-foreground mt-1">
-              Gérez votre formule Pro ou Business. Paiement sécurisé par Mobile Money (T-Money, Moov, Wave, Orange) et Carte Bancaire.
+              Gérez votre formule Starter, Pro ou Business. Paiement sécurisé par Mobile Money (T-Money, Moov, Wave, Orange) et Carte Bancaire.
             </p>
           </div>
           <span className="px-3 py-1 rounded-full bg-emerald-500/10 text-emerald-600 text-xs font-bold border border-emerald-500/20">
@@ -220,7 +220,7 @@ export default function SettingsPage() {
           <div>
             <div className="text-sm font-bold text-foreground">Formules Disponibles</div>
             <div className="text-xs text-muted-foreground mt-0.5">
-              Pro (5 000 FCFA/mois ou 50 000 FCFA/an) • Business (15 000 FCFA/mois ou 150 000 FCFA/an)
+              Starter (2 500 F/mois) • Pro (5 000 F/mois) • Business (10 000 F/mois) — 2 mois offerts en paiement annuel
             </div>
           </div>
           <button

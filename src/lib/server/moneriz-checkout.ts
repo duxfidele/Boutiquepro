@@ -18,7 +18,7 @@ export type CheckoutAttempt = {
     embedOrigin?: string;
     successUrl?: string;
     cancelUrl?: string;
-    metadata: { orderId: string };
+    metadata: { orderId: string; storeId?: string; planKey?: string; [key: string]: any };
   };
   session: BrowserCheckout | null;
 };

@@ -2,6 +2,8 @@
 
 import React, { useMemo, useState } from "react";
 import { useStore } from "@/context/StoreContext";
+import { useAuth } from "@/context/AuthContext";
+import SubscriptionModal from "@/components/subscription/SubscriptionModal";
 import {
   BarChart3,
   TrendingUp,
@@ -64,6 +66,8 @@ const paymentIcons: Record<string, React.ReactNode> = {
 };
 
 export default function AnalyticsPage() {
+  const { canUseAdvancedAnalytics } = useAuth();
+  const [subModalOpen, setSubModalOpen] = useState(false);
   const { 
     state, 
     formatPrice, 

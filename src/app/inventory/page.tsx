@@ -1,12 +1,16 @@
 "use client";
 
 import React, { useState, useMemo } from "react";
+import { useAuth } from "@/context/AuthContext";
+import SubscriptionModal from "@/components/subscription/SubscriptionModal";
 import { useStore, InventorySession, InventoryItem } from "@/context/StoreContext";
 import { ClipboardList, Plus, Search, Check, FileText, Printer, ArrowLeft, ArrowRight, Save, Trash2, Calendar, X } from "lucide-react";
 import { ProductAvatar } from "@/components/ui/ProductAvatar";
 
 export default function InventoryPage() {
   const { state, dispatch, formatPrice } = useStore();
+  const { canUseInventory } = useAuth();
+  const [subModalOpen, setSubModalOpen] = useState(false);
   
   const [isDrafting, setIsDrafting] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
