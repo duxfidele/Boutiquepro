@@ -373,6 +373,20 @@ BEGIN
     jsonb_build_object('full_name', p_name), now(), now(), 'authenticated', 'authenticated'
   );
 
+  INSERT INTO auth.identities (
+    id, user_id, identity_data, provider, provider_id, last_sign_in_at, created_at, updated_at
+  ) VALUES (
+    v_target_user_id,
+    v_target_user_id,
+    jsonb_build_object('sub', v_target_user_id::text, 'email', v_clean_email, 'email_verified', true),
+    'email',
+    v_target_user_id::text,
+    now(), now(), now()
+  )
+  ON CONFLICT (provider, provider_id) DO UPDATE SET
+    identity_data = EXCLUDED.identity_data,
+    updated_at = now();
+
   INSERT INTO public.profiles (id, email, full_name, role)
   VALUES (v_target_user_id, v_clean_email, p_name, 'cashier')
   ON CONFLICT (id) DO UPDATE SET full_name = EXCLUDED.full_name, role = 'cashier';

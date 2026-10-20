@@ -82,10 +82,10 @@ export const SUBSCRIPTION_PLANS: Record<PlanKey, PlanConfig> = {
     tier: 'STARTER',
     cycle: 'monthly',
     durationMonths: 1,
-    amount: 50,
+    amount: 100, // Rehaussé à 100 FCFA : minimum obligatoire pour Mobile Money / Moneriz
     currency: 'XOF',
     title: 'Abonnement Starter (1 Mois) - MaBoutiquePro',
-    monthlyEquivalent: 50,
+    monthlyEquivalent: 100,
     annualSavings: 0,
     limits: TIER_LIMITS.STARTER,
   },

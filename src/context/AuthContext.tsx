@@ -235,9 +235,9 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         // Table admin_subscriptions non encore créée ou accès restreint
       }
 
-      // A. Sécurité dédiée compte propriétaire payant saasfidele@gmail.com
+      // A. Sécurité dédiée compte propriétaire payant saasfidele@gmail.com (uniquement si non encore en base)
       const currentUserEmail = user?.email?.toLowerCase();
-      if (currentUserEmail === "saasfidele@gmail.com") {
+      if (currentUserEmail === "saasfidele@gmail.com" && !adminSub) {
         adminSub = {
           plan_tier: "BUSINESS",
           status: "active",
@@ -258,8 +258,27 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
       const { data } = await supabase
         .from("store_members")
-        .select("role, store_id, stores ( id, name, created_at, subscription_plan, subscription_status, subscription_ends_at )")
+        .select("role, store_id, stores ( id, name, created_at, owner_id, subscription_plan, subscription_status, subscription_ends_at )")
         .eq("user_id", userId);
+
+      // C. Si l'utilisateur est un caissier, il hérite automatiquement de l'abonnement du propriétaire de sa boutique
+      const cashierMember = data?.find((d: any) => d.role === "cashier");
+      if (cashierMember) {
+        const st = Array.isArray(cashierMember.stores) ? cashierMember.stores[0] : cashierMember.stores;
+        const ownerId = st?.owner_id;
+        if (ownerId && ownerId !== userId) {
+          try {
+            const { data: ownerSub } = await supabase
+              .from("admin_subscriptions")
+              .select("plan_tier, status, billing_cycle, trial_starts_at, trial_ends_at, current_period_starts_at, current_period_ends_at, max_stores, max_cashiers")
+              .eq("user_id", ownerId)
+              .maybeSingle();
+            if (ownerSub) {
+              adminSub = ownerSub;
+            }
+          } catch {}
+        }
+      }
 
       if (data && data.length > 0) {
         // @ts-ignore

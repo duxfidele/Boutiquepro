@@ -440,32 +440,12 @@ export async function commitMonerizInbox(event: MonerizEvent): Promise<void> {
 
               const ownerId = stData?.owner_id;
 
-              // Récupérer l'abonnement existant pour calculer la date de fin exacte sans perte de jours (sans décalage)
-              let existingSub: any = null;
-              if (ownerId) {
-                const { data } = await supabase
-                  .from('admin_subscriptions')
-                  .select('current_period_ends_at, trial_ends_at, status')
-                  .eq('user_id', ownerId)
-                  .maybeSingle();
-                existingSub = data;
-              }
-
-              let baseDate = new Date();
-              if (existingSub?.current_period_ends_at) {
-                const existingEnd = new Date(existingSub.current_period_ends_at);
-                if (existingEnd > baseDate) {
-                  baseDate = existingEnd; // Prolonge l'abonnement en cours sans perte
-                }
-              } else if (existingSub?.trial_ends_at) {
-                const trialEnd = new Date(existingSub.trial_ends_at);
-                if (trialEnd > baseDate) {
-                  baseDate = trialEnd; // Ajoute les mois achetés à la suite des jours d'essai restants
-                }
-              }
-
-              const endsAt = new Date(baseDate);
-              endsAt.setMonth(endsAt.getMonth() + durationMonths);
+              // Règle stricte sans accumulation :
+              // Dès qu'un paiement est validé, la formule démarre à l'instant du paiement
+              // pour exactement 30 jours (mensuel) ou 365 jours (annuel).
+              const durationDays = durationMonths === 12 ? 365 : 30;
+              const now = new Date();
+              const endsAt = new Date(now.getTime() + durationDays * 24 * 60 * 60 * 1000);
 
               if (ownerId) {
 

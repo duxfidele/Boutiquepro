@@ -215,7 +215,7 @@ export default function SubscriptionModal({
                     <span>STARTER</span>
                   </h4>
                   <div className="text-2xl font-black text-on-surface mb-3">
-                    {isAnnual ? "500" : "50"}{" "}
+                    {isAnnual ? "1 000" : "100"}{" "}
                     <span className="text-xs font-bold text-outline">FCFA / {isAnnual ? "an" : "mois"}</span>
                   </div>
                   <ul className="space-y-2 text-xs text-on-surface-variant font-medium">
