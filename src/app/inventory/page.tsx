@@ -101,6 +101,43 @@ export default function InventoryPage() {
     return { count: diff, cost };
   }, [draftItems, sortedProducts]);
 
+  if (!canUseInventory) {
+    return (
+      <div className="max-w-4xl mx-auto space-y-6 animate-fade-in p-4 sm:p-8">
+        <div className="glass-panel p-8 sm:p-12 rounded-3xl border border-border/50 text-center space-y-6 shadow-xl bg-card">
+          <div className="w-16 h-16 rounded-3xl bg-amber-500/10 text-amber-600 dark:text-amber-400 flex items-center justify-center mx-auto shadow-sm">
+            <ClipboardList className="w-8 h-8" />
+          </div>
+          <div className="max-w-md mx-auto space-y-3">
+            <span className="px-3 py-1 rounded-full bg-amber-500/15 text-amber-700 dark:text-amber-300 text-xs font-black uppercase tracking-wider">
+              Formules PRO &amp; BUSINESS
+            </span>
+            <h2 className="text-2xl font-black text-foreground">
+              Inventaires physiques &amp; Écarts de stock
+            </h2>
+            <p className="text-sm text-muted-foreground leading-relaxed">
+              La gestion des sessions d&apos;inventaire physique, le comptage et le calcul des écarts de stock sont réservés aux formules <b>Pro</b> et <b>Business</b>.
+            </p>
+          </div>
+          <div className="pt-2 flex flex-col sm:flex-row items-center justify-center gap-3">
+            <button
+              type="button"
+              onClick={() => setSubModalOpen(true)}
+              className="w-full sm:w-auto px-8 py-3.5 rounded-2xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-black text-sm shadow-lg shadow-emerald-600/25 hover:shadow-xl transition-all cursor-pointer"
+            >
+              Passer à la formule PRO (100 FCFA/mois)
+            </button>
+          </div>
+        </div>
+        <SubscriptionModal
+          isOpen={subModalOpen}
+          onClose={() => setSubModalOpen(false)}
+          defaultPlan="PRO"
+        />
+      </div>
+    );
+  }
+
   return (
     <>
       <div className="space-y-6 print:hidden">
