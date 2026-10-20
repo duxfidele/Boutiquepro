@@ -18,7 +18,7 @@ import {
   ShoppingCart,
   BarChart3,
   Settings,
-  Sparkles,
+  Sparkles, ShieldCheck, Clock,
   ChevronLeft,
   ChevronRight,
   AlertTriangle,
@@ -54,6 +54,7 @@ export default function Sidebar({ isOpen, onClose }: { isOpen?: boolean; onClose
     stores,
     activeStore,
     setActiveStore,
+    subscription,
     tier,
     limits,
     canOfferCredit,
@@ -294,6 +295,108 @@ export default function Sidebar({ isOpen, onClose }: { isOpen?: boolean; onClose
                 </span>
               )}
             </button>
+          </div>
+        )}
+
+        {/* WIDGET COMPTE À REBOURS ABONNEMENT & ESSAI */}
+        {role === "admin" && subscription && (
+          <div className="px-3 pb-2 animate-fade-in">
+            {!collapsed ? (
+              <div
+                onClick={() => {
+                  setSubModalDefaultPlan(subscription.isTrial ? "PRO" : tier);
+                  setSubModalOpen(true);
+                }}
+                className={`group relative cursor-pointer p-3 rounded-2xl border transition-all duration-200 overflow-hidden shadow-xs hover:shadow-md ${
+                  subscription.isTrial
+                    ? subscription.daysRemaining <= 3
+                      ? "bg-amber-500/10 border-amber-500/30 hover:border-amber-500/60 text-amber-900 dark:text-amber-200"
+                      : "bg-emerald-500/10 border-emerald-500/25 hover:border-emerald-500/50 text-foreground"
+                    : "bg-primary/5 border-primary/20 hover:border-primary/40 text-foreground"
+                }`}
+              >
+                {/* En-tête du widget */}
+                <div className="flex items-center justify-between gap-1 mb-1.5">
+                  <div className="flex items-center gap-1.5 min-w-0">
+                    {subscription.isTrial ? (
+                      <Sparkles className="w-3.5 h-3.5 text-amber-500 shrink-0 animate-pulse" />
+                    ) : (
+                      <ShieldCheck className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
+                    )}
+                    <span className="text-[11px] font-black uppercase tracking-wider truncate">
+                      {subscription.isTrial ? "Essai 14j (PRO)" : `Formule ${tier}`}
+                    </span>
+                  </div>
+
+                  <span
+                    className={`px-1.5 py-0.5 rounded-md text-[9px] font-black uppercase shrink-0 ${
+                      subscription.isTrial
+                        ? subscription.daysRemaining <= 3
+                          ? "bg-amber-500 text-white"
+                          : "bg-emerald-600 text-white"
+                        : "bg-primary/20 text-primary"
+                    }`}
+                  >
+                    {subscription.isTrial ? `J-${subscription.daysRemaining}` : "Actif"}
+                  </span>
+                </div>
+
+                {/* Barre de progression dynamique */}
+                {subscription.isTrial && (
+                  <div className="space-y-1 mb-1.5">
+                    <div className="w-full bg-black/10 dark:bg-white/10 h-1.5 rounded-full overflow-hidden">
+                      <div
+                        className={`h-full rounded-full transition-all duration-500 ${
+                          subscription.daysRemaining <= 3
+                            ? "bg-amber-500"
+                            : "bg-gradient-to-r from-emerald-500 to-teal-500"
+                        }`}
+                        style={{
+                          width: `${Math.max(8, Math.min(100, ((14 - subscription.daysRemaining) / 14) * 100))}%`,
+                        }}
+                      />
+                    </div>
+                    <div className="flex justify-between items-center text-[10px] font-semibold text-muted-foreground">
+                      <span className="text-foreground font-bold">
+                        {subscription.daysRemaining} jour{subscription.daysRemaining > 1 ? "s" : ""} restant{subscription.daysRemaining > 1 ? "s" : ""}
+                      </span>
+                      <span className="text-[9px] uppercase font-black text-primary group-hover:underline">
+                        Activer
+                      </span>
+                    </div>
+                  </div>
+                )}
+
+                {!subscription.isTrial && subscription.endsAt && (
+                  <div className="text-[10px] font-medium text-muted-foreground flex items-center justify-between">
+                    <span>{subscription.daysRemaining} jours restants</span>
+                    <span className="text-[9px] text-primary font-bold group-hover:underline">
+                      Gérer
+                    </span>
+                  </div>
+                )}
+              </div>
+            ) : (
+              /* Vue repliée (icône seule animée) */
+              <button
+                type="button"
+                onClick={() => {
+                  setSubModalDefaultPlan(subscription.isTrial ? "PRO" : tier);
+                  setSubModalOpen(true);
+                }}
+                title={
+                  subscription.isTrial
+                    ? `Essai gratuit : ${subscription.daysRemaining} jours restants`
+                    : `Formule ${tier}`
+                }
+                className="w-full relative flex items-center justify-center p-2 rounded-xl bg-secondary/60 hover:bg-secondary text-primary transition-colors"
+              >
+                <Sparkles className="w-4 h-4 text-amber-500 animate-pulse" />
+                <span className="absolute -top-1 -right-1 px-1 rounded-full bg-emerald-600 text-[8px] font-black text-white">
+                  {subscription.daysRemaining}j
+                </span>
+              </button>
+            )}
           </div>
         )}
 

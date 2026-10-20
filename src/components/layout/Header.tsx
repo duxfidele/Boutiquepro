@@ -5,11 +5,12 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useStore } from "@/context/StoreContext";
 import { useAuth } from "@/context/AuthContext";
+import SubscriptionModal from "@/components/subscription/SubscriptionModal";
 import {
   Search,
   Bell,
   ShoppingCart,
-  AlertTriangle,
+  AlertTriangle, Sparkles, ShieldCheck,
   Sun,
   Moon,
   User,
@@ -35,7 +36,8 @@ export default function Header({ onMenuClick }: { onMenuClick?: () => void }) {
     }
   };
 
-  const { user, role, signOut } = useAuth();
+  const { user, role, signOut, subscription, tier } = useAuth();
+  const [showSubModal, setShowSubModal] = useState(false);
   const [showProfile, setShowProfile] = useState(false);
   const { lowStockProducts, state, formatPrice, todayRevenue, todayOrders, dispatch, isOnline, pendingSyncCount } = useStore();
   const pathname = usePathname();
@@ -80,6 +82,41 @@ export default function Header({ onMenuClick }: { onMenuClick?: () => void }) {
               <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
               Hors-ligne {pendingSyncCount > 0 ? `(${pendingSyncCount} en attente)` : ""}
             </span>
+          )}
+
+          {/* Badge interactif compte à rebours Abonnement / Essai */}
+          {role === "admin" && subscription && (
+            <button
+              type="button"
+              onClick={() => setShowSubModal(true)}
+              className={`hidden md:inline-flex items-center gap-1.5 px-3 py-1 rounded-xl text-xs font-bold border transition-all cursor-pointer shadow-2xs ${
+                subscription.isTrial
+                  ? subscription.daysRemaining <= 3
+                    ? "bg-amber-500/15 border-amber-500/30 text-amber-700 dark:text-amber-300 hover:bg-amber-500/25"
+                    : "bg-emerald-500/10 border-emerald-500/25 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-500/20"
+                  : "bg-primary/10 border-primary/20 text-primary hover:bg-primary/20"
+              }`}
+            >
+              {subscription.isTrial ? (
+                <>
+                  <Sparkles className="w-3.5 h-3.5 text-amber-500 shrink-0 animate-pulse" />
+                  <span className="text-[11px] font-medium text-muted-foreground">Essai PRO :</span>
+                  <span className="font-extrabold text-emerald-600 dark:text-emerald-400">
+                    {subscription.daysRemaining}j restants
+                  </span>
+                </>
+              ) : (
+                <>
+                  <ShieldCheck className="w-3.5 h-3.5 text-primary shrink-0" />
+                  <span>Formule {tier}</span>
+                  {subscription.endsAt && (
+                    <span className="text-[11px] font-normal text-muted-foreground">
+                      ({subscription.daysRemaining}j)
+                    </span>
+                  )}
+                </>
+              )}
+            </button>
           )}
         </div>
       </div>
@@ -255,6 +292,12 @@ export default function Header({ onMenuClick }: { onMenuClick?: () => void }) {
           )}
         </div>
       </div>
+      {/* Modal d'abonnement accessible au clic */}
+      <SubscriptionModal
+        isOpen={showSubModal}
+        onClose={() => setShowSubModal(false)}
+        defaultPlan={subscription?.isTrial ? "PRO" : tier}
+      />
     </header>
   );
 }
