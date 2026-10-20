@@ -9,67 +9,117 @@ export default function LandingPage({ onLoginClick }: LandingPageProps) {
   const [isAnnual, setIsAnnual] = useState(false);
   return (
     <div className="bg-surface font-sans text-on-surface antialiased">
-      <header className="fixed top-0 left-0 right-0 z-50 bg-surface-container-lowest/90 backdrop-blur-md border-b border-surface-container"><div className="h-20 max-w-7xl mx-auto px-margin-mobile md:px-margin flex items-center justify-between"><div className="flex items-center gap-space-sm"><img alt="MaBoutiquePro Logo" className="h-8 w-auto object-contain" src="/logo.png"/><span className="font-headline-sm text-lg sm:text-headline-sm text-on-surface tracking-tight font-bold">MaBoutiquePro</span></div><nav className="hidden lg:flex items-center gap-space-lg"><a className="font-title-md text-title-md text-on-surface-variant hover:text-primary transition-colors font-medium" href="#features">Fonctionnalités</a><a className="font-title-md text-title-md text-on-surface-variant hover:text-primary transition-colors font-medium" href="#how-it-works">Comment ça marche</a><a className="font-title-md text-title-md text-on-surface-variant hover:text-primary transition-colors font-medium" href="#tarifs">Tarifs</a><a className="font-title-md text-title-md text-on-surface-variant hover:text-primary transition-colors font-medium" href="#faq-accordion">FAQ</a></nav><div className="flex items-center gap-2 sm:gap-space-md">
-<button className="lg:hidden text-on-surface p-2 flex items-center justify-center" onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}><span className="material-symbols-outlined">{isMobileMenuOpen ? 'close' : 'menu'}</span></button>
-<button onClick={() => onLoginClick(false)} className="font-title-md text-title-md text-on-surface-variant hover:text-on-surface transition-colors hidden sm:inline-flex font-semibold mr-4">Se connecter</button><button onClick={() => onLoginClick(true)} className="group relative inline-flex items-center justify-center gap-2 px-5 sm:px-6 py-2.5 rounded-xl bg-gradient-to-r from-indigo-600 via-indigo-700 to-violet-700 text-white font-title-md text-sm sm:text-base shadow-md shadow-indigo-600/30 hover:shadow-xl hover:shadow-indigo-600/40 hover:from-indigo-500 hover:to-violet-600 active:scale-[0.98] transition-all duration-300 font-bold whitespace-nowrap overflow-hidden cursor-pointer"><span className="relative z-10 flex items-center gap-1.5"><span className="hidden sm:inline">Essai gratuit 14 jours</span><span className="sm:hidden">Démarrer</span><span className="material-symbols-outlined text-lg transition-transform duration-300 group-hover:translate-x-1">arrow_forward</span></span><span className="absolute inset-0 w-full h-full bg-gradient-to-r from-transparent via-white/20 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-700 ease-out pointer-events-none" /></button></div></div>
-{isMobileMenuOpen && (
-  <div className="lg:hidden absolute top-20 left-0 right-0 bg-surface-container-lowest border-b border-surface-container shadow-2xl p-6 flex flex-col gap-6 z-40 animate-in slide-in-from-top-2">
-    <a onClick={() => setIsMobileMenuOpen(false)} className="font-title-md text-lg text-on-surface-variant hover:text-primary transition-colors font-medium flex items-center gap-3" href="#features">
-      <span className="material-symbols-outlined text-primary/70">auto_awesome</span> Fonctionnalités
-    </a>
-    <a onClick={() => setIsMobileMenuOpen(false)} className="font-title-md text-lg text-on-surface-variant hover:text-primary transition-colors font-medium flex items-center gap-3" href="#how-it-works">
-      <span className="material-symbols-outlined text-primary/70">play_circle</span> Comment ça marche
-    </a>
-    <a onClick={() => setIsMobileMenuOpen(false)} className="font-title-md text-lg text-on-surface-variant hover:text-primary transition-colors font-medium flex items-center gap-3" href="#tarifs">
-      <span className="material-symbols-outlined text-primary/70">payments</span> Tarifs
-    </a>
-    <a onClick={() => setIsMobileMenuOpen(false)} className="font-title-md text-lg text-on-surface-variant hover:text-primary transition-colors font-medium flex items-center gap-3" href="#faq-accordion">
-      <span className="material-symbols-outlined text-primary/70">help</span> FAQ
-    </a>
-    <div className="w-full h-px bg-surface-container my-2"></div>
-    <button onClick={() => { setIsMobileMenuOpen(false); onLoginClick(false); }} className="font-title-md text-lg text-on-surface-variant hover:text-on-surface transition-colors font-bold text-left flex items-center gap-3">
-      <span className="material-symbols-outlined text-outline">login</span> Se connecter
-    </button>
-  </div>
-)}
-</header><main className="w-full pt-20 bg-surface"><div className="flex flex-col w-full overflow-hidden">
-{/* 1. HERO SECTION */}
-<section className="relative w-full pt-20 pb-24 px-4 md:px-8 bg-gradient-to-b from-surface-container-low/40 via-surface to-surface flex flex-col items-center text-center">
-<div className="absolute top-12 left-1/2 -translate-x-1/2 w-[720px] h-[340px] bg-primary/10 rounded-full blur-3xl pointer-events-none -z-10"></div>
-<div className="absolute top-48 left-1/4 w-80 h-80 bg-secondary/5 rounded-full blur-2xl pointer-events-none -z-10"></div>
-<div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-surface-container border border-outline-variant/30 text-primary font-title-md text-sm shadow-sm mb-6 transition-all hover:bg-surface-container-high cursor-default">
-<span className="inline-block w-2 h-2 rounded-full bg-primary animate-pulse"></span>
-<span className="font-medium">✨ 14 jours d&apos;essai gratuit • Sans carte bancaire</span>
-</div>
-<h1 className="max-w-5xl font-display-hero text-4xl md:text-5xl font-extrabold tracking-tight text-on-surface mb-6">
-      Gérez votre boutique. Suivez vos ventes.<br className="hidden md:inline"/>
-<span className="bg-gradient-to-r from-primary via-primary-container to-tertiary bg-clip-text text-transparent">Développez votre activité.</span>
-</h1>
-<p className="max-w-2xl text-lg text-on-surface-variant mb-10 leading-relaxed font-medium">
-      La solution tout-en-un conçue pour les commerçants africains. Centralisez vos produits, gérez vos stocks en temps réel, enregistrez vos ventes et suivez vos bénéfices en FCFA en toute sérénité.
-    </p>
-<div className="flex flex-col sm:flex-row items-center justify-center gap-4 mb-4 w-full sm:w-auto">
-<button onClick={() => onLoginClick(true)} className="group w-full sm:w-auto inline-flex items-center justify-center gap-3 px-8 py-4 rounded-2xl bg-gradient-to-r from-indigo-600 via-indigo-700 to-violet-700 text-white font-title-md text-base shadow-xl shadow-indigo-600/30 hover:shadow-2xl hover:shadow-indigo-600/50 hover:from-indigo-500 hover:to-violet-600 active:scale-[0.98] transition-all duration-300 font-extrabold relative overflow-hidden cursor-pointer">
-<span className="relative z-10 flex items-center gap-2">
-<span>Démarrer 14 jours gratuits</span>
-<span className="material-symbols-outlined text-xl transition-transform duration-300 group-hover:translate-x-1">arrow_forward</span>
-</span>
-<span className="absolute inset-0 w-full h-full bg-gradient-to-r from-transparent via-white/20 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-1000 ease-out pointer-events-none" />
-</button>
-<a className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-7 py-4 rounded-xl bg-surface-container-lowest text-on-surface font-title-md text-base border border-outline-variant/40 hover:bg-surface-container-low active:scale-[0.98] transition-all shadow-sm font-semibold" href="#mockup">
-<span className="material-symbols-outlined text-primary text-xl" style={{ fontVariationSettings: "'FILL' 1" }}>play_circle</span>
-<span>Découvrir MaBoutiquePro</span>
-</a>
-</div>
-<p className="text-sm text-outline flex items-center justify-center gap-2 mb-16 flex-wrap font-medium">
-<span>14 jours d&apos;essai offert</span>
-<span>•</span>
-<span>Sans carte bancaire</span>
-<span>•</span>
-<span>Configuration en 2 minutes</span>
-<span>•</span>
-<span className="font-bold text-primary">100% adapté à l&apos;Afrique (FCFA)</span>
-</p>
+      <header className="fixed top-0 left-0 right-0 z-50 bg-surface-container-lowest/95 backdrop-blur-md border-b border-surface-container">
+        <div className="h-16 sm:h-20 max-w-7xl mx-auto px-margin-mobile md:px-margin flex items-center justify-between">
+          <div className="flex items-center gap-space-sm">
+            <img alt="MaBoutiquePro Logo" className="h-7 sm:h-8 w-auto object-contain" src="/logo.png"/>
+            <span className="font-headline-sm text-base sm:text-headline-sm text-on-surface tracking-tight font-bold">MaBoutiquePro</span>
+          </div>
+          <nav className="hidden lg:flex items-center gap-space-lg">
+            <a className="font-title-md text-title-md text-on-surface-variant hover:text-primary transition-colors font-medium" href="#features">Fonctionnalités</a>
+            <a className="font-title-md text-title-md text-on-surface-variant hover:text-primary transition-colors font-medium" href="#how-it-works">Comment ça marche</a>
+            <a className="font-title-md text-title-md text-on-surface-variant hover:text-primary transition-colors font-medium" href="#tarifs">Tarifs</a>
+            <a className="font-title-md text-title-md text-on-surface-variant hover:text-primary transition-colors font-medium" href="#faq-accordion">FAQ</a>
+          </nav>
+          <div className="flex items-center gap-2 sm:gap-space-md">
+            <button className="lg:hidden text-on-surface p-1.5 sm:p-2 rounded-lg hover:bg-surface-container flex items-center justify-center transition-colors" onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)} aria-label="Menu">
+              <span className="material-symbols-outlined">{isMobileMenuOpen ? 'close' : 'menu'}</span>
+            </button>
+            <button onClick={() => onLoginClick(false)} className="font-title-md text-title-md text-on-surface-variant hover:text-on-surface transition-colors hidden sm:inline-flex font-semibold mr-4">
+              Se connecter
+            </button>
+            <button onClick={() => onLoginClick(true)} className="group relative inline-flex items-center justify-center gap-2 px-3.5 sm:px-6 py-2 sm:py-2.5 rounded-xl bg-gradient-to-r from-indigo-600 via-indigo-700 to-violet-700 text-white font-title-md text-xs sm:text-base shadow-md shadow-indigo-600/30 hover:shadow-xl hover:shadow-indigo-600/40 hover:from-indigo-500 hover:to-violet-600 active:scale-[0.98] transition-all duration-300 font-bold whitespace-nowrap overflow-hidden cursor-pointer">
+              <span className="relative z-10 flex items-center gap-1.5">
+                <span className="hidden sm:inline">Essai gratuit 14 jours</span>
+                <span className="sm:hidden font-bold">Essai gratuit</span>
+                <span className="material-symbols-outlined text-base sm:text-lg transition-transform duration-300 group-hover:translate-x-1">arrow_forward</span>
+              </span>
+              <span className="absolute inset-0 w-full h-full bg-gradient-to-r from-transparent via-white/20 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-700 ease-out pointer-events-none" />
+            </button>
+          </div>
+        </div>
+        {isMobileMenuOpen && (
+          <div className="lg:hidden absolute top-16 sm:top-20 left-0 right-0 bg-surface-container-lowest border-b border-surface-container shadow-2xl p-6 flex flex-col gap-6 z-40 animate-in slide-in-from-top-2">
+            <a onClick={() => setIsMobileMenuOpen(false)} className="font-title-md text-lg text-on-surface-variant hover:text-primary transition-colors font-medium flex items-center gap-3" href="#features">
+              <span className="material-symbols-outlined text-primary/70">auto_awesome</span> Fonctionnalités
+            </a>
+            <a onClick={() => setIsMobileMenuOpen(false)} className="font-title-md text-lg text-on-surface-variant hover:text-primary transition-colors font-medium flex items-center gap-3" href="#how-it-works">
+              <span className="material-symbols-outlined text-primary/70">play_circle</span> Comment ça marche
+            </a>
+            <a onClick={() => setIsMobileMenuOpen(false)} className="font-title-md text-lg text-on-surface-variant hover:text-primary transition-colors font-medium flex items-center gap-3" href="#tarifs">
+              <span className="material-symbols-outlined text-primary/70">payments</span> Tarifs
+            </a>
+            <a onClick={() => setIsMobileMenuOpen(false)} className="font-title-md text-lg text-on-surface-variant hover:text-primary transition-colors font-medium flex items-center gap-3" href="#faq-accordion">
+              <span className="material-symbols-outlined text-primary/70">help</span> FAQ
+            </a>
+            <div className="w-full h-px bg-surface-container my-2"></div>
+            <button onClick={() => { setIsMobileMenuOpen(false); onLoginClick(false); }} className="font-title-md text-lg text-on-surface-variant hover:text-on-surface transition-colors font-bold text-left flex items-center gap-3">
+              <span className="material-symbols-outlined text-outline">login</span> Se connecter
+            </button>
+          </div>
+        )}
+      </header>
+
+      <main className="w-full pt-16 sm:pt-20 bg-surface">
+        <div className="flex flex-col w-full overflow-hidden">
+          {/* 1. HERO SECTION (MOBILE-FIRST) */}
+          <section className="relative w-full pt-4 sm:pt-10 md:pt-16 pb-10 sm:pb-20 px-4 md:px-8 bg-gradient-to-b from-surface-container-low/40 via-surface to-surface flex flex-col items-center text-center">
+            <div className="absolute top-6 left-1/2 -translate-x-1/2 w-[90%] max-w-[720px] h-[260px] sm:h-[340px] bg-primary/10 rounded-full blur-3xl pointer-events-none -z-10"></div>
+            <div className="absolute top-32 left-1/4 w-52 sm:w-80 h-52 sm:h-80 bg-secondary/5 rounded-full blur-2xl pointer-events-none -z-10"></div>
+
+            {/* Badge rassurant compact */}
+            <div className="inline-flex items-center gap-2 px-3 py-1 sm:px-4 sm:py-1.5 rounded-full bg-surface-container border border-outline-variant/30 text-primary font-title-md text-xs sm:text-sm shadow-xs mb-3 sm:mb-5 transition-all hover:bg-surface-container-high cursor-default">
+              <span className="inline-block w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+              <span className="font-semibold text-on-surface">✨ 14 jours d&apos;essai gratuit • Sans carte bancaire</span>
+            </div>
+
+            {/* Grand Titre (Impactant, moderne & mobile-first) */}
+            <h1 className="max-w-4xl font-display-hero text-3xl sm:text-5xl lg:text-6xl font-black tracking-tight text-on-surface mb-3 sm:mb-5 leading-[1.14]">
+              Gérez votre boutique en toute sérénité.
+              <span className="block mt-1 sm:mt-2 bg-gradient-to-r from-primary via-indigo-600 to-violet-600 bg-clip-text text-transparent">
+                Ventes, stocks &amp; bénéfices en direct.
+              </span>
+            </h1>
+
+            {/* Sous-titre clair, lisible & direct */}
+            <p className="max-w-2xl text-sm sm:text-lg md:text-xl text-on-surface-variant mb-5 sm:mb-8 leading-snug sm:leading-relaxed font-medium text-balance">
+              Fini les cahiers de comptes et les pertes d&apos;argent. Enregistrez vos ventes au comptoir, contrôlez vos stocks en temps réel et suivez vos bénéfices en FCFA — directement depuis votre smartphone ou PC.
+            </p>
+
+            {/* CTA Clair & Immanquable (immédiatement visible au-dessus de la ligne de flottaison sur mobile) */}
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-center gap-3 sm:gap-4 w-full sm:w-auto max-w-md sm:max-w-none">
+              <button
+                onClick={() => onLoginClick(true)}
+                className="group w-full sm:w-auto inline-flex items-center justify-center gap-3 px-7 sm:px-9 py-3.5 sm:py-4 rounded-xl sm:rounded-2xl bg-gradient-to-r from-indigo-600 via-indigo-700 to-violet-700 text-white font-title-md text-base sm:text-lg shadow-xl shadow-indigo-600/35 hover:shadow-2xl hover:shadow-indigo-600/50 hover:from-indigo-500 hover:to-violet-600 active:scale-[0.98] transition-all duration-300 font-extrabold relative overflow-hidden cursor-pointer"
+              >
+                <span className="relative z-10 flex items-center gap-2">
+                  <span>Démarrer mes 14 jours gratuits</span>
+                  <span className="material-symbols-outlined text-xl transition-transform duration-300 group-hover:translate-x-1">arrow_forward</span>
+                </span>
+                <span className="absolute inset-0 w-full h-full bg-gradient-to-r from-transparent via-white/20 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-1000 ease-out pointer-events-none" />
+              </button>
+
+              <a
+                href="#mockup"
+                className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-6 py-3 sm:py-4 rounded-xl sm:rounded-2xl bg-surface-container-lowest text-on-surface font-title-md text-sm sm:text-base border border-outline-variant/40 hover:bg-surface-container-low active:scale-[0.98] transition-all shadow-xs font-bold"
+              >
+                <span className="material-symbols-outlined text-primary text-xl" style={{ fontVariationSettings: "'FILL' 1" }}>play_circle</span>
+                <span>Voir la démonstration</span>
+              </a>
+            </div>
+
+            {/* Micro-réassurances sous le CTA */}
+            <div className="flex flex-wrap items-center justify-center gap-x-3 sm:gap-x-4 gap-y-1 mt-3 sm:mt-4 mb-6 sm:mb-14 text-[11px] sm:text-xs text-outline font-medium">
+              <span className="inline-flex items-center gap-1 text-emerald-700 font-semibold">
+                <span className="material-symbols-outlined text-[13px] sm:text-sm">check_circle</span> 14 jours d&apos;essai offert
+              </span>
+              <span className="text-outline/40">•</span>
+              <span>Sans carte bancaire</span>
+              <span className="text-outline/40">•</span>
+              <span>Prêt en 2 min</span>
+              <span className="text-outline/40">•</span>
+              <span className="font-bold text-primary">100% adapté Afrique (FCFA)</span>
+            </div>
 <div className="w-full max-w-6xl relative mx-auto text-left" id="mockup">
 <div className="absolute -inset-1 bg-gradient-to-r from-primary/20 via-tertiary/20 to-secondary/20 rounded-2xl blur-xl opacity-60"></div>
 <div className="relative bg-surface-container-lowest rounded-2xl shadow-2xl border border-outline-variant/40 overflow-hidden">
@@ -773,7 +823,24 @@ export default function LandingPage({ onLoginClick }: LandingPageProps) {
       </p>
 </div>
 </section>
-</div></main><footer className="w-full bg-inverse-surface text-inverse-on-surface"><div className="max-w-7xl mx-auto px-4 md:px-8 pt-10 pb-6"><div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-10 pb-10 border-b border-on-surface-variant/20"><div className="lg:col-span-2 flex flex-col gap-4"><div className="flex items-center gap-2"><span className="text-xl font-bold text-inverse-on-surface tracking-tight">MaBoutiquePro</span></div><p className="text-sm text-inverse-on-surface/80 max-w-sm font-medium">Le système d&apos;exploitation commercial nouvelle génération pensé pour les commerçants modernes d'Afrique. Gestion des stocks, caisse tactile et réconciliations instantanées.</p></div><div className="flex flex-col gap-2"><h4 className="font-bold text-base text-inverse-on-surface">Produit</h4><ul className="flex flex-col gap-1 text-sm text-inverse-on-surface/75 font-medium"><li><a className="hover:text-inverse-primary transition-colors" href="#">Fonctionnalités</a></li><li><a className="hover:text-inverse-primary transition-colors" href="#">Tableau de bord</a></li><li><a className="hover:text-inverse-primary transition-colors" href="#">Gestion des stocks</a></li></ul></div><div className="flex flex-col gap-2"><h4 className="font-bold text-base text-inverse-on-surface">Entreprise</h4><ul className="flex flex-col gap-1 text-sm text-inverse-on-surface/75 font-medium"><li><a className="hover:text-inverse-primary transition-colors" href="#">À propos</a></li><li><a className="hover:text-inverse-primary transition-colors" href="#">Contact</a></li></ul></div><div className="flex flex-col gap-2"><h4 className="font-bold text-base text-inverse-on-surface">Légal</h4><ul className="flex flex-col gap-1 text-sm text-inverse-on-surface/75 font-medium"><li><a className="hover:text-inverse-primary transition-colors" href="#">Conditions d&apos;utilisation</a></li><li><a className="hover:text-inverse-primary transition-colors" href="#">Politique de confidentialité</a></li></ul></div></div><div className="pt-6 flex flex-col md:flex-row items-center justify-between gap-4"><p className="text-xs text-inverse-on-surface/60 font-medium">© 2026 MaBoutiquePro. Tous droits réservés.</p><div className="flex items-center gap-1 text-tertiary-fixed font-bold text-sm"><span className="material-symbols-outlined text-[18px]">favorite</span><span>Fait avec fierté pour les entrepreneurs africains.</span></div></div></div></footer>
+</div></main><footer className="w-full bg-inverse-surface text-inverse-on-surface"><div className="max-w-7xl mx-auto px-4 md:px-8 pt-10 pb-20 sm:pb-6"><div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-10 pb-10 border-b border-on-surface-variant/20"><div className="lg:col-span-2 flex flex-col gap-4"><div className="flex items-center gap-2"><span className="text-xl font-bold text-inverse-on-surface tracking-tight">MaBoutiquePro</span></div><p className="text-sm text-inverse-on-surface/80 max-w-sm font-medium">Le système d&apos;exploitation commercial nouvelle génération pensé pour les commerçants modernes d'Afrique. Gestion des stocks, caisse tactile et réconciliations instantanées.</p></div><div className="flex flex-col gap-2"><h4 className="font-bold text-base text-inverse-on-surface">Produit</h4><ul className="flex flex-col gap-1 text-sm text-inverse-on-surface/75 font-medium"><li><a className="hover:text-inverse-primary transition-colors" href="#">Fonctionnalités</a></li><li><a className="hover:text-inverse-primary transition-colors" href="#">Tableau de bord</a></li><li><a className="hover:text-inverse-primary transition-colors" href="#">Gestion des stocks</a></li></ul></div><div className="flex flex-col gap-2"><h4 className="font-bold text-base text-inverse-on-surface">Entreprise</h4><ul className="flex flex-col gap-1 text-sm text-inverse-on-surface/75 font-medium"><li><a className="hover:text-inverse-primary transition-colors" href="#">À propos</a></li><li><a className="hover:text-inverse-primary transition-colors" href="#">Contact</a></li></ul></div><div className="flex flex-col gap-2"><h4 className="font-bold text-base text-inverse-on-surface">Légal</h4><ul className="flex flex-col gap-1 text-sm text-inverse-on-surface/75 font-medium"><li><a className="hover:text-inverse-primary transition-colors" href="#">Conditions d&apos;utilisation</a></li><li><a className="hover:text-inverse-primary transition-colors" href="#">Politique de confidentialité</a></li></ul></div></div><div className="pt-6 flex flex-col md:flex-row items-center justify-between gap-4"><p className="text-xs text-inverse-on-surface/60 font-medium">© 2026 MaBoutiquePro. Tous droits réservés.</p><div className="flex items-center gap-1 text-tertiary-fixed font-bold text-sm"><span className="material-symbols-outlined text-[18px]">favorite</span><span>Fait avec fierté pour les entrepreneurs africains.</span></div></div></div></footer>
+      {/* Barre CTA Mobile Sticky — garantit que le CTA n'est JAMAIS masqué sur smartphone */}
+      <div className="sm:hidden fixed bottom-0 left-0 right-0 z-40 px-4 py-3 bg-surface-container-lowest/95 backdrop-blur-md border-t border-surface-container shadow-2xl flex items-center justify-between gap-3">
+        <div className="min-w-0 flex-1">
+          <p className="text-xs font-bold text-on-surface truncate">Essai 14 jours gratuit</p>
+          <p className="text-[10px] text-emerald-700 font-semibold truncate flex items-center gap-1">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+            Sans carte • En 2 minutes
+          </p>
+        </div>
+        <button
+          onClick={() => onLoginClick(true)}
+          className="shrink-0 px-4 py-2.5 rounded-xl bg-gradient-to-r from-indigo-600 via-indigo-700 to-violet-700 text-white font-extrabold text-xs shadow-md shadow-indigo-600/30 flex items-center gap-1.5 active:scale-95 transition-all cursor-pointer"
+        >
+          <span>Démarrer</span>
+          <span className="material-symbols-outlined text-sm">arrow_forward</span>
+        </button>
+      </div>
     </div>
   );
 }
