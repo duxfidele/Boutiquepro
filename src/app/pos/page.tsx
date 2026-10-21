@@ -611,16 +611,28 @@ export default function POSPage() {
           <div className="flex flex-col border-t border-border/40 bg-secondary/5 shrink-0">
             {/* Options intermédiaires compactes et défilantes si petit écran */}
             <div className="max-h-[220px] overflow-y-auto px-4 py-2.5 space-y-2.5 no-scrollbar">
-              {/* Nom du client (optionnel) */}
-              <div className="relative">
-                <User className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
-                <input
-                  type="text"
-                  placeholder={payMethod === "credit" ? "Nom du client (Obligatoire pour crédit) *" : "Nom du client (optionnel)"}
-                  value={customerName}
-                  onChange={(e) => setCustomerName(e.target.value)}
-                  className="w-full rounded-lg border border-border/50 bg-background pl-8 pr-3 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-primary/20"
-                />
+              {/* Coordonnées Client : Nom & Téléphone (Accessibles pour toutes les ventes, comptant ou crédit) */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <div className="relative">
+                  <User className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+                  <input
+                    type="text"
+                    placeholder={payMethod === "credit" ? "Nom client (Requis crédit) *" : "Nom du client (optionnel)"}
+                    value={customerName}
+                    onChange={(e) => setCustomerName(e.target.value)}
+                    className="w-full rounded-lg border border-border/50 bg-background pl-8 pr-2.5 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-primary/20 font-medium"
+                  />
+                </div>
+                <div className="relative">
+                  <Phone className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+                  <input
+                    type="tel"
+                    placeholder={payMethod === "credit" ? "N° Tél / WhatsApp (Requis) *" : "N° Tél. client (optionnel)"}
+                    value={customerPhone}
+                    onChange={(e) => setCustomerPhone(e.target.value)}
+                    className="w-full rounded-lg border border-border/50 bg-background pl-8 pr-2.5 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-primary/20 font-medium"
+                  />
+                </div>
               </div>
 
               {/* Remise commerciale compacte */}
@@ -787,17 +799,7 @@ export default function POSPage() {
                     </span>
                   </div>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-1.5">
-                    <div className="relative">
-                      <Phone className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3 w-3 text-muted-foreground" />
-                      <input
-                        type="tel"
-                        placeholder="N° Téléphone / WhatsApp"
-                        value={customerPhone}
-                        onChange={(e) => setCustomerPhone(e.target.value)}
-                        className="w-full rounded-lg border border-border/50 bg-background pl-7 pr-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-purple-500/30 font-medium"
-                      />
-                    </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
                     <div>
                       <input
                         type="number"
@@ -960,6 +962,12 @@ export default function POSPage() {
                     <div className="flex justify-between items-center">
                       <span className="text-gray-700">Client</span>
                       <span className="font-semibold text-black">{lastSale.customerName}</span>
+                    </div>
+                  )}
+                  {lastSale.customerPhone && (
+                    <div className="flex justify-between items-center">
+                      <span className="text-gray-700">Tél. Client</span>
+                      <span className="font-semibold text-black">{lastSale.customerPhone}</span>
                     </div>
                   )}
                 </div>
@@ -1170,6 +1178,12 @@ export default function POSPage() {
                   <div>
                     <h3 className="text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-1">Client / Destinataire</h3>
                     <p className="text-sm font-extrabold text-gray-900">{lastSale.customerName || "Client au comptoir (Particulier)"}</p>
+                    {lastSale.customerPhone && (
+                      <p className="text-xs font-semibold text-gray-800 mt-0.5 flex items-center gap-1.5">
+                        <Phone className="w-3 h-3 text-primary shrink-0" />
+                        <span>Tél : {lastSale.customerPhone}</span>
+                      </p>
+                    )}
                     <p className="text-xs text-gray-500 mt-0.5">Vente directe au comptoir</p>
                   </div>
                   <div className="sm:text-right">

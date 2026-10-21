@@ -1442,7 +1442,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           cart: [],
           categories: demoCategories,
           products: [],
-          settings: { name: "MaBoutiquePro", logo: "/logo.png", currency: "FCFA", taxRate: 0, city: "Dakar", country: "Sénégal", email: "contact@maboutiquepro.app", phone: "+228 98 37 61 01" }
+          settings: { name: "MaBoutiquePro", logo: "/logo.png", currency: "FCFA", taxRate: 0, city: "Lomé", country: "Togo", email: "contact@maboutiquepro.app", phone: "+228 98 37 61 01" }
         };
 
         if (settings) {
@@ -1451,8 +1451,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             currency: settings.currency || "FCFA",
             taxRate: Number(settings.tax_rate) || 0,
             logo: settings.logo,
-            city: settings.city,
-            country: settings.country,
+            city: settings.city || "Lomé",
+            country: settings.country || "Togo",
             email: settings.email,
             phone: settings.phone
           };

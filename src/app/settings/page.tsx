@@ -1,7 +1,7 @@
 "use client";
 import SubscriptionModal from "@/components/subscription/SubscriptionModal";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useStore } from "@/context/StoreContext";
 import { Save, Sparkles, Image as ImageIcon, CreditCard, Store, DollarSign, Percent, MapPin, Mail, Phone } from "lucide-react";
 import { useRouter } from "next/navigation";
@@ -12,13 +12,24 @@ export default function SettingsPage() {
   const [currency, setCurrency] = useState(state.settings.currency);
   const [taxRate, setTaxRate] = useState(state.settings.taxRate.toString());
   const [logo, setLogo] = useState(state.settings.logo || "");
-  const [city, setCity] = useState(state.settings.city || "");
-  const [country, setCountry] = useState(state.settings.country || "");
+  const [city, setCity] = useState(state.settings.city && state.settings.city !== "Dakar" ? state.settings.city : "Lomé");
+  const [country, setCountry] = useState(state.settings.country && state.settings.country !== "Sénégal" ? state.settings.country : "Togo");
   const [email, setEmail] = useState(state.settings.email || "");
   const [phone, setPhone] = useState(state.settings.phone || "");
   const [saved, setSaved] = useState(false);
   const [showSubModal, setShowSubModal] = useState(false);
   const router = useRouter();
+  useEffect(() => {
+    setName(state.settings.name);
+    setCurrency(state.settings.currency);
+    setTaxRate(state.settings.taxRate.toString());
+    setLogo(state.settings.logo || "");
+    setCity(state.settings.city && state.settings.city !== "Dakar" ? state.settings.city : "Lomé");
+    setCountry(state.settings.country && state.settings.country !== "Sénégal" ? state.settings.country : "Togo");
+    setEmail(state.settings.email || "");
+    setPhone(state.settings.phone || "");
+  }, [state.settings]);
+
 
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -140,6 +151,7 @@ export default function SettingsPage() {
               </label>
               <input
                 type="text"
+                placeholder="Lomé"
                 value={city}
                 onChange={(e) => setCity(e.target.value)}
                 className="w-full bg-secondary/50 border border-border/50 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
@@ -153,6 +165,7 @@ export default function SettingsPage() {
               </label>
               <input
                 type="text"
+                placeholder="Togo"
                 value={country}
                 onChange={(e) => setCountry(e.target.value)}
                 className="w-full bg-secondary/50 border border-border/50 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
