@@ -3,6 +3,7 @@
 import React, { useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { Store, Lock, Mail, Loader2, AlertCircle, ArrowLeft, KeyRound, CheckCircle2 } from 'lucide-react';
+import TurnstileWidget from '@/components/auth/TurnstileWidget';
 
 export default function Login({ initialIsSignUp = false, onBack }: { initialIsSignUp?: boolean, onBack?: () => void }) {
   const [email, setEmail] = useState('');
@@ -14,16 +15,55 @@ export default function Login({ initialIsSignUp = false, onBack }: { initialIsSi
   const [message, setMessage] = useState<{type: 'error' | 'success', text: string} | null>(null);
   const [loading, setLoading] = useState(false);
 
+  // Sécurité Anti-Bot & Turnstile
+  const [turnstileToken, setTurnstileToken] = useState<string>('');
+  const [honeypot, setHoneypot] = useState<string>('');
+  const [formMountedAt] = useState<number>(() => Date.now());
+
   const handleAuth = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setMessage(null);
 
     if (isSignUp) {
+      // 1. Détection bot par Honeypot
+      if (honeypot.trim() !== '') {
+        setLoading(false);
+        setMessage({ type: 'error', text: "Erreur de validation du formulaire." });
+        return;
+      }
+
+      // 2. Détection bot par soumission instantanée (< 1.2s)
+      if (Date.now() - formMountedAt < 1200) {
+        setLoading(false);
+        setMessage({ type: 'error', text: "Veuillez patienter un instant avant de valider votre inscription." });
+        return;
+      }
+
       if (password !== confirmPassword) {
         setMessage({ type: 'error', text: "Les mots de passe ne correspondent pas." });
         setLoading(false);
         return;
+      }
+
+      // 3. Vérification Cloudflare Turnstile côté serveur
+      try {
+        const verifyRes = await fetch('/api/auth/verify-turnstile', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ token: turnstileToken }),
+        });
+        const verifyData = await verifyRes.json();
+        if (!verifyData.ok) {
+          setMessage({
+            type: 'error',
+            text: verifyData.error || "Échec de validation de sécurité anti-robot. Veuillez recharger la page."
+          });
+          setLoading(false);
+          return;
+        }
+      } catch (err) {
+        console.warn('Erreur vérification anti-bot:', err);
       }
       
       const { error, data } = await supabase.auth.signUp({
@@ -196,6 +236,18 @@ export default function Login({ initialIsSignUp = false, onBack }: { initialIsSi
           </form>
         ) : (
           <form onSubmit={handleAuth} className="space-y-5">
+            {/* Honeypot invisible pour les humains, piège pour les robots spammeurs */}
+            <input
+              type="text"
+              name="b_phone_fax"
+              value={honeypot}
+              onChange={(e) => setHoneypot(e.target.value)}
+              tabIndex={-1}
+              autoComplete="off"
+              style={{ display: 'none', position: 'absolute', left: '-9999px' }}
+              aria-hidden="true"
+            />
+
             <div className="space-y-2">
               <label className="text-sm font-medium text-foreground ml-1">
                 {isSignUp ? "Adresse Email" : "Adresse Email ou Identifiant"}
@@ -259,6 +311,16 @@ export default function Login({ initialIsSignUp = false, onBack }: { initialIsSi
                     autoComplete="new-password"
                   />
                 </div>
+              </div>
+            )}
+
+            {isSignUp && (
+              <div className="pt-1">
+                <TurnstileWidget
+                  onVerify={(token) => setTurnstileToken(token)}
+                  onExpire={() => setTurnstileToken('')}
+                  onError={() => setTurnstileToken('')}
+                />
               </div>
             )}
 

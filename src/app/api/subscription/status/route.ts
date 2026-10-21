@@ -1,8 +1,16 @@
 import { getOrderStatus } from '@/lib/server/moneriz-app';
+import { checkRateLimit, getClientIp, rateLimitExceededResponse } from '@/lib/server/rate-limit';
 
 export const runtime = 'nodejs';
 
 export async function GET(request: Request) {
+  // Rate limiting : max 60 requêtes de polling par minute par adresse IP
+  const clientIp = getClientIp(request);
+  const rate = checkRateLimit(`subscription-status:${clientIp}`, { maxRequests: 60, windowSeconds: 60 });
+  if (!rate.success) {
+    return rateLimitExceededResponse(rate.resetInSeconds);
+  }
+
   const { searchParams } = new URL(request.url);
   const orderId = searchParams.get('orderId');
 

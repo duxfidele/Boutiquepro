@@ -1,9 +1,20 @@
 import { createMonerizCheckout } from '@/lib/server/moneriz-checkout';
 import { prepareAuthorizedCheckout, saveCheckoutSession } from '@/lib/server/moneriz-app';
+import { checkRateLimit, getClientIp, rateLimitExceededResponse } from '@/lib/server/rate-limit';
 
 export const runtime = 'nodejs';
 
 export async function POST(request: Request) {
+  // Rate limiting : max 10 tentatives de checkout par minute par adresse IP
+  const clientIp = getClientIp(request);
+  const rate = checkRateLimit(`checkout:${clientIp}`, { maxRequests: 10, windowSeconds: 60 });
+  if (!rate.success) {
+    return rateLimitExceededResponse(
+      rate.resetInSeconds,
+      'Trop de tentatives d\'initiation de paiement. Veuillez patienter une minute avant de réessayer.'
+    );
+  }
+
   let body: unknown;
   try {
     body = await request.json();

@@ -1,9 +1,20 @@
 import { createSubscriptionOrder, PlanKey } from '@/lib/server/moneriz-app';
 import { supabaseServer } from '@/lib/server/supabase-server';
+import { checkRateLimit, getClientIp, rateLimitExceededResponse } from '@/lib/server/rate-limit';
 
 export const runtime = 'nodejs';
 
 export async function POST(request: Request) {
+  // Rate limiting : max 10 commandes par minute par adresse IP
+  const clientIp = getClientIp(request);
+  const rate = checkRateLimit(`subscription-order:${clientIp}`, { maxRequests: 10, windowSeconds: 60 });
+  if (!rate.success) {
+    return rateLimitExceededResponse(
+      rate.resetInSeconds,
+      'Trop de requêtes de commande. Veuillez patienter une minute avant de réessayer.'
+    );
+  }
+
   try {
     const body = await request.json();
     const { planKey, storeId, customerEmail } = body;
