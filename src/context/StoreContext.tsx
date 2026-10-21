@@ -1,5 +1,5 @@
 "use client";
-import { saveOfflineSale, getOfflineSales, removeOfflineSale, getOfflineSalesCount } from "@/lib/offlineQueue";
+import { saveOfflineSale, getOfflineSales, removeOfflineSale, getOfflineSalesCount, clearOfflineQueue } from "@/lib/offlineQueue";
 
 import React, { createContext, useContext, useReducer, useEffect, useState, useMemo, ReactNode } from "react";
 import { useAuth } from '@/context/AuthContext';
@@ -95,6 +95,7 @@ export interface StoreSettings {
   country?: string;
   email?: string;
   phone?: string;
+  managerName?: string;
 }
 
 export interface Category {
@@ -745,6 +746,7 @@ interface StoreContextType {
   pendingSyncCount: number;
   isSyncing: boolean;
   syncOfflineSales: () => Promise<{ success: number; failed: number }>;
+  clearOfflineSalesQueue: () => Promise<void>;
   isRealtimeActive: boolean;
   unpaidDebts: Sale[];
   totalDebtsAmount: number;
@@ -861,7 +863,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       paymentMethod: method,
       paidAt: now,
       note: note || undefined,
-      cashierName: cashierName || user?.email?.split("@")[0] || "Caissier"
+      cashierName: cashierName || user?.user_metadata?.full_name || state.settings?.managerName || (role === "admin" ? "Gérant" : "Caissier")
     };
 
     dispatchBase({
@@ -1107,14 +1109,15 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         const s = item.sale;
         const targetStoreId = activeStore.id || item.storeId;
         try {
-          // ÉTAPE ANTI-DOUBLON 1 : Vérifier si la vente existe DÉJÀ dans Supabase
+          // ÉTAPE ANTI-DOUBLON 1 : Vérifier si la vente existe DÉJÀ dans Supabase ou dans le catalogue local
+          const existsInLocalState = (state.sales || []).some((ls) => ls.id === s.id);
           const { data: existingSale } = await supabase
             .from("sales")
             .select("id")
             .eq("id", s.id)
             .maybeSingle();
 
-          if (existingSale) {
+          if (existingSale || existsInLocalState) {
             // Vente déjà enregistrée : retirer directement de la file d'attente locale sans réinsérer
             await removeOfflineSale(s.id);
             success++;
@@ -1217,6 +1220,19 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
     return { success, failed };
   };
+
+  const clearOfflineSalesQueue = async (): Promise<void> => {
+    try {
+      if (activeStore?.id) {
+        await clearOfflineQueue(activeStore.id);
+      }
+      await clearOfflineQueue();
+      setPendingSyncCount(0);
+    } catch (e) {
+      console.warn("Erreur purge queue offline:", e);
+    }
+  };
+
 
   // Écoute de l'état réseau (en ligne / hors-ligne) et synchronisation automatique
   useEffect(() => {
@@ -1539,7 +1555,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           city: "Lomé",
           country: "Togo",
           email: "contact@maboutiquepro.app",
-          phone: "+228 98 37 61 01"
+          phone: "+228 98 37 61 01",
+          managerName: "Fr Fidèle"
         };
 
         const payload: any = {
@@ -1563,7 +1580,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             city: settings.city || cachedSettings?.city || defaultSettings.city,
             country: settings.country || cachedSettings?.country || defaultSettings.country,
             email: settings.email || cachedSettings?.email || defaultSettings.email,
-            phone: settings.phone || cachedSettings?.phone || defaultSettings.phone
+            phone: settings.phone || cachedSettings?.phone || defaultSettings.phone,
+            managerName: (settings as any).manager_name || cachedSettings?.managerName || defaultSettings.managerName
           };
         } else if (cachedSettings) {
           payload.settings = {
@@ -1931,6 +1949,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         if (s.country !== undefined) updates.country = s.country;
         if (s.email !== undefined) updates.email = s.email;
         if (s.phone !== undefined) updates.phone = s.phone;
+        if (s.managerName !== undefined) updates.manager_name = s.managerName;
         
         // 1. Sauvegarde locale immédiate pour garantir zéro perte
         if (typeof window !== "undefined" && activeStore?.id) {
@@ -2360,7 +2379,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       id: sessionId,
       storeId: activeStore?.id || "",
       userId: user?.id || "",
-      cashierName: cashierName || user?.user_metadata?.full_name || user?.email?.split('@')[0] || "Caissier",
+      cashierName: (cashierName && !cashierName.includes("@") && cashierName !== user?.email?.split("@")[0]) ? cashierName : (user?.user_metadata?.full_name || state.settings?.managerName || (role === "admin" ? "Gérant" : "Caissier")),
       openingAmount: openingAmount,
       expectedAmount: openingAmount,
       totalCashSales: 0,
@@ -2506,6 +2525,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       pendingSyncCount,
       isSyncing,
       syncOfflineSales,
+      clearOfflineSalesQueue,
       isRealtimeActive,
       unpaidDebts,
       totalDebtsAmount,

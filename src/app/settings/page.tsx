@@ -3,6 +3,8 @@ import SubscriptionModal from "@/components/subscription/SubscriptionModal";
 
 import React, { useState, useEffect } from "react";
 import { useStore } from "@/context/StoreContext";
+import { useAuth } from "@/context/AuthContext";
+import { supabase } from "@/lib/supabase";
 import { Save, Sparkles, Image as ImageIcon, CreditCard, Store, DollarSign, Percent, MapPin, Mail, Phone, Loader2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 
@@ -15,7 +17,9 @@ export default function SettingsPage() {
   const [city, setCity] = useState(state.settings.city && state.settings.city !== "Dakar" ? state.settings.city : "Lomé");
   const [country, setCountry] = useState(state.settings.country && state.settings.country !== "Sénégal" ? state.settings.country : "Togo");
   const [email, setEmail] = useState(state.settings.email || "");
+  const { user } = useAuth();
   const [phone, setPhone] = useState(state.settings.phone || "");
+  const [managerName, setManagerName] = useState(state.settings.managerName || user?.user_metadata?.full_name || "Fr Fidèle");
   const [saved, setSaved] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [showSubModal, setShowSubModal] = useState(false);
@@ -29,7 +33,8 @@ export default function SettingsPage() {
     setCountry(state.settings.country && state.settings.country !== "Sénégal" ? state.settings.country : "Togo");
     setEmail(state.settings.email || "");
     setPhone(state.settings.phone || "");
-  }, [state.settings]);
+    setManagerName(state.settings.managerName || user?.user_metadata?.full_name || "Fr Fidèle");
+  }, [state.settings, user]);
 
   // Compression automatique du logo pour éviter de saturer le quota du navigateur ou de Supabase
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -87,6 +92,13 @@ export default function SettingsPage() {
           phone
         }
       });
+      if (managerName.trim()) {
+        try {
+          await supabase.auth.updateUser({
+            data: { full_name: managerName.trim() }
+          });
+        } catch (eAuth) {}
+      }
       setSaved(true);
     } catch (err) {
       console.error("Erreur enregistrement:", err);
@@ -121,6 +133,24 @@ export default function SettingsPage() {
             onChange={(e) => setName(e.target.value)}
             className="w-full bg-secondary/50 border border-border/50 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
           />
+        </div>
+
+        {/* Nom du gérant / caissier responsable */}
+        <div className="space-y-2">
+          <label className="text-sm font-semibold flex items-center gap-2">
+            <User className="w-4 h-4 text-primary" />
+            Nom du gérant / Responsable de caisse
+          </label>
+          <input
+            type="text"
+            placeholder="Ex: Fr Fidèle"
+            value={managerName}
+            onChange={(e) => setManagerName(e.target.value)}
+            className="w-full bg-secondary/50 border border-border/50 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 font-medium"
+          />
+          <p className="text-xs text-muted-foreground">
+            Ce nom s'affichera sur vos reçus de caisse, factures officielles et sur la caisse active à la place de l'adresse email.
+          </p>
         </div>
 
         {/* Logo */}

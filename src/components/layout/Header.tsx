@@ -268,8 +268,9 @@ export default function Header({ onMenuClick }: { onMenuClick?: () => void }) {
           {showProfile && (
             <div className="absolute right-0 top-full mt-2 w-56 rounded-xl border border-border/50 bg-popover shadow-soft-lg animate-scale-in overflow-hidden">
               <div className="p-3 border-b border-border/50 bg-secondary/30">
-                <p className="text-sm font-medium text-foreground truncate">{user?.email}</p>
-                <p className="text-[10px] text-muted-foreground mt-0.5">{role === 'admin' ? 'Administrateur' : 'Caissier'}</p>
+                <p className="text-sm font-bold text-foreground truncate">{user?.user_metadata?.full_name || state.settings?.managerName || (role === 'admin' ? 'Gérant' : 'Caissier')}</p>
+                <p className="text-[11px] text-muted-foreground truncate">{user?.email}</p>
+                <p className="text-[10px] text-primary font-semibold mt-0.5">{role === 'admin' ? 'Administrateur' : 'Caissier'}</p>
               </div>
               
               <div className="p-1">

@@ -82,7 +82,7 @@ export default function TeamPage() {
           member_id: m.id,
           user_id: m.user_id,
           email: prof?.email || 'Email non renseigné',
-          full_name: prof?.full_name || (prof?.email ? prof.email.split('@')[0] : 'Membre'),
+          full_name: prof?.full_name || (m.role === 'admin' ? 'Gérant' : 'Caissier'),
           role: m.role,
           created_at: m.created_at
         };
@@ -118,7 +118,7 @@ export default function TeamPage() {
 
       const { data, error } = await supabase.rpc('admin_create_cashier', {
         p_store_id: selectedStoreId,
-        p_name: cashierName.trim() || cleanInput.split('@')[0],
+        p_name: cashierName.trim() || 'Caissier',
         p_email: targetEmail,
         p_password: cashierPassword
       });

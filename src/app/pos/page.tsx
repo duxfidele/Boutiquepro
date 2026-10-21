@@ -61,10 +61,19 @@ export default function POSPage() {
     pendingSyncCount,
     isSyncing,
     syncOfflineSales,
+    clearOfflineSalesQueue,
     isRealtimeActive
   } = useStore();
   const { user, role, subscription, canOfferCredit, canPrintReceipts } = useAuth();
   const [subModalOpen, setSubModalOpen] = useState(false);
+  // Résolution propre de l'identité du caissier/gérant (Bannit l'affichage d'un email comme 'boutiquepro89')
+  const getCashierDisplayName = (rawName?: string) => {
+    if (rawName && !rawName.includes("@") && rawName !== user?.email?.split("@")[0] && rawName !== user?.email) {
+      return rawName;
+    }
+    return user?.user_metadata?.full_name || state.settings?.managerName || (role === "admin" ? "Gérant" : "Caissier");
+  };
+
 
   // Cash Session States
   const [showOpenModal, setShowOpenModal] = useState(false);
@@ -161,7 +170,7 @@ export default function POSPage() {
       paymentMethod: "cash",
       paidAt: now,
       note: "Acompte initial à la caisse",
-      cashierName: user?.email?.split("@")[0] || "Caissier",
+      cashierName: getCashierDisplayName(activeCashSession?.cashierName),
     }] : [];
 
     const sale: Sale = {
@@ -249,7 +258,7 @@ export default function POSPage() {
 
   const handleStartSession = async () => {
     const val = Number(openingAmountInput) || 0;
-    const name = user?.user_metadata?.full_name || user?.email?.split('@')[0] || "Caissier";
+    const name = getCashierDisplayName(user?.user_metadata?.full_name || state.settings?.managerName);
     await openCashSession(val, name);
     setShowOpenModal(false);
   };
@@ -326,7 +335,7 @@ export default function POSPage() {
                 <span className="relative inline-flex rounded-full h-3 w-3 bg-emerald-500"></span>
               </span>
               <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400">
-                Caisse Active : {activeCashSession.cashierName || "En cours"}
+                Caisse Active : {getCashierDisplayName(activeCashSession.cashierName)}
               </span>
               <span className="text-xs text-muted-foreground">•</span>
               <span className="text-xs text-muted-foreground">
@@ -362,25 +371,47 @@ export default function POSPage() {
               )}
             </div>
           ) : pendingSyncCount > 0 ? (
-            <button
-              type="button"
-              onClick={async () => {
-                const res = await syncOfflineSales();
-                if (res.success > 0) {
-                  alert(`✅ ${res.success} vente(s) synchronisée(s) avec succès !`);
-                } else if (res.failed > 0) {
-                  alert("⚠️ Échec de la synchronisation. Vérifiez que votre appareil est bien connecté à Internet.");
-                } else {
-                  alert("ℹ️ Vos données sont déjà à jour avec le serveur.");
-                }
-              }}
-              disabled={isSyncing}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/30 text-blue-600 dark:text-blue-400 text-xs font-bold transition-all shadow-xs active:scale-95 cursor-pointer"
-              title="Cliquer pour synchroniser les ventes enregistrées hors-ligne"
-            >
-              <RefreshCw className={`h-3.5 w-3.5 ${isSyncing ? "animate-spin" : ""}`} />
-              <span>{isSyncing ? "Synchronisation en cours..." : `${pendingSyncCount} en attente • Synchroniser`}</span>
-            </button>
+            <div className="flex items-center gap-1.5 animate-fade-in">
+              <button
+                type="button"
+                onClick={async () => {
+                  const res = await syncOfflineSales();
+                  if (res.success > 0) {
+                    alert(`✅ ${res.success} vente(s) synchronisée(s) avec succès !`);
+                  } else if (res.failed > 0) {
+                    const confirmClear = window.confirm(
+                      `⚠️ La vente n'a pas pu être synchronisée (erreur réseau ou déjà présente).\n\nVoulez-vous vérifier et purger cette vente de la file d'attente locale pour débloquer le compteur ?`
+                    );
+                    if (confirmClear) {
+                      await clearOfflineSalesQueue();
+                      alert("🧹 File d'attente réinitialisée avec succès !");
+                    }
+                  } else {
+                    await clearOfflineSalesQueue();
+                    alert("✅ File d'attente actualisée et nettoyée !");
+                  }
+                }}
+                disabled={isSyncing}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/30 text-blue-600 dark:text-blue-400 text-xs font-bold transition-all shadow-xs active:scale-95 cursor-pointer"
+                title="Cliquer pour synchroniser les ventes enregistrées hors-ligne"
+              >
+                <RefreshCw className={`h-3.5 w-3.5 ${isSyncing ? "animate-spin" : ""}`} />
+                <span>{isSyncing ? "Synchronisation..." : `${pendingSyncCount} en attente • Synchroniser`}</span>
+              </button>
+              <button
+                type="button"
+                onClick={async () => {
+                  if (window.confirm("Voulez-vous forcer le nettoyage de la file d'attente hors-ligne ?")) {
+                    await clearOfflineSalesQueue();
+                    alert("🧹 File d'attente vidée avec succès !");
+                  }
+                }}
+                className="p-1.5 rounded-xl border border-blue-500/30 text-blue-600 dark:text-blue-400 hover:bg-blue-500/15 text-xs transition-colors cursor-pointer"
+                title="Purger la file d'attente si elle reste bloquée"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+              </button>
+            </div>
           ) : (
             <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 text-[11px] font-semibold border border-emerald-500/20" title="Synchronisation temps réel WebSocket active pour votre boutique">
               <span className="relative flex h-2 w-2">
@@ -964,7 +995,7 @@ export default function POSPage() {
                   <div className="flex justify-between items-center">
                     <span className="text-gray-700">Caissier</span>
                     <span className="font-medium text-black">
-                      {activeCashSession?.cashierName || user?.user_metadata?.full_name || user?.email?.split('@')[0] || "Caissier"}
+                      {getCashierDisplayName(activeCashSession?.cashierName)}
                     </span>
                   </div>
                   {lastSale.customerName && (
@@ -1201,7 +1232,7 @@ export default function POSPage() {
                       Mode : <span className="text-primary font-extrabold">{paymentMethods.find(p => p.id === lastSale.paymentMethod)?.label || "Espèces"}</span>
                     </p>
                     <p className="text-xs text-gray-500 mt-0.5">
-                      Caissier : {activeCashSession?.cashierName || user?.user_metadata?.full_name || "Agent de caisse"}
+                      Caissier : {getCashierDisplayName(activeCashSession?.cashierName)}
                     </p>
                   </div>
                 </div>
