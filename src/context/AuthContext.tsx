@@ -388,6 +388,26 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         localStorage.setItem("activeStoreId", activeStore.id);
         localStorage.setItem("activeStoreObj", JSON.stringify(activeStore));
       } catch {}
+
+      // Mise à jour automatique du décompte en temps réel (au réveil du téléphone ou toutes les 30 min)
+      const interval = setInterval(() => {
+        setSubscription(computeSubscription(activeStore));
+      }, 30 * 60 * 1000);
+
+      const handleResume = () => {
+        if (typeof document !== "undefined" && document.visibilityState === "visible") {
+          setSubscription(computeSubscription(activeStore));
+        }
+      };
+
+      window.addEventListener("visibilitychange", handleResume);
+      window.addEventListener("focus", handleResume);
+
+      return () => {
+        clearInterval(interval);
+        window.removeEventListener("visibilitychange", handleResume);
+        window.removeEventListener("focus", handleResume);
+      };
     }
   }, [activeStore]);
 
