@@ -141,7 +141,7 @@ export default function Sidebar({ isOpen, onClose }: { isOpen?: boolean; onClose
           </div>
           {(!collapsed || isOpen) && (
             <div className="animate-fade-in overflow-hidden">
-              <h1 className="text-base font-bold text-gradient truncate">{state.settings.name || activeStore?.name || "MaBoutiquePro"}</h1>
+              <h1 className="text-base font-bold text-gradient truncate">{activeStore?.name || state.settings.name || "MaBoutiquePro"}</h1>
               <p className="text-[10px] text-muted-foreground">Gestion Commerciale</p>
             </div>
           )}
@@ -240,6 +240,10 @@ export default function Sidebar({ isOpen, onClose }: { isOpen?: boolean; onClose
                       }
                       const s = stores.find((x) => x.id === e.target.value);
                       if (s) {
+                        try {
+                          localStorage.setItem("activeStoreId", s.id);
+                          localStorage.setItem("activeStoreObj", JSON.stringify(s));
+                        } catch {}
                         setActiveStore(s);
                         window.location.reload();
                       }

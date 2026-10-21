@@ -155,7 +155,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     return null;
   });
 
-  const [activeStore, setActiveStore] = useState<any | null>(() => {
+  const [activeStore, setActiveStoreState] = useState<any | null>(() => {
     if (typeof window === "undefined") return null;
     try {
       const raw = localStorage.getItem("activeStoreObj");
@@ -163,6 +163,16 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     } catch {}
     return null;
   });
+
+  const handleSetActiveStore = (store: any) => {
+    setActiveStoreState(store);
+    if (store && typeof window !== "undefined") {
+      try {
+        localStorage.setItem("activeStoreId", store.id);
+        localStorage.setItem("activeStoreObj", JSON.stringify(store));
+      } catch {}
+    }
+  };
 
   const [role, setRole] = useState<"admin" | "cashier" | null>(() => {
     if (typeof window === "undefined") return null;
@@ -237,7 +247,8 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
       // A. Sécurité dédiée compte propriétaire payant saasfidele@gmail.com (uniquement si non encore en base)
       const currentUserEmail = user?.email?.toLowerCase();
-      if (currentUserEmail === "saasfidele@gmail.com" && !adminSub) {
+      const isOwnerEmail = currentUserEmail === "saasfidele@gmail.com" || currentUserEmail === "profidele91@gmail.com";
+      if (isOwnerEmail && !adminSub) {
         adminSub = {
           plan_tier: "BUSINESS",
           status: "active",
@@ -311,7 +322,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
           const singleStore = [cashierStore];
           setStores(singleStore);
           setRole("cashier");
-          setActiveStore(singleStore[0]);
+          setActiveStoreState(singleStore[0]);
           setSubscription(computeSubscription(singleStore[0], adminSub));
           try {
             localStorage.setItem("cachedStores", JSON.stringify(singleStore));
@@ -327,22 +338,18 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
           localStorage.setItem("cachedStores", JSON.stringify(valid));
         } catch {}
 
-        const initialSub = computeSubscription(valid[0], adminSub);
-        const hasMultiStore = initialSub?.limits?.hasMultiStore ?? false;
-
-        const savedStoreId = localStorage.getItem("activeStoreId");
+        const savedStoreId = typeof window !== "undefined" ? localStorage.getItem("activeStoreId") : null;
         let selected = valid.find((s: any) => s.id === savedStoreId);
 
-        // Si la formule actuelle ne permet pas le multi-boutique (ex: Pro ou Starter),
-        // on impose STRICTEMENT la boutique principale (valid[0])
-        if (!hasMultiStore || !selected) {
+        if (!selected) {
           selected = valid[0];
-          try {
-            localStorage.setItem("activeStoreId", valid[0].id);
-          } catch {}
         }
+        try {
+          localStorage.setItem("activeStoreId", selected.id);
+          localStorage.setItem("activeStoreObj", JSON.stringify(selected));
+        } catch {}
 
-        setActiveStore(selected);
+        setActiveStoreState(selected);
         setSubscription(computeSubscription(selected, adminSub));
       } else {
         if (!activeStore) {
@@ -355,7 +362,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
             subscription_ends_at: adminSub?.current_period_ends_at || new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString(),
           };
           setStores([fallback]);
-          setActiveStore(fallback);
+          setActiveStoreState(fallback);
           setSubscription(computeSubscription(fallback, adminSub));
           setRole("admin");
         }
@@ -372,7 +379,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
           subscription_ends_at: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString(),
         };
         setStores([fallback]);
-        setActiveStore(fallback);
+        setActiveStoreState(fallback);
         setSubscription(computeSubscription(fallback));
         setRole("admin");
       }
@@ -422,7 +429,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
           try {
             const parsedStore = JSON.parse(cachedStore);
             if (parsedStore?.id) {
-              setActiveStore(parsedStore);
+              setActiveStoreState(parsedStore);
               setRole(parsedStore.role || "admin");
               setSubscription(computeSubscription(parsedStore));
             }
@@ -483,7 +490,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       if (event === "SIGNED_OUT") {
         setUser(null);
         setRole(null);
-        setActiveStore(null);
+        setActiveStoreState(null);
         setSubscription(null);
         setStores([]);
         setLoading(false);
@@ -525,7 +532,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         role,
         stores,
         activeStore,
-        setActiveStore,
+        setActiveStore: handleSetActiveStore,
         subscription,
         refreshSubscription,
         loading,

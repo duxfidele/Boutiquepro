@@ -254,8 +254,8 @@ const getInitialStoreState = (defaultState: StoreState): StoreState => {
   if (typeof window !== "undefined") {
     try {
       const activeId = localStorage.getItem("activeStoreId");
-      const key = activeId ? `boutiquepro-state-${activeId}` : "boutiquepro-state";
-      const saved = localStorage.getItem(key) || localStorage.getItem("boutiquepro-state");
+      const key = activeId ? `boutiquepro-state-${activeId}` : null;
+      const saved = key ? localStorage.getItem(key) : null;
       if (saved) {
         const parsed = JSON.parse(saved);
         if (parsed && Array.isArray(parsed.products) && parsed.products.length > 0) {
@@ -1482,12 +1482,29 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     // Immédiatement restaurer le cache spécifique à cette boutique si disponible
     if (typeof window !== "undefined" && activeStore.id) {
       try {
-        const storeCache = localStorage.getItem(`boutiquepro-state-${activeStore.id}`) || localStorage.getItem("boutiquepro-state");
+        // Nettoyage de sécurité du vieux cache global historique
+        if (localStorage.getItem("boutiquepro-state")) {
+          localStorage.removeItem("boutiquepro-state");
+        }
+        const storeCache = localStorage.getItem(`boutiquepro-state-${activeStore.id}`);
         if (storeCache) {
           const parsed = JSON.parse(storeCache);
-          if (parsed && Array.isArray(parsed.products) && parsed.products.length > 0) {
+          if (parsed && Array.isArray(parsed.products)) {
             dispatchBase({ type: "LOAD_STATE", payload: parsed });
           }
+        } else {
+          // Si cette boutique n'a pas encore de cache local, initialiser un espace propre
+          dispatchBase({
+            type: "LOAD_STATE",
+            payload: {
+              ...initialState,
+              categories: demoCategories,
+              settings: {
+                ...initialState.settings,
+                name: activeStore.name || "MaBoutiquePro",
+              },
+            },
+          });
         }
       } catch (e) {}
     }
@@ -1519,7 +1536,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           supabase.from('sales').select('*, items:sale_items(*)').eq('store_id', activeStore.id).order('created_at', { ascending: false }),
           supabase.from('customers').select('*').eq('store_id', activeStore.id),
           supabase.from('orders').select('*, items:order_items(*)').eq('store_id', activeStore.id),
-          supabase.from('inventory_sessions').select('*, items:inventory_items(*)'),
+          supabase.from('inventory_sessions').select('*, items:inventory_items(*)').eq('store_id', activeStore.id),
           supabase.from('expenses').select('*').eq('store_id', activeStore.id).order('date', { ascending: false }),
           supabase.from('cash_sessions').select('*').eq('store_id', activeStore.id).order('opened_at', { ascending: false }),
           // Charger product_costs UNIQUEMENT pour l'admin (ne jamais interroger pour le caissier)
@@ -1573,7 +1590,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
         if (settings) {
           payload.settings = {
-            name: settings.name || activeStore?.name || cachedSettings?.name || defaultSettings.name,
+            name: activeStore?.name || settings.name || cachedSettings?.name || defaultSettings.name,
             currency: settings.currency || cachedSettings?.currency || defaultSettings.currency,
             taxRate: Number(settings.tax_rate) !== undefined && settings.tax_rate !== null ? Number(settings.tax_rate) : (cachedSettings?.taxRate || 0),
             logo: settings.logo || cachedSettings?.logo || defaultSettings.logo,
@@ -1803,8 +1820,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           payload.activeCashSession = null;
         }
 
-        // Restore Cart from localStorage (cart shouldn't be in DB)
-        const saved = typeof window !== "undefined" ? localStorage.getItem("boutiquepro-state") : null;
+        // Restore Cart from localStorage per-store (cart shouldn't be in DB)
+        const saved = typeof window !== "undefined" && activeStore?.id ? localStorage.getItem(`boutiquepro-state-${activeStore.id}`) : null;
         if (saved) {
           try {
             const localData = JSON.parse(saved);
@@ -1820,8 +1837,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         if (typeof window !== "undefined" && activeStore?.id) {
           try {
             localStorage.setItem(`boutiquepro-state-${activeStore.id}`, JSON.stringify(payload));
-            localStorage.setItem("boutiquepro-state", JSON.stringify(payload));
-          } catch (e) {}
+                      } catch (e) {}
         }
       } catch (err) {
         console.warn("Échec du rafraîchissement depuis Supabase (hors-ligne ou réseau): conservation du cache local.", err);
@@ -1837,8 +1853,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     if (isInitialized && activeStore?.id) {
       try {
         localStorage.setItem(`boutiquepro-state-${activeStore.id}`, JSON.stringify(state));
-        localStorage.setItem("boutiquepro-state", JSON.stringify(state));
-      } catch (e) {}
+              } catch (e) {}
     }
   }, [state, isInitialized, activeStore?.id]);
 
@@ -1959,8 +1974,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             const parsed = existingRaw ? JSON.parse(existingRaw) : {};
             parsed.settings = { ...(parsed.settings || state.settings), ...s };
             localStorage.setItem(cacheKey, JSON.stringify(parsed));
-            localStorage.setItem("boutiquepro-state", JSON.stringify(parsed));
-          } catch (storageErr) {
+                      } catch (storageErr) {
             console.warn("Avertissement sauvegarde locale settings:", storageErr);
           }
         }
