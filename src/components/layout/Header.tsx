@@ -17,7 +17,7 @@ import {
   LogOut,
   Settings as SettingsIcon,
   X,
-  Download, Menu, Users,
+  Download, Menu, Users, RefreshCw,
 } from "lucide-react";
 
 export default function Header({ onMenuClick }: { onMenuClick?: () => void }) {
@@ -39,7 +39,7 @@ export default function Header({ onMenuClick }: { onMenuClick?: () => void }) {
   const { user, role, signOut, subscription, tier } = useAuth();
   const [showSubModal, setShowSubModal] = useState(false);
   const [showProfile, setShowProfile] = useState(false);
-  const { lowStockProducts, state, formatPrice, todayRevenue, todayOrders, dispatch, isOnline, pendingSyncCount } = useStore();
+  const { lowStockProducts, state, formatPrice, todayRevenue, todayOrders, dispatch, isOnline, pendingSyncCount, syncOfflineSales, isSyncing } = useStore();
   const pathname = usePathname();
   const [showNotif, setShowNotif] = useState(false);
   const [showSearch, setShowSearch] = useState(false);
@@ -73,14 +73,34 @@ export default function Header({ onMenuClick }: { onMenuClick?: () => void }) {
         )}
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
           {isOnline ? (
-            <span className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-500/10 px-2.5 py-1 text-xs font-semibold text-emerald-600 border border-emerald-500/20">
-              <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
-              En ligne
-            </span>
+            pendingSyncCount > 0 ? (
+              <button
+                type="button"
+                onClick={async () => {
+                  const res = await syncOfflineSales();
+                  if (res.success > 0) {
+                    alert(`✅ ${res.success} vente(s) synchronisée(s) avec succès !`);
+                  } else if (res.failed > 0) {
+                    alert("⚠️ Échec de la synchronisation. Vérifiez votre connexion Internet.");
+                  }
+                }}
+                disabled={isSyncing}
+                className="inline-flex items-center gap-1.5 rounded-lg bg-blue-500/15 hover:bg-blue-500/25 px-2.5 py-1 text-xs font-bold text-blue-600 dark:text-blue-400 border border-blue-500/30 transition-all cursor-pointer active:scale-95 shadow-xs"
+                title="Cliquer pour synchroniser les ventes enregistrées hors-ligne"
+              >
+                <RefreshCw className={`h-3 w-3 ${isSyncing ? "animate-spin" : ""}`} />
+                <span>{isSyncing ? "Sync..." : `${pendingSyncCount} en attente • Sync`}</span>
+              </button>
+            ) : (
+              <span className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-500/10 px-2.5 py-1 text-xs font-semibold text-emerald-600 border border-emerald-500/20">
+                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                En ligne
+              </span>
+            )
           ) : (
             <span className="inline-flex items-center gap-1.5 rounded-lg bg-amber-500/15 px-2.5 py-1 text-xs font-bold text-amber-600 border border-amber-500/30 animate-pulse">
               <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
-              Hors-ligne {pendingSyncCount > 0 ? `(${pendingSyncCount} en attente)` : ""}
+              Hors-ligne {pendingSyncCount > 0 ? `(${pendingSyncCount} attente)` : ""}
             </span>
           )}
 

@@ -3,7 +3,7 @@ import SubscriptionModal from "@/components/subscription/SubscriptionModal";
 
 import React, { useState, useEffect } from "react";
 import { useStore } from "@/context/StoreContext";
-import { Save, Sparkles, Image as ImageIcon, CreditCard, Store, DollarSign, Percent, MapPin, Mail, Phone } from "lucide-react";
+import { Save, Sparkles, Image as ImageIcon, CreditCard, Store, DollarSign, Percent, MapPin, Mail, Phone, Loader2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 
 export default function SettingsPage() {
@@ -17,6 +17,7 @@ export default function SettingsPage() {
   const [email, setEmail] = useState(state.settings.email || "");
   const [phone, setPhone] = useState(state.settings.phone || "");
   const [saved, setSaved] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
   const [showSubModal, setShowSubModal] = useState(false);
   const router = useRouter();
   useEffect(() => {
@@ -30,37 +31,72 @@ export default function SettingsPage() {
     setPhone(state.settings.phone || "");
   }, [state.settings]);
 
-
+  // Compression automatique du logo pour éviter de saturer le quota du navigateur ou de Supabase
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
       const reader = new FileReader();
-      reader.onloadend = () => {
-        setLogo(reader.result as string);
+      reader.onload = (event) => {
+        const img = new Image();
+        img.onload = () => {
+          const canvas = document.createElement("canvas");
+          const MAX_SIZE = 320;
+          let width = img.width;
+          let height = img.height;
+          if (width > height) {
+            if (width > MAX_SIZE) {
+              height = Math.round((height * MAX_SIZE) / width);
+              width = MAX_SIZE;
+            }
+          } else {
+            if (height > MAX_SIZE) {
+              width = Math.round((width * MAX_SIZE) / height);
+              height = MAX_SIZE;
+            }
+          }
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext("2d");
+          if (ctx) {
+            ctx.drawImage(img, 0, 0, width, height);
+            const compressed = canvas.toDataURL("image/png", 0.9);
+            setLogo(compressed);
+          } else {
+            setLogo(event.target?.result as string);
+          }
+        };
+        img.src = event.target?.result as string;
       };
       reader.readAsDataURL(file);
     }
   };
 
-  const handleSave = () => {
-    dispatch({
-      type: "UPDATE_SETTINGS",
-      payload: {
-        name,
-        currency,
-        taxRate: parseFloat(taxRate) || 0,
-        logo,
-        city,
-        country,
-        email,
-        phone
-      }
-    });
-    setSaved(true);
-    setTimeout(() => {
-      setSaved(false);
-      router.push("/");
-    }, 800); // Court délai pour voir le message de confirmation avant de revenir au tableau de bord
+  const handleSave = async () => {
+    setIsSaving(true);
+    try {
+      await dispatch({
+        type: "UPDATE_SETTINGS",
+        payload: {
+          name,
+          currency,
+          taxRate: parseFloat(taxRate) || 0,
+          logo,
+          city,
+          country,
+          email,
+          phone
+        }
+      });
+      setSaved(true);
+    } catch (err) {
+      console.error("Erreur enregistrement:", err);
+    } finally {
+      setIsSaving(false);
+      setTimeout(() => {
+        setSaved(false);
+        router.push("/");
+      }, 900);
+    }
   };
 
   return (
@@ -204,10 +240,11 @@ export default function SettingsPage() {
         <div className="pt-4 border-t border-border/40 flex justify-end">
           <button
             onClick={handleSave}
-            className="flex items-center gap-2 px-6 py-2.5 bg-primary text-primary-foreground hover:opacity-90 rounded-xl font-medium transition-opacity shadow-lg glow-primary"
+            disabled={isSaving}
+            className="flex items-center gap-2 px-6 py-2.5 bg-primary text-primary-foreground hover:opacity-90 rounded-xl font-medium transition-all shadow-lg glow-primary disabled:opacity-50 cursor-pointer active:scale-95"
           >
-            <Save className="w-4 h-4" />
-            {saved ? "Enregistré !" : "Sauvegarder"}
+            {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+            {saved ? "Enregistré avec succès !" : isSaving ? "Enregistrement..." : "Sauvegarder"}
           </button>
         </div>
       </div>

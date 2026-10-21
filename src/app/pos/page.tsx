@@ -364,13 +364,22 @@ export default function POSPage() {
           ) : pendingSyncCount > 0 ? (
             <button
               type="button"
-              onClick={() => syncOfflineSales()}
+              onClick={async () => {
+                const res = await syncOfflineSales();
+                if (res.success > 0) {
+                  alert(`✅ ${res.success} vente(s) synchronisée(s) avec succès !`);
+                } else if (res.failed > 0) {
+                  alert("⚠️ Échec de la synchronisation. Vérifiez que votre appareil est bien connecté à Internet.");
+                } else {
+                  alert("ℹ️ Vos données sont déjà à jour avec le serveur.");
+                }
+              }}
               disabled={isSyncing}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/30 text-blue-600 dark:text-blue-400 text-xs font-bold transition-all shadow-xs"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/30 text-blue-600 dark:text-blue-400 text-xs font-bold transition-all shadow-xs active:scale-95 cursor-pointer"
               title="Cliquer pour synchroniser les ventes enregistrées hors-ligne"
             >
               <RefreshCw className={`h-3.5 w-3.5 ${isSyncing ? "animate-spin" : ""}`} />
-              <span>{isSyncing ? "Synchronisation..." : `${pendingSyncCount} en attente • Sync`}</span>
+              <span>{isSyncing ? "Synchronisation en cours..." : `${pendingSyncCount} en attente • Synchroniser`}</span>
             </button>
           ) : (
             <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 text-[11px] font-semibold border border-emerald-500/20" title="Synchronisation temps réel WebSocket active pour votre boutique">

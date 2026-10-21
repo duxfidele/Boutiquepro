@@ -798,7 +798,7 @@ export const isSubscriptionExpiredError = (err: any): boolean => {
 };
 
 export function StoreProvider({ children }: { children: ReactNode }) {
-  const { activeStore, user, role } = useAuth();
+  const { activeStore, user, role, setActiveStore } = useAuth();
   const isAdmin = role === 'admin' || activeStore?.role === 'admin';
   const [state, dispatchBase] = useReducer(storeReducer, initialState, getInitialStoreState);
   const [isInitialized, setIsInitialized] = useState(false);
@@ -1096,12 +1096,34 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     let failed = 0;
 
     try {
-      const pendingItems = await getOfflineSales(activeStore.id);
+      // Récupérer les ventes hors-ligne
+      let pendingItems = await getOfflineSales(activeStore.id);
+      if (pendingItems.length === 0) {
+        const allPending = await getOfflineSales();
+        pendingItems = allPending.filter((i) => !i.storeId || i.storeId === activeStore.id);
+      }
+
       for (const item of pendingItems) {
         const s = item.sale;
+        const targetStoreId = activeStore.id || item.storeId;
         try {
+          // ÉTAPE ANTI-DOUBLON 1 : Vérifier si la vente existe DÉJÀ dans Supabase
+          const { data: existingSale } = await supabase
+            .from("sales")
+            .select("id")
+            .eq("id", s.id)
+            .maybeSingle();
+
+          if (existingSale) {
+            // Vente déjà enregistrée : retirer directement de la file d'attente locale sans réinsérer
+            await removeOfflineSale(s.id);
+            success++;
+            continue;
+          }
+
+          // ÉTAPE ANTI-DOUBLON 2 : Appel atomique RPC create_sale
           const { error: saleError } = await supabase.rpc("create_sale", {
-            p_store_id: activeStore.id,
+            p_store_id: targetStoreId,
             p_sale_id: s.id,
             p_subtotal: s.subtotal,
             p_tax: s.tax,
@@ -1118,8 +1140,16 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             p_due_date: s.dueDate || null,
           });
 
-          // Succès ou vente déjà présente (idempotent code 23505)
-          if (!saleError || saleError.code === "23505") {
+          const isDuplicate = Boolean(
+            saleError && (
+              saleError.code === "23505" ||
+              saleError.message?.toLowerCase().includes("duplicate key") ||
+              saleError.message?.toLowerCase().includes("sales_pkey") ||
+              saleError.details?.toLowerCase().includes("already exists")
+            )
+          );
+
+          if (!saleError || isDuplicate) {
             if (s.paymentMethod === "credit") {
               try {
                 await supabase.from("sales").update({
@@ -1128,14 +1158,51 @@ export function StoreProvider({ children }: { children: ReactNode }) {
                   remaining_amount: s.remainingAmount ?? s.total,
                   payment_status: s.paymentStatus || 'unpaid',
                   due_date: s.dueDate || null,
-                }).eq("id", s.id).eq("store_id", activeStore.id);
+                }).eq("id", s.id).eq("store_id", targetStoreId);
               } catch (e) {}
             }
             await removeOfflineSale(s.id);
             success++;
           } else {
-            console.error("Erreur sync vente:", saleError);
-            failed++;
+            // ÉTAPE ANTI-DOUBLON 3 : Fallback direct upsert si la RPC échoue
+            console.warn("RPC create_sale a échoué, tentative d'upsert direct de secours:", saleError);
+            const { error: directErr } = await supabase.from("sales").upsert([{
+              id: s.id,
+              store_id: targetStoreId,
+              subtotal: s.subtotal,
+              tax: s.tax,
+              discount: s.discount,
+              total: s.total,
+              payment_method: s.paymentMethod,
+              customer_name: s.customerName || null,
+              customer_phone: s.customerPhone || null,
+              amount_paid: s.amountPaid ?? (s.paymentMethod === 'credit' ? 0 : s.total),
+              remaining_amount: s.remainingAmount ?? (s.paymentMethod === 'credit' ? s.total : 0),
+              payment_status: s.paymentStatus || (s.paymentMethod === 'credit' ? 'unpaid' : 'paid'),
+              due_date: s.dueDate || null,
+              created_at: s.createdAt
+            }], { onConflict: 'id' });
+
+            if (!directErr) {
+              if (s.items && s.items.length > 0) {
+                const saleItems = s.items.map((it: any) => ({
+                  id: `si_${Math.random().toString(36).substring(2, 9)}`,
+                  sale_id: s.id,
+                  store_id: targetStoreId,
+                  product_id: it.productId,
+                  product_name: it.productName,
+                  quantity: it.quantity,
+                  unit_price: it.unitPrice,
+                  total: it.total
+                }));
+                await supabase.from("sale_items").insert(saleItems);
+              }
+              await removeOfflineSale(s.id);
+              success++;
+            } else {
+              console.error("Échec persistance vente offline:", directErr);
+              failed++;
+            }
           }
         } catch (err) {
           console.error("Exception sync vente:", err);
@@ -1167,29 +1234,50 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
     const handleOnline = () => {
       setIsOnline(true);
-      syncOfflineSales();
+      setTimeout(() => {
+        syncOfflineSales();
+      }, 500);
     };
 
     const handleOffline = () => {
       setIsOnline(false);
     };
 
+    const handleVisibility = () => {
+      if (document.visibilityState === "visible" && navigator.onLine) {
+        setIsOnline(true);
+        refreshPendingCount();
+        syncOfflineSales();
+      }
+    };
+
+    const handleFocus = () => {
+      if (navigator.onLine) {
+        refreshPendingCount();
+        syncOfflineSales();
+      }
+    };
+
     window.addEventListener("online", handleOnline);
     window.addEventListener("offline", handleOffline);
+    window.addEventListener("focus", handleFocus);
+    document.addEventListener("visibilitychange", handleVisibility);
 
     const interval = setInterval(() => {
       refreshPendingCount();
-      if (navigator.onLine && pendingSyncCount > 0 && !isSyncing) {
+      if (navigator.onLine && !isSyncing) {
         syncOfflineSales();
       }
-    }, 25000);
+    }, 20000);
 
     return () => {
       window.removeEventListener("online", handleOnline);
       window.removeEventListener("offline", handleOffline);
+      window.removeEventListener("focus", handleFocus);
+      document.removeEventListener("visibilitychange", handleVisibility);
       clearInterval(interval);
     };
-  }, [activeStore?.id, pendingSyncCount, isSyncing]);
+  }, [activeStore?.id, isSyncing]);
 
   // ─── Synchronisation Temps Réel (Supabase Realtime) ───────────
   // Écoute strictement isolée sur filter store_id = activeStore.id
@@ -1433,28 +1521,55 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           });
         }
 
+        let cachedSettings: any = null;
+        if (storeCache) {
+          try {
+            const parsed = JSON.parse(storeCache);
+            if (parsed && parsed.settings) {
+              cachedSettings = parsed.settings;
+            }
+          } catch (e) {}
+        }
+
+        const defaultSettings = {
+          name: activeStore?.name || "MaBoutiquePro",
+          logo: "/logo.png",
+          currency: "FCFA",
+          taxRate: 0,
+          city: "Lomé",
+          country: "Togo",
+          email: "contact@maboutiquepro.app",
+          phone: "+228 98 37 61 01"
+        };
+
         const payload: any = {
           sales: [],
           inventorySessions: [],
           orders: [],
-  expenses: [],
+          expenses: [],
           customers: [],
           cart: [],
           categories: demoCategories,
           products: [],
-          settings: { name: "MaBoutiquePro", logo: "/logo.png", currency: "FCFA", taxRate: 0, city: "Lomé", country: "Togo", email: "contact@maboutiquepro.app", phone: "+228 98 37 61 01" }
+          settings: { ...defaultSettings, ...(cachedSettings || {}) }
         };
 
         if (settings) {
           payload.settings = {
-            name: settings.name || "MaBoutiquePro",
-            currency: settings.currency || "FCFA",
-            taxRate: Number(settings.tax_rate) || 0,
-            logo: settings.logo,
-            city: settings.city || "Lomé",
-            country: settings.country || "Togo",
-            email: settings.email,
-            phone: settings.phone
+            name: settings.name || activeStore?.name || cachedSettings?.name || defaultSettings.name,
+            currency: settings.currency || cachedSettings?.currency || defaultSettings.currency,
+            taxRate: Number(settings.tax_rate) !== undefined && settings.tax_rate !== null ? Number(settings.tax_rate) : (cachedSettings?.taxRate || 0),
+            logo: settings.logo || cachedSettings?.logo || defaultSettings.logo,
+            city: settings.city || cachedSettings?.city || defaultSettings.city,
+            country: settings.country || cachedSettings?.country || defaultSettings.country,
+            email: settings.email || cachedSettings?.email || defaultSettings.email,
+            phone: settings.phone || cachedSettings?.phone || defaultSettings.phone
+          };
+        } else if (cachedSettings) {
+          payload.settings = {
+            ...defaultSettings,
+            ...cachedSettings,
+            name: activeStore?.name || cachedSettings.name || defaultSettings.name
           };
         }
         if (categories && categories.length > 0) payload.categories = categories;
@@ -1817,9 +1932,47 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         if (s.email !== undefined) updates.email = s.email;
         if (s.phone !== undefined) updates.phone = s.phone;
         
-        if (Object.keys(updates).length > 0) {
-          const { error } = await supabase.from('settings').update(updates).eq('store_id', activeStore.id);
-          if (error) console.error("Supabase Update Settings Error:", error);
+        // 1. Sauvegarde locale immédiate pour garantir zéro perte
+        if (typeof window !== "undefined" && activeStore?.id) {
+          try {
+            const cacheKey = `boutiquepro-state-${activeStore.id}`;
+            const existingRaw = localStorage.getItem(cacheKey);
+            const parsed = existingRaw ? JSON.parse(existingRaw) : {};
+            parsed.settings = { ...(parsed.settings || state.settings), ...s };
+            localStorage.setItem(cacheKey, JSON.stringify(parsed));
+            localStorage.setItem("boutiquepro-state", JSON.stringify(parsed));
+          } catch (storageErr) {
+            console.warn("Avertissement sauvegarde locale settings:", storageErr);
+          }
+        }
+
+        if (Object.keys(updates).length > 0 && activeStore?.id) {
+          // 2. Persistance dans la table settings avec UPSERT (crée la ligne si elle n'existe pas)
+          try {
+            const { error: upsertErr } = await supabase.from('settings').upsert({
+              store_id: activeStore.id,
+              ...updates
+            }, { onConflict: 'store_id' });
+
+            if (upsertErr) {
+              console.warn("Supabase upsert settings fallback to update:", upsertErr);
+              await supabase.from('settings').update(updates).eq('store_id', activeStore.id);
+            }
+          } catch (errSet) {
+            console.error("Erreur upsert settings:", errSet);
+          }
+
+          // 3. Mise à jour simultanée du nom de la boutique dans stores pour actualiser Sidebar/Header
+          if (updates.name) {
+            try {
+              await supabase.from('stores').update({ name: updates.name }).eq('id', activeStore.id);
+              if (typeof setActiveStore === "function") {
+                setActiveStore({ ...activeStore, name: updates.name });
+              }
+            } catch (errStore) {
+              console.warn("Erreur synchronisation stores.name:", errStore);
+            }
+          }
         }
       }
       else if (action.type === "COMPLETE_SALE") {
