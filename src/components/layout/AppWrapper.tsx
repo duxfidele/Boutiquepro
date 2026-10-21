@@ -145,7 +145,7 @@ export default function AppWrapper({ children }: { children: React.ReactNode }) 
               )}
 
               <Header onMenuClick={() => setIsMobileMenuOpen(true)} />
-              <main className="flex-1 p-6">
+              <main className="flex-1 p-4 sm:p-6 pb-28 lg:pb-6">
                 {children}
               </main>
 
