@@ -174,7 +174,7 @@ Un audit complet et rigoureux a été exécuté sur l'ensemble de l'application 
 |---|---|---|---|
 | 🔴 **Bloquant (Critique)** | **0** | ✅ Conforme | Aucun secret exposé, RLS active, API protégées |
 | 🟠 **Important (Moyen)** | **0** | ✅ Corrigé | API `/api/subscription/order` verrouillée en JWT + RBAC Admin, Import Excel immunisé contre les DoS |
-| 🟡 **Durcissement (Faible)** | **3** | ℹ️ Recommandations futures | Rate limiter applicatif (ex: Upstash Redis), Captcha Turnstile inscription, validation Zod |
+| 🟡 **Durcissement (Faible)** | **0 résiduel critique** | ✅ Implémenté | Rate Limiter actif sur les API, Anti-bot Cloudflare Turnstile + Honeypot en place sur l'inscription |
 
 #### Mesures de Durcissement Appliquées :
 1. **Protection Serveur de l'API de Commande d'Abonnement (`/api/subscription/order`) :**
