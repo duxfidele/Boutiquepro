@@ -8,6 +8,7 @@ import Login from "@/components/auth/Login";
 import { StoreProvider } from "@/context/StoreContext";
 import Sidebar from "@/components/layout/Sidebar";
 import Header from "@/components/layout/Header";
+import MobileBottomNav from "@/components/layout/MobileBottomNav";
 import SubscriptionModal from "@/components/subscription/SubscriptionModal";
 import { Loader2, Lock, LogOut, Sparkles } from "lucide-react";
 import { usePathname, useRouter } from "next/navigation";
@@ -112,7 +113,7 @@ export default function AppWrapper({ children }: { children: React.ReactNode }) 
     return (
       <ErrorBoundary>
         <StoreProvider>
-          <div className="flex min-h-screen">
+          <div className="flex min-h-screen min-h-[100dvh]">
             <Sidebar isOpen={isMobileMenuOpen} onClose={() => setIsMobileMenuOpen(false)} />
             <div className="flex-1 flex flex-col min-w-0 lg:ml-[260px] ml-0 transition-all duration-300">
               {/* Bannière de rappel : Essai (en rose/rouge) ou Renouvellement abonnement actif (si <= 7 jours) */}
@@ -156,6 +157,9 @@ export default function AppWrapper({ children }: { children: React.ReactNode }) 
                 isLocked={false}
               />
             </div>
+
+            {/* Barre de navigation mobile - Placée en dernier pour toujours rester visible au-dessus de tout */}
+            <MobileBottomNav />
           </div>
         </StoreProvider>
       </ErrorBoundary>

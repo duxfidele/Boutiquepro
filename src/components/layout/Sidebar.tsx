@@ -446,55 +446,6 @@ export default function Sidebar({ isOpen, onClose }: { isOpen?: boolean; onClose
         </div>
       </aside>
 
-      {/* Mobile Bottom Navigation */}
-      <nav
-        style={{
-          transform: "translateZ(0)",
-          WebkitTransform: "translateZ(0)",
-        }}
-        className="lg:hidden fixed bottom-0 left-0 right-0 z-50 bg-background/95 backdrop-blur-md border-t border-border/60 px-3 pt-2 pb-[max(0.6rem,env(safe-area-inset-bottom))] flex justify-around items-center shadow-[0_-4px_20px_rgba(0,0,0,0.08)] will-change-transform"
-      >
-        <Link
-          href="/"
-          prefetch={true}
-          className={`flex flex-col items-center gap-1 py-1 px-3 rounded-xl text-xs transition-colors ${
-            pathname === "/" ? "text-primary font-bold" : "text-muted-foreground hover:text-foreground"
-          }`}
-        >
-          <LayoutDashboard className="h-5 w-5" />
-          <span className="text-[11px]">Accueil</span>
-        </Link>
-        <Link
-          href="/pos"
-          prefetch={true}
-          className={`flex flex-col items-center gap-1 py-1 px-3 rounded-xl text-xs transition-colors ${
-            pathname === "/pos" ? "text-primary font-bold" : "text-muted-foreground hover:text-foreground"
-          }`}
-        >
-          <ShoppingCart className="h-5 w-5" />
-          <span className="text-[11px]">Caisse</span>
-        </Link>
-        <Link
-          href="/products"
-          prefetch={true}
-          className={`flex flex-col items-center gap-1 py-1 px-3 rounded-xl text-xs transition-colors ${
-            pathname === "/products" ? "text-primary font-bold" : "text-muted-foreground hover:text-foreground"
-          }`}
-        >
-          <Package className="h-5 w-5" />
-          <span className="text-[11px]">Produits</span>
-        </Link>
-        <Link
-          href="/settings"
-          prefetch={true}
-          className={`flex flex-col items-center gap-1 py-1 px-3 rounded-xl text-xs transition-colors ${
-            pathname === "/settings" ? "text-primary font-bold" : "text-muted-foreground hover:text-foreground"
-          }`}
-        >
-          <Settings className="h-5 w-5" />
-          <span className="text-[11px]">Paramètres</span>
-        </Link>
-      </nav>
 
       {/* Modal d'abonnement ou mise à niveau */}
       <SubscriptionModal
