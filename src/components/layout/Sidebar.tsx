@@ -131,9 +131,8 @@ export default function Sidebar({ isOpen, onClose }: { isOpen?: boolean; onClose
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-40 lg:hidden animate-fade-in" onClick={onClose} />
       )}
       <aside
-        className={`print:hidden fixed z-50 top-0 bottom-0 left-0 h-screen flex flex-col border-r border-border/50 bg-sidebar transition-transform duration-300 ease-in-out ${
-          isOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"
-        } ${collapsed ? "lg:w-[72px]" : "w-[260px]"}`}
+        className={`print:hidden fixed z-50 top-0 bottom-0 left-0 h-screen flex flex-col border-r border-border/50 bg-sidebar transition-transform duration-300 ease-in-out ${isOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"
+          } ${collapsed ? "lg:w-[72px]" : "w-[260px]"}`}
       >
         {/* Logo / Brand */}
         <div className="flex h-16 items-center gap-3 border-b border-border/50 px-4">
@@ -190,11 +189,10 @@ export default function Sidebar({ isOpen, onClose }: { isOpen?: boolean; onClose
                         onClose();
                       }
                     }}
-                    className={`group relative flex flex-row items-center justify-start gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-all duration-200 ${
-                      isActive
+                    className={`group relative flex flex-row items-center justify-start gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-all duration-200 ${isActive
                         ? "bg-primary/10 text-primary shadow-sm"
                         : "text-muted-foreground hover:bg-secondary hover:text-foreground"
-                    }`}
+                      }`}
                   >
                     {isActive && <div className="absolute left-0 top-1/2 h-6 w-1 -translate-y-1/2 rounded-r-full bg-primary" />}
                     <Icon className={`h-5 w-5 shrink-0 transition-colors ${isActive ? "text-primary" : ""}`} />
@@ -211,9 +209,8 @@ export default function Sidebar({ isOpen, onClose }: { isOpen?: boolean; onClose
                     )}
                     {showBadge && !isLockedForUser && (
                       <span
-                        className={`badge-pulse flex h-5 items-center justify-center rounded-full ${badgeColor} text-[10px] font-bold text-white ${
-                          collapsed ? "absolute -right-1 -top-1 w-5" : "ml-auto min-w-[20px] px-1.5"
-                        }`}
+                        className={`badge-pulse flex h-5 items-center justify-center rounded-full ${badgeColor} text-[10px] font-bold text-white ${collapsed ? "absolute -right-1 -top-1 w-5" : "ml-auto min-w-[20px] px-1.5"
+                          }`}
                       >
                         {badgeCount}
                       </span>
@@ -307,13 +304,12 @@ export default function Sidebar({ isOpen, onClose }: { isOpen?: boolean; onClose
           <div className="px-3 pb-2 animate-fade-in">
             {!collapsed ? (
               <div
-                className={`group relative p-3 rounded-2xl border transition-all duration-200 overflow-hidden shadow-xs hover:shadow-md ${
-                  subscription.isTrial
+                className={`group relative p-3 rounded-2xl border transition-all duration-200 overflow-hidden shadow-xs hover:shadow-md ${subscription.isTrial
                     ? subscription.daysRemaining <= 3
                       ? "bg-amber-500/10 border-amber-500/30 hover:border-amber-500/60 text-amber-900 dark:text-amber-200"
                       : "bg-emerald-500/10 border-emerald-500/25 hover:border-emerald-500/50 text-foreground"
                     : "bg-primary/5 border-primary/20 hover:border-primary/40 text-foreground"
-                }`}
+                  }`}
               >
                 {/* En-tête du widget */}
                 <div className="flex items-center justify-between gap-1 mb-1.5">
@@ -329,13 +325,12 @@ export default function Sidebar({ isOpen, onClose }: { isOpen?: boolean; onClose
                   </div>
 
                   <span
-                    className={`px-1.5 py-0.5 rounded-md text-[9px] font-black uppercase shrink-0 ${
-                      subscription.isTrial
+                    className={`px-1.5 py-0.5 rounded-md text-[9px] font-black uppercase shrink-0 ${subscription.isTrial
                         ? subscription.daysRemaining <= 3
                           ? "bg-amber-500 text-white"
                           : "bg-emerald-600 text-white"
                         : "bg-primary/20 text-primary"
-                    }`}
+                      }`}
                   >
                     {subscription.isTrial ? `J-${subscription.daysRemaining}` : "Actif"}
                   </span>
@@ -383,7 +378,7 @@ export default function Sidebar({ isOpen, onClose }: { isOpen?: boolean; onClose
                 >
                   {/* Effet reflet Shimmer */}
                   <span className="absolute inset-0 w-1/2 h-full bg-white/25 skew-x-12 -translate-x-full animate-btn-shimmer group-hover/btn:translate-x-[300%] transition-transform duration-1000 ease-out" />
-                  
+
                   <Sparkles className="w-3.5 h-3.5 text-yellow-300 animate-pulse shrink-0" />
                   <span className="tracking-wide">
                     {subscription.isTrial ? "S'abonner" : "Renouveler / Changer"}
@@ -450,6 +445,50 @@ export default function Sidebar({ isOpen, onClose }: { isOpen?: boolean; onClose
           </button>
         </div>
       </aside>
+
+      {/* Mobile Bottom Navigation */}
+      <nav className="lg:hidden fixed bottom-0 left-0 right-0 z-40 bg-sidebar/95 backdrop-blur-md border-t border-border/50 px-2 py-1.5 flex justify-around items-center shadow-lg">
+        <Link
+          href="/"
+          prefetch={true}
+          className={`flex flex-col items-center gap-1 py-1 px-3 rounded-lg text-xs transition-colors ${
+            pathname === "/" ? "text-primary font-medium" : "text-muted-foreground hover:text-foreground"
+          }`}
+        >
+          <LayoutDashboard className="h-5 w-5" />
+          <span>Accueil</span>
+        </Link>
+        <Link
+          href="/pos"
+          prefetch={true}
+          className={`flex flex-col items-center gap-1 py-1 px-3 rounded-lg text-xs transition-colors ${
+            pathname === "/pos" ? "text-primary font-medium" : "text-muted-foreground hover:text-foreground"
+          }`}
+        >
+          <ShoppingCart className="h-5 w-5" />
+          <span>Caisse</span>
+        </Link>
+        <Link
+          href="/products"
+          prefetch={true}
+          className={`flex flex-col items-center gap-1 py-1 px-3 rounded-lg text-xs transition-colors ${
+            pathname === "/products" ? "text-primary font-medium" : "text-muted-foreground hover:text-foreground"
+          }`}
+        >
+          <Package className="h-5 w-5" />
+          <span>Produits</span>
+        </Link>
+        <Link
+          href="/settings"
+          prefetch={true}
+          className={`flex flex-col items-center gap-1 py-1 px-3 rounded-lg text-xs transition-colors ${
+            pathname === "/settings" ? "text-primary font-medium" : "text-muted-foreground hover:text-foreground"
+          }`}
+        >
+          <Settings className="h-5 w-5" />
+          <span>Paramètres</span>
+        </Link>
+      </nav>
 
       {/* Modal d'abonnement ou mise à niveau */}
       <SubscriptionModal
