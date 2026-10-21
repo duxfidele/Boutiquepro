@@ -157,6 +157,20 @@ export default function ProductExcelImportModal({ isOpen, onClose }: ProductExce
   const processFile = async (selectedFile: File) => {
     setFile(selectedFile);
     setErrorMsg(null);
+
+    // Contrôles de sécurité : extension et taille maximale (max 5 Mo)
+    const validExtensions = [".xlsx", ".xls", ".csv"];
+    const fileExt = selectedFile.name.substring(selectedFile.name.lastIndexOf(".")).toLowerCase();
+    if (!validExtensions.includes(fileExt)) {
+      setErrorMsg("Format non pris en charge. Veuillez fournir un fichier Excel (.xlsx, .xls) ou CSV (.csv).");
+      return;
+    }
+
+    if (selectedFile.size > 5 * 1024 * 1024) {
+      setErrorMsg("Fichier trop volumineux. La taille maximale autorisée est de 5 Mo.");
+      return;
+    }
+
     setLoading(true);
 
     try {
@@ -173,6 +187,10 @@ export default function ProductExcelImportModal({ isOpen, onClose }: ProductExce
 
       if (rawJson.length === 0) {
         throw new Error("La feuille de calcul est vide.");
+      }
+
+      if (rawJson.length > 5000) {
+        throw new Error("Le fichier contient trop de lignes (" + rawJson.length + "). Limite maximale : 5 000 lignes par import.");
       }
 
       const rows: ParsedRow[] = [];
