@@ -23,7 +23,7 @@ export default function MobileBottomNav() {
   return (
     <nav
       aria-label="Navigation mobile"
-      className="lg:hidden fixed bottom-0 left-0 right-0 z-[999] bg-card border-t border-border shadow-[0_-4px_20px_rgba(0,0,0,0.08)] px-2 pt-2 pb-[max(0.6rem,env(safe-area-inset-bottom,0.6rem))] flex justify-around items-center select-none"
+      className="lg:hidden shrink-0 w-full z-40 bg-card border-t border-border shadow-[0_-4px_16px_rgba(0,0,0,0.06)] px-2 pt-2 pb-[max(0.6rem,env(safe-area-inset-bottom,0.6rem))] flex justify-around items-center select-none"
     >
       {navItems.map((item) => {
         const Icon = item.icon;

@@ -113,9 +113,9 @@ export default function AppWrapper({ children }: { children: React.ReactNode }) 
     return (
       <ErrorBoundary>
         <StoreProvider>
-          <div className="flex min-h-screen min-h-[100dvh]">
+          <div className="flex h-screen h-[100dvh] overflow-hidden">
             <Sidebar isOpen={isMobileMenuOpen} onClose={() => setIsMobileMenuOpen(false)} />
-            <div className="flex-1 flex flex-col min-w-0 lg:ml-[260px] ml-0 transition-all duration-300">
+            <div className="flex-1 flex flex-col min-w-0 lg:ml-[260px] ml-0 h-full overflow-hidden">
               {/* Bannière de rappel : Essai (en rose/rouge) ou Renouvellement abonnement actif (si <= 7 jours) */}
               {role === "admin" && subscription && (
                 subscription.isTrial ? (
@@ -146,7 +146,7 @@ export default function AppWrapper({ children }: { children: React.ReactNode }) 
               )}
 
               <Header onMenuClick={() => setIsMobileMenuOpen(true)} />
-              <main className="flex-1 p-4 sm:p-6 pb-28 lg:pb-6">
+              <main className="flex-1 overflow-y-auto p-4 sm:p-6 pb-6">
                 {children}
               </main>
 
@@ -156,10 +156,10 @@ export default function AppWrapper({ children }: { children: React.ReactNode }) 
                 onClose={() => setShowUpgradeModal(false)}
                 isLocked={false}
               />
-            </div>
 
-            {/* Barre de navigation mobile - Placée en dernier pour toujours rester visible au-dessus de tout */}
-            <MobileBottomNav />
+              {/* Barre de navigation mobile - Intégrée au shell, 100% figée et immobile */}
+              <MobileBottomNav />
+            </div>
           </div>
         </StoreProvider>
       </ErrorBoundary>

@@ -59,7 +59,7 @@ export default function Header({ onMenuClick }: { onMenuClick?: () => void }) {
     : [];
 
   return (
-    <header className="print:hidden sticky top-0 z-30 flex h-16 items-center justify-between border-b border-border/50 bg-background/80 backdrop-blur-xl px-6">
+    <header className="shrink-0 print:hidden sticky top-0 z-30 flex h-16 items-center justify-between border-b border-border/50 bg-background/80 backdrop-blur-xl px-6">
       {/* Left - Page context */}
       <div className="flex items-center gap-4">
         <button onClick={onMenuClick} className="lg:hidden p-2 -ml-2 rounded-xl hover:bg-secondary">
