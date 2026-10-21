@@ -23,6 +23,13 @@ export default function SubscriptionModal({
   const { user, activeStore, subscription, signOut, refreshSubscription } = useAuth();
   const [selectedTier, setSelectedTier] = useState<SubscriptionTier>(defaultPlan);
   const [isAnnual, setIsAnnual] = useState(false);
+
+  // Synchronisation automatique et immédiate du plan par défaut à l'ouverture
+  React.useEffect(() => {
+    if (isOpen && defaultPlan) {
+      setSelectedTier(defaultPlan);
+    }
+  }, [isOpen, defaultPlan]);
   const [loading, setLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
@@ -176,6 +183,15 @@ export default function SubscriptionModal({
               </div>
             )}
 
+            {defaultPlan === "BUSINESS" && !isLocked && (
+              <div className="p-4 rounded-2xl bg-primary/10 border border-primary/25 text-primary text-xs flex items-start gap-3 font-medium animate-in fade-in duration-200">
+                <Store className="w-4 h-4 shrink-0 mt-0.5 text-primary" />
+                <div className="leading-relaxed text-foreground">
+                  <span className="font-bold text-primary">Gestion Multi-Boutiques :</span> Votre formule actuelle ne permet qu&apos;une seule boutique. Pour débloquer jusqu&apos;à <b>3 boutiques distinctes</b> et leurs caissiers dédiés, activez la formule <b>Business</b> ci-dessous.
+                </div>
+              </div>
+            )}
+
             {/* Toggle Annuel / Mensuel */}
             <div className="flex items-center justify-center gap-2 sm:gap-4 bg-surface-container-low p-1.5 sm:p-2 rounded-2xl w-fit mx-auto border border-outline-variant/30">
               <button
@@ -280,10 +296,12 @@ export default function SubscriptionModal({
                     : "border-outline-variant/30 hover:border-outline-variant/70 bg-surface-container-lowest hover:bg-surface-container-low/40"
                 }`}
               >
-                <div className="absolute -top-3 left-4 px-2.5 py-0.5 rounded-full bg-gradient-to-r from-emerald-600 to-teal-600 text-white text-[10px] font-black uppercase tracking-wider shadow-sm flex items-center gap-1">
-                  <Sparkles className="w-3 h-3 text-amber-300" />
-                  <span>Recommandé</span>
-                </div>
+                {defaultPlan !== "BUSINESS" && (
+                  <div className="absolute -top-3 left-4 px-2.5 py-0.5 rounded-full bg-gradient-to-r from-emerald-600 to-teal-600 text-white text-[10px] font-black uppercase tracking-wider shadow-sm flex items-center gap-1">
+                    <Sparkles className="w-3 h-3 text-amber-300" />
+                    <span>Recommandé</span>
+                  </div>
+                )}
                 <div>
                   <div className="flex justify-between items-start mb-2.5">
                     <span className="px-2.5 py-0.5 rounded-full bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 text-[10px] font-black uppercase">
@@ -353,6 +371,12 @@ export default function SubscriptionModal({
                     : "border-outline-variant/30 hover:border-outline-variant/70 bg-surface-container-lowest hover:bg-surface-container-low/40"
                 }`}
               >
+                {defaultPlan === "BUSINESS" && (
+                  <div className="absolute -top-3 left-4 px-2.5 py-0.5 rounded-full bg-gradient-to-r from-primary via-indigo-600 to-purple-600 text-white text-[10px] font-black uppercase tracking-wider shadow-sm flex items-center gap-1">
+                    <Sparkles className="w-3 h-3 text-amber-300 animate-pulse" />
+                    <span>Requis Multi-Boutiques</span>
+                  </div>
+                )}
                 <div>
                   <div className="flex justify-between items-start mb-2.5">
                     <span className="px-2.5 py-0.5 rounded-full bg-primary/15 text-primary text-[10px] font-black uppercase">
