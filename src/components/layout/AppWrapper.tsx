@@ -28,6 +28,12 @@ export default function AppWrapper({ children }: { children: React.ReactNode }) 
       const allowedPaths = ["/", "/pos", "/debts", "/products", "/customers", "/support", "/profile"];
       if (!allowedPaths.includes(pathname)) {
         router.replace("/pos");
+      } else if (pathname === "/") {
+        // Rediriger automatiquement le caissier vers le Point de Vente (/pos) à la connexion initiale
+        const hasSeenDashboard = typeof window !== "undefined" && sessionStorage.getItem("cashier_viewed_dashboard");
+        if (!hasSeenDashboard) {
+          router.replace("/pos");
+        }
       }
     }
   }, [role, pathname, router]);

@@ -64,7 +64,7 @@ export default function POSPage() {
     clearOfflineSalesQueue,
     isRealtimeActive
   } = useStore();
-  const { user, role, subscription, canOfferCredit, canPrintReceipts } = useAuth();
+  const { user, role, subscription, canOfferCredit, canPrintReceipts, signOut } = useAuth();
   const [subModalOpen, setSubModalOpen] = useState(false);
   // Résolution propre de l'identité du caissier/gérant (Bannit l'affichage d'un email comme 'boutiquepro89')
   const getCashierDisplayName = (rawName?: string) => {
@@ -77,6 +77,17 @@ export default function POSPage() {
 
   // Cash Session States
   const [showOpenModal, setShowOpenModal] = useState(false);
+
+  // Auto-invitation ouverture de caisse pour le caissier
+  React.useEffect(() => {
+    if (role === "cashier" && !activeCashSession) {
+      const prompted = typeof window !== "undefined" && sessionStorage.getItem("prompted_open_cash_session");
+      if (!prompted) {
+        sessionStorage.setItem("prompted_open_cash_session", "true");
+        setShowOpenModal(true);
+      }
+    }
+  }, [role, activeCashSession]);
   const [showCloseModal, setShowCloseModal] = useState(false);
   const [showRapportXModal, setShowRapportXModal] = useState(false);
   const [showRapportZModal, setShowRapportZModal] = useState(false);
@@ -469,6 +480,26 @@ export default function POSPage() {
             <History className="h-3.5 w-3.5" />
             Historique Z
           </button>
+
+          {role === "cashier" && (
+            <button
+              type="button"
+              onClick={() => {
+                if (window.confirm("Voulez-vous verrouiller le poste de caisse et changer d'utilisateur ?")) {
+                  try {
+                    sessionStorage.removeItem("cashier_viewed_dashboard");
+                    sessionStorage.removeItem("prompted_open_cash_session");
+                  } catch {}
+                  signOut();
+                }
+              }}
+              className="px-3 py-1.5 rounded-xl border border-amber-500/30 hover:bg-amber-500/10 text-amber-600 dark:text-amber-400 text-xs font-semibold flex items-center gap-1.5 transition-colors"
+              title="Verrouiller la caisse et changer de caissier"
+            >
+              <Lock className="h-3.5 w-3.5" />
+              <span>Verrouiller / Quitter</span>
+            </button>
+          )}
         </div>
       </div>
 

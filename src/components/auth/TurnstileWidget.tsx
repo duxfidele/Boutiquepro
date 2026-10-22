@@ -50,7 +50,7 @@ export default function TurnstileWidget({ onVerify, onError, onExpire }: Turnsti
 
       try {
         const id = window.turnstile.render(containerRef.current, {
-          sitekey: siteKey,
+          sitekey: siteKey || "",
           theme: 'auto',
           callback: (token: string) => {
             if (isMounted) onVerify(token);

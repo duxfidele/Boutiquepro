@@ -315,18 +315,24 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
           .filter((d: any) => d.id);
 
         // ISOLATION STRICTE : Si l'utilisateur est un caissier
-        const cashierStore = valid.find((d: any) => d.role === "cashier");
+        const cashierStores = valid.filter((d: any) => d.role === "cashier");
 
-        if (cashierStore) {
-          // Le caissier ne voit QUE sa boutique assignée, rien d'autre !
-          const singleStore = [cashierStore];
-          setStores(singleStore);
+        if (cashierStores.length > 0) {
+          // Le caissier ne voit QUE les boutiques auxquelles il est affecté
+          const savedStoreId = typeof window !== "undefined" ? localStorage.getItem("activeStoreId") : null;
+          let selected = cashierStores.find((s: any) => s.id === savedStoreId);
+          if (!selected) {
+            selected = cashierStores[0];
+          }
+
+          setStores(cashierStores);
           setRole("cashier");
-          setActiveStoreState(singleStore[0]);
-          setSubscription(computeSubscription(singleStore[0], adminSub));
+          setActiveStoreState(selected);
+          setSubscription(computeSubscription(selected, adminSub));
           try {
-            localStorage.setItem("cachedStores", JSON.stringify(singleStore));
-            localStorage.setItem("activeStoreObj", JSON.stringify(singleStore[0]));
+            localStorage.setItem("cachedStores", JSON.stringify(cashierStores));
+            localStorage.setItem("activeStoreObj", JSON.stringify(selected));
+            localStorage.setItem("activeStoreId", selected.id);
           } catch {}
           return;
         }

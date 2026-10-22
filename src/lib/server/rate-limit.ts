@@ -15,11 +15,11 @@ const rateLimitStore = new Map<string, RateLimitRecord>();
 // Nettoyage automatique périodique des clés expirées toutes les 5 minutes
 setInterval(() => {
   const now = Date.now();
-  for (const [key, record] of rateLimitStore.entries()) {
+  rateLimitStore.forEach((record, key) => {
     if (record.resetAt <= now) {
       rateLimitStore.delete(key);
     }
-  }
+  });
 }, 5 * 60 * 1000).unref?.();
 
 export interface RateLimitOptions {

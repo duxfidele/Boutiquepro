@@ -1555,11 +1555,14 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         }
 
         let cachedSettings: any = null;
-        if (storeCache) {
+        if (typeof window !== "undefined" && activeStore?.id) {
           try {
-            const parsed = JSON.parse(storeCache);
-            if (parsed && parsed.settings) {
-              cachedSettings = parsed.settings;
+            const storeCache = localStorage.getItem(`boutiquepro-state-${activeStore.id}`);
+            if (storeCache) {
+              const parsed = JSON.parse(storeCache);
+              if (parsed && parsed.settings) {
+                cachedSettings = parsed.settings;
+              }
             }
           } catch (e) {}
         }

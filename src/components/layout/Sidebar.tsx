@@ -180,6 +180,9 @@ export default function Sidebar({ isOpen, onClose }: { isOpen?: boolean; onClose
                     href={item.href}
                     prefetch={true}
                     onClick={(e) => {
+                      if (item.href === "/") {
+                        try { sessionStorage.setItem("cashier_viewed_dashboard", "true"); } catch {}
+                      }
                       if (isLockedForUser) {
                         e.preventDefault();
                         setSubModalDefaultPlan("PRO");
@@ -264,8 +267,37 @@ export default function Sidebar({ isOpen, onClose }: { isOpen?: boolean; onClose
                   </p>
                 </div>
               </div>
+            ) : stores && stores.length > 1 ? (
+              /* CAISSIER : Choix entre ses boutiques d'affectation */
+              <div className="flex items-center gap-3 rounded-xl bg-secondary/40 px-3 py-2.5 border border-amber-500/30">
+                <Store className="h-4 w-4 text-amber-500 shrink-0" />
+                <div className="flex-1 min-w-0">
+                  <select
+                    value={activeStore?.id || ""}
+                    onChange={(e) => {
+                      const s = stores.find((x) => x.id === e.target.value);
+                      if (s) {
+                        try {
+                          localStorage.setItem("activeStoreId", s.id);
+                          localStorage.setItem("activeStoreObj", JSON.stringify(s));
+                        } catch {}
+                        setActiveStore(s);
+                        window.location.reload();
+                      }
+                    }}
+                    className="w-full bg-transparent text-xs font-bold truncate outline-none cursor-pointer appearance-none text-foreground"
+                  >
+                    {stores.map((s) => (
+                      <option key={s.id} value={s.id}>
+                        {s.name}
+                      </option>
+                    ))}
+                  </select>
+                  <p className="text-[10px] text-amber-500 font-semibold uppercase tracking-wider">Boutique d&apos;affectation</p>
+                </div>
+              </div>
             ) : (
-              /* CAISSIER : Boutique FIXE et VERROUILLÉE, aucun changement possible */
+              /* CAISSIER : Boutique FIXE et VERROUILLÉE, unique boutique assignée */
               <div className="flex items-center gap-3 rounded-xl bg-secondary/30 px-3 py-2.5 border border-border/40">
                 <Store className="h-4 w-4 text-amber-500 shrink-0" />
                 <div className="flex-1 min-w-0">
