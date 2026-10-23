@@ -160,6 +160,17 @@ export default function StoreModulesPage() {
         </div>
       )}
 
+      {/* Avertissement de descente de formule */}
+      <div className="flex items-start gap-3 p-4 rounded-2xl bg-indigo-500/10 border border-indigo-500/30 text-indigo-900 dark:text-indigo-200 animate-scale-in">
+        <Info className="w-5 h-5 text-indigo-500 shrink-0 mt-0.5" />
+        <div className="space-y-1">
+          <h4 className="text-sm font-bold">Information sur la descente de formule (Downgrade)</h4>
+          <p className="text-xs leading-relaxed text-indigo-800 dark:text-indigo-300">
+            En cas de passage à une formule inférieure (ex: Pro vers Starter), les modules non inclus dans la nouvelle formule sont automatiquement verrouillés dans l'interface, sans aucune perte de données. Vos historiques de ventes, stocks et créances restent archivés en toute sécurité et réapparaîtront immédiatement lors d'une remise à niveau.
+          </p>
+        </div>
+      </div>
+
       {/* Alerte contextuelle crédits impayés */}
       {showDebtsWarning && (
         <div className="flex items-start gap-3 p-4 rounded-2xl bg-amber-500/15 border-2 border-amber-500/40 text-amber-900 dark:text-amber-200 animate-scale-in">
