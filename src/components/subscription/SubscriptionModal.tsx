@@ -243,7 +243,7 @@ export default function SubscriptionModal({
                     <span>STARTER</span>
                   </h4>
                   <div className="text-2xl font-black text-on-surface mb-3">
-                    {isAnnual ? "1 000" : "100"}{" "}
+                    {isAnnual ? "25 000" : "2 500"}{" "}
                     <span className="text-xs font-bold text-outline">FCFA / {isAnnual ? "an" : "mois"}</span>
                   </div>
                   <ul className="space-y-2 text-xs text-on-surface-variant font-medium">
@@ -318,7 +318,7 @@ export default function SubscriptionModal({
                     <Zap className="w-4 h-4 text-emerald-500" />
                   </h4>
                   <div className="text-2xl font-black text-on-surface mb-3">
-                    {isAnnual ? "1 000" : "100"}{" "}
+                    {isAnnual ? "50 000" : "5 000"}{" "}
                     <span className="text-xs font-bold text-outline">FCFA / {isAnnual ? "an" : "mois"}</span>
                   </div>
                   <ul className="space-y-2 text-xs text-on-surface-variant font-medium">
@@ -393,7 +393,7 @@ export default function SubscriptionModal({
                     <Store className="w-4 h-4 text-primary" />
                   </h4>
                   <div className="text-2xl font-black text-on-surface mb-3">
-                    {isAnnual ? "1 500" : "150"}{" "}
+                    {isAnnual ? "100 000" : "10 000"}{" "}
                     <span className="text-xs font-bold text-outline">FCFA / {isAnnual ? "an" : "mois"}</span>
                   </div>
                   <ul className="space-y-2 text-xs text-on-surface-variant font-medium">

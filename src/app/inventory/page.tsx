@@ -125,7 +125,7 @@ export default function InventoryPage() {
               onClick={() => setSubModalOpen(true)}
               className="w-full sm:w-auto px-8 py-3.5 rounded-2xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-black text-sm shadow-lg shadow-emerald-600/25 hover:shadow-xl transition-all cursor-pointer"
             >
-              Passer à la formule PRO (100 FCFA/mois)
+              Passer à la formule PRO (5 000 FCFA/mois)
             </button>
           </div>
         </div>
