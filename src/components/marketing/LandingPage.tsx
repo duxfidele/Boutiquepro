@@ -148,7 +148,7 @@ export default function LandingPage({ onLoginClick }: LandingPageProps) {
               className="group w-full sm:w-auto inline-flex items-center justify-center gap-3 px-8 sm:px-10 py-4 sm:py-5 rounded-2xl bg-gradient-to-r from-indigo-600 via-indigo-700 to-violet-700 text-white font-title-md text-base sm:text-lg shadow-xl shadow-indigo-600/35 hover:shadow-2xl hover:shadow-indigo-600/50 hover:from-indigo-500 hover:to-violet-600 active:scale-[0.98] transition-all duration-300 font-extrabold relative overflow-hidden cursor-pointer"
             >
               <span className="relative z-10 flex items-center gap-2">
-                <span>Créer ma boutique gratuitement</span>
+                <span>Démarrer mes 14 jours gratuits</span>
                 <span className="material-symbols-outlined text-2xl transition-transform duration-300 group-hover:translate-x-1">
                   arrow_forward
                 </span>

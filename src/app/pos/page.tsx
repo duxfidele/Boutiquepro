@@ -217,6 +217,28 @@ export default function POSPage() {
     }
   };
 
+  const handleOpenWhatsAppReminder = (debt: Sale) => {
+    const cashier = getCashierInfo();
+    const remaining = debt.remainingAmount ?? (debt.total - (debt.amountPaid || 0));
+    const text = buildWhatsAppDebtReminderText(debt, state.settings, remaining, {
+      cashierName: cashier.name,
+      cashierPhone: cashier.phone,
+    });
+    const cleanPhone = formatWhatsAppNumber(debt.customerPhone);
+    if (cleanPhone) {
+      const url = getWhatsAppUrl(cleanPhone, text);
+      window.open(url, "_blank", "noopener,noreferrer");
+    } else {
+      setWhatsappModalData({
+        isOpen: true,
+        phone: debt.customerPhone || "",
+        customerName: debt.customerName || "",
+        messageText: text,
+        saleId: debt.id,
+      });
+    }
+  };
+
   const allCategories = ["Tous", ...state.categories.map(c => c.name)];
 
   const filteredProducts = useMemo(() => {
@@ -640,14 +662,26 @@ export default function POSPage() {
           </div>
 
           <div className="flex items-center gap-2 shrink-0">
-            <button
-              type="button"
-              onClick={() => setShowDueDebtsModal(true)}
-              className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs transition-all shadow-md flex items-center gap-2 cursor-pointer hover:shadow-emerald-600/25"
-            >
-              <MessageCircle className="h-4 w-4" />
-              <span>Relancer sur WhatsApp ({todayDueDebts.length})</span>
-            </button>
+            {todayDueDebts.length === 1 ? (
+              <button
+                type="button"
+                onClick={() => handleOpenWhatsAppReminder(todayDueDebts[0])}
+                className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs transition-all shadow-md flex items-center gap-2 cursor-pointer hover:shadow-emerald-600/25"
+                title="Envoyer directement le rappel WhatsApp"
+              >
+                <MessageCircle className="h-4 w-4" />
+                <span>Relancer {todayDueDebts[0].customerName || "le client"} sur WhatsApp</span>
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setShowDueDebtsModal(true)}
+                className="px-4 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs transition-all shadow-md flex items-center gap-2 cursor-pointer hover:shadow-amber-600/25"
+              >
+                <Clock className="h-4 w-4" />
+                <span>Consulter les relances ({todayDueDebts.length})</span>
+              </button>
+            )}
           </div>
         </div>
       )}
@@ -2342,31 +2376,12 @@ export default function POSPage() {
                     <div className="flex items-center gap-2 shrink-0 self-end sm:self-center">
                       <button
                         type="button"
-                        onClick={() => {
-                          const cashier = getCashierInfo();
-                          const text = buildWhatsAppDebtReminderText(debt, state.settings, remaining, {
-                            cashierName: cashier.name,
-                            cashierPhone: cashier.phone,
-                          });
-                          const cleanPhone = formatWhatsAppNumber(debt.customerPhone);
-                          if (cleanPhone) {
-                            const url = getWhatsAppUrl(cleanPhone, text);
-                            window.open(url, "_blank", "noopener,noreferrer");
-                          } else {
-                            setWhatsappModalData({
-                              isOpen: true,
-                              phone: debt.customerPhone || "",
-                              customerName: debt.customerName || "",
-                              messageText: text,
-                              saleId: debt.id,
-                            });
-                          }
-                        }}
+                        onClick={() => handleOpenWhatsAppReminder(debt)}
                         className="px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs flex items-center gap-1.5 transition-all shadow-sm cursor-pointer"
                         title="Envoyer un rappel de paiement sur WhatsApp"
                       >
                         <MessageCircle className="w-3.5 h-3.5" />
-                        <span>Relancer sur WhatsApp</span>
+                        <span>Envoyer le rappel WhatsApp</span>
                       </button>
                     </div>
                   </div>

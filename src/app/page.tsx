@@ -138,8 +138,15 @@ export default function Dashboard() {
       return true;
     };
 
-    // Ventes de la période sélectionnée
-    const filteredSales = (state.sales || []).filter((s) => {
+    // Ventes de la période sélectionnée avec déduplication stricte par ID unique
+    const uniqueSalesMap = new Map<string, any>();
+    (state.sales || []).forEach((s) => {
+      if (s && s.id && !uniqueSalesMap.has(s.id)) {
+        uniqueSalesMap.set(s.id, s);
+      }
+    });
+
+    const filteredSales = Array.from(uniqueSalesMap.values()).filter((s) => {
       if (!s || !s.createdAt) return false;
       const d = new Date(s.createdAt);
       if (isNaN(d.getTime())) return false;

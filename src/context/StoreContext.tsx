@@ -514,6 +514,11 @@ function storeReducer(state: StoreState, action: Action): StoreState {
     case "CLEAR_CART":
       return { ...state, cart: [] };
     case "COMPLETE_SALE": {
+      const saleExists = state.sales.some((s) => s.id === action.payload.id);
+      const updatedSales = saleExists
+        ? state.sales.map((s) => (s.id === action.payload.id ? { ...s, ...action.payload } : s))
+        : [action.payload, ...state.sales];
+
       const updatedProducts = state.products.map((p) => {
         const soldItem = action.payload.items.find((i) => i.productId === p.id);
         return soldItem ? { ...p, stock: Math.max(0, p.stock - soldItem.quantity) } : p;
@@ -523,7 +528,7 @@ function storeReducer(state: StoreState, action: Action): StoreState {
       let updatedCashSessions = state.cashSessions;
 
       if (updatedActiveSession) {
-        const stats = getSessionStats(updatedActiveSession, [action.payload, ...state.sales], updatedCashSessions);
+        const stats = getSessionStats(updatedActiveSession, updatedSales, updatedCashSessions);
         updatedActiveSession = {
           ...updatedActiveSession,
           totalCashSales: stats.cash,
@@ -541,7 +546,7 @@ function storeReducer(state: StoreState, action: Action): StoreState {
 
       return { 
         ...state, 
-        sales: [action.payload, ...state.sales], 
+        sales: updatedSales, 
         products: updatedProducts, 
         cart: [],
         activeCashSession: updatedActiveSession,
@@ -699,9 +704,15 @@ function storeReducer(state: StoreState, action: Action): StoreState {
         sales: state.sales.map((s) => (s.id === updated.id ? { ...s, ...updated } : s)),
       };
     }
-    case "LOAD_STATE":
+    case "LOAD_STATE": {
+      const rawSales = action.payload.sales || [];
+      const salesMap = new Map<string, Sale>();
+      rawSales.forEach((s: Sale) => {
+        if (s && s.id && !salesMap.has(s.id)) salesMap.set(s.id, s);
+      });
       return { 
         ...action.payload, 
+        sales: Array.from(salesMap.values()),
         products: [...(action.payload.products || [])].sort((a, b) => a.name.localeCompare(b.name)),
         categories: action.payload.categories || demoCategories,
         orders: action.payload.orders || [],
@@ -711,6 +722,7 @@ function storeReducer(state: StoreState, action: Action): StoreState {
         cashSessions: action.payload.cashSessions || [],
         activeCashSession: action.payload.activeCashSession || null
       };
+    }
     default:
       return state;
   }
@@ -2239,19 +2251,27 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   const lowStockProducts = (state.products || []).filter((p) => p && p.stock <= p.minStock);
 
-  const totalRevenue = (state.sales || []).reduce((sum, s) => sum + (s?.total || 0), 0);
+  const uniqueSales = useMemo(() => {
+    const map = new Map<string, Sale>();
+    (state.sales || []).forEach((s) => {
+      if (s && s.id && !map.has(s.id)) map.set(s.id, s);
+    });
+    return Array.from(map.values());
+  }, [state.sales]);
+
+  const totalRevenue = uniqueSales.reduce((sum, s) => sum + (s?.total || 0), 0);
 
   const today = new Date().toISOString().split("T")[0];
-  const todaySales = (state.sales || []).filter((s) => s?.createdAt && s.createdAt.startsWith(today));
+  const todaySales = uniqueSales.filter((s) => s?.createdAt && s.createdAt.startsWith(today));
   const todayRevenue = todaySales.reduce((sum, s) => sum + (s?.total || 0), 0);
-  const totalOrders = (state.sales || []).length;
+  const totalOrders = uniqueSales.length;
   const todayOrders = todaySales.length;
   const averageBasket = totalOrders > 0 ? totalRevenue / totalOrders : 0;
 
   const totalExpenses = state.expenses ? state.expenses.reduce((sum, e) => sum + Number(e.amount), 0) : 0;
   
   let totalCOGS = 0;
-  (state.sales || []).forEach(sale => {
+  uniqueSales.forEach(sale => {
     if (!sale) return;
     (sale.items || []).forEach(item => {
       if (!item) return;

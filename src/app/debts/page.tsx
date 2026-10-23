@@ -73,7 +73,13 @@ export default function DebtsPage() {
     formatPrice 
   } = useStore();
 
-  const sales = useMemo(() => state?.sales || [], [state?.sales]);
+  const sales = useMemo(() => {
+    const map = new Map<string, any>();
+    (state?.sales || []).forEach((s) => {
+      if (s && s.id && !map.has(s.id)) map.set(s.id, s);
+    });
+    return Array.from(map.values());
+  }, [state?.sales]);
 
   // Résolution propre de l'identité et du numéro du caissier/gérant
   const getCashierInfo = () => {
