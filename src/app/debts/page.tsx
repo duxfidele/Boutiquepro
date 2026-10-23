@@ -64,7 +64,7 @@ function getDebtPaid(debt?: Sale | null): number {
 }
 
 export default function DebtsPage() {
-  const { activeStore, canOfferCredit } = useAuth();
+  const { user, role, activeStore, canOfferCredit } = useAuth();
   const [subModalOpen, setSubModalOpen] = useState(false);
   const { 
     state, 
@@ -74,6 +74,48 @@ export default function DebtsPage() {
   } = useStore();
 
   const sales = useMemo(() => state?.sales || [], [state?.sales]);
+
+  // Résolution propre de l'identité et du numéro du caissier/gérant
+  const getCashierInfo = () => {
+    let name = "";
+    if (activeCashSession?.cashierName && activeCashSession.cashierName !== "Caissier" && !activeCashSession.cashierName.includes("@")) {
+      name = activeCashSession.cashierName;
+    } else if (user?.user_metadata?.full_name && user.user_metadata.full_name !== "Caissier") {
+      name = user.user_metadata.full_name;
+    } else if (user?.user_metadata?.name && user.user_metadata.name !== "Caissier") {
+      name = user.user_metadata.name;
+    } else if (typeof window !== "undefined" && localStorage.getItem("cashier_name")) {
+      name = localStorage.getItem("cashier_name") || "";
+    } else if (user?.email) {
+      const clean = user.email.split("@")[0];
+      name = clean.charAt(0).toUpperCase() + clean.slice(1);
+    } else if (role === "admin") {
+      name = state.settings?.managerName || "Gérant";
+    }
+
+    let phone = user?.user_metadata?.phone || user?.phone || "";
+    if (!phone && typeof window !== "undefined") {
+      phone = localStorage.getItem("cashier_phone") || "";
+    }
+
+    return { 
+      name: name.trim() || (role === "admin" ? "Gérant" : "Caissier"), 
+      phone: phone.trim() 
+    };
+  };
+
+  // Dettes échues ou à échéance aujourd'hui
+  const todayDueDebts = useMemo(() => {
+    const todayStr = new Date().toISOString().split("T")[0];
+    return sales.filter((s) => {
+      if (s.paymentMethod !== "credit") return false;
+      const remaining = s.remainingAmount ?? (s.total - (s.amountPaid || 0));
+      if (remaining <= 0) return false;
+      if (!s.dueDate) return false;
+      const dueStr = s.dueDate.split("T")[0];
+      return dueStr <= todayStr;
+    });
+  }, [sales]);
 
   // Tab navigation: "debts" (créances) | "recovery" (journal des recouvrements)
   const [activeTab, setActiveTab] = useState<"debts" | "recovery">("debts");
@@ -319,7 +361,11 @@ export default function DebtsPage() {
   const handleOpenWhatsAppReminder = (debt: Sale) => {
     const remaining = getDebtRemaining(debt);
     const storeSettings = activeStore ? { ...state.settings, name: activeStore.name } : state.settings;
-    const text = buildWhatsAppDebtReminderText(debt, storeSettings, remaining);
+    const cashier = getCashierInfo();
+    const text = buildWhatsAppDebtReminderText(debt, storeSettings, remaining, {
+      cashierName: cashier.name,
+      cashierPhone: cashier.phone,
+    });
     const cleanPhone = formatWhatsAppNumber(debt.customerPhone);
 
     if (cleanPhone) {
@@ -524,6 +570,44 @@ export default function DebtsPage() {
               </div>
             </div>
           </div>
+
+          {/* Bannière d'alerte proactive : Dettes à échéance aujourd'hui ou en retard */}
+          {todayDueDebts.length > 0 && (
+            <div className="p-4 rounded-2xl bg-amber-500/10 border-2 border-amber-500/30 flex flex-col sm:flex-row sm:items-center justify-between gap-3 animate-fade-in shadow-xs">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-amber-500/20 text-amber-600 dark:text-amber-400 flex items-center justify-center shrink-0">
+                  <Clock className="w-5 h-5 animate-pulse" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-black text-foreground uppercase tracking-wider">
+                      Échéances de dettes du jour ({todayDueDebts.length})
+                    </span>
+                    <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-amber-500 text-white">
+                      Règlements attendus
+                    </span>
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    {todayDueDebts.map(d => d.customerName || "Client").slice(0, 3).join(", ")}
+                    {todayDueDebts.length > 3 ? ` et ${todayDueDebts.length - 3} autre(s)` : ""}
+                    {" — "}
+                    Montant total à recouvrer : <strong className="text-foreground">{formatPrice(todayDueDebts.reduce((sum, d) => sum + getDebtRemaining(d), 0))}</strong>
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setStatusFilter("overdue")}
+                  className="px-3.5 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold transition-all shadow-xs flex items-center gap-1.5 cursor-pointer"
+                >
+                  <Filter className="w-3.5 h-3.5" />
+                  <span>Filtrer les échéances ({todayDueDebts.length})</span>
+                </button>
+              </div>
+            </div>
+          )}
 
           {/* Search & Filters */}
           <div className="glass-card p-4 rounded-2xl flex flex-col md:flex-row gap-4 items-center justify-between">

@@ -143,7 +143,8 @@ export function buildWhatsAppReceiptText(
 export function buildWhatsAppDebtReminderText(
   debt: Sale,
   settings?: StoreSettings | null,
-  remainingAmount?: number
+  remainingAmount?: number,
+  cashierOpt?: string | WhatsAppCashierOptions
 ): string {
   const storeName = settings?.name || "Notre Boutique";
   const currency = settings?.currency || "FCFA";
@@ -154,6 +155,12 @@ export function buildWhatsAppDebtReminderText(
   const dateStr = new Date(debt.createdAt).toLocaleDateString("fr-FR");
   const clientName = debt.customerName || "cher(e) client(e)";
   const ticketRef = `BTQ-${debt.id.slice(0, 8).toUpperCase()}`;
+
+  const cashierName = typeof cashierOpt === "string" ? cashierOpt : cashierOpt?.cashierName;
+  const cashierPhone = typeof cashierOpt === "object" ? cashierOpt?.cashierPhone : undefined;
+
+  // Priorité absolue au numéro enregistré du caissier
+  const contactPhone = cashierPhone || settings?.phone;
 
   let msg = `Bonjour *${clientName}*,\n\n`;
   msg += `Nous vous remercions pour votre confiance auprès de *${storeName}*.\n\n`;
@@ -176,10 +183,13 @@ export function buildWhatsAppDebtReminderText(
   }
 
   msg += `\nMerci de bien vouloir nous contacter ou passer à la boutique pour régulariser votre compte.\n`;
-  if (settings?.phone) {
-    msg += `Contact Boutique : ${settings.phone}\n`;
+  if (contactPhone) {
+    msg += `Vous pouvez me joindre directement au : ${contactPhone}\n`;
   }
   msg += `\nExcellente journée à vous !\n`;
+  if (cashierName && cashierName !== "Caissier" && cashierName !== "Gérant") {
+    msg += `${cashierName} • `;
+  }
   msg += `_${storeName}_`;
 
   return msg;
