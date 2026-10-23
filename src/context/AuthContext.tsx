@@ -10,6 +10,13 @@ import {
   normalizeTier,
   getTierLimits,
 } from "@/lib/subscriptionPlans";
+import {
+  ModuleKey,
+  ModuleStatus,
+  resolveModuleStatus,
+  DEFAULT_ENABLED_MODULES,
+  StoreSector,
+} from "@/types/modules";
 
 export interface StoreSubscription {
   plan: string;
@@ -42,6 +49,12 @@ interface AuthContextType {
   canUseAdvancedAnalytics: boolean;
   canManageTeam: boolean;
   hasMultiStore: boolean;
+  // Système de modules
+  enabledModules: ModuleKey[];
+  businessSector: StoreSector | null;
+  getModuleStatus: (moduleKey: ModuleKey) => ModuleStatus;
+  isModuleActive: (moduleKey: ModuleKey) => boolean;
+  updateStoreModules: (newModules: ModuleKey[], newSector?: StoreSector | null) => Promise<{ success: boolean; error?: string }>;
 }
 
 export const computeSubscription = (store: any, adminSub?: any): StoreSubscription | null => {
@@ -170,6 +183,9 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       try {
         localStorage.setItem("activeStoreId", store.id);
         localStorage.setItem("activeStoreObj", JSON.stringify(store));
+        if (store.enabled_modules && Array.isArray(store.enabled_modules)) {
+          localStorage.setItem(`store_modules_${store.id}`, JSON.stringify(store.enabled_modules));
+        }
       } catch {}
     }
   };
@@ -269,7 +285,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
       const { data } = await supabase
         .from("store_members")
-        .select("role, store_id, stores ( id, name, created_at, owner_id, subscription_plan, subscription_status, subscription_ends_at )")
+        .select("role, store_id, stores ( id, name, created_at, owner_id, subscription_plan, subscription_status, subscription_ends_at, enabled_modules, business_sector )")
         .eq("user_id", userId);
 
       // C. Si l'utilisateur est un caissier, il hérite automatiquement de l'abonnement du propriétaire de sa boutique
@@ -301,6 +317,15 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
               ? new Date(new Date(st.created_at).getTime() + 14 * 24 * 60 * 60 * 1000).toISOString()
               : null;
 
+            let cachedModules: string[] | null = null;
+            if (typeof window !== "undefined" && (st?.id || d.store_id)) {
+              try {
+                const raw = localStorage.getItem(`store_modules_${st?.id || d.store_id}`);
+                if (raw) cachedModules = JSON.parse(raw);
+              } catch {}
+            }
+            const finalModules = st?.enabled_modules || cachedModules || DEFAULT_ENABLED_MODULES;
+
             return {
               role: d.role,
               store_id: d.store_id,
@@ -310,6 +335,8 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
               subscription_plan: adminSub?.plan_tier || st?.subscription_plan || "TRIAL",
               subscription_status: adminSub?.status || st?.subscription_status || "trial",
               subscription_ends_at: (adminSub?.status === 'active' ? adminSub?.current_period_ends_at : (adminSub?.trial_ends_at || adminSub?.current_period_ends_at)) || st?.subscription_ends_at || fallbackEndsAt,
+              enabled_modules: finalModules,
+              business_sector: st?.business_sector || null,
             };
           })
           .filter((d: any) => d.id);
@@ -367,6 +394,9 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
             localStorage.setItem("cachedStores", JSON.stringify(cashierStores));
             localStorage.setItem("activeStoreObj", JSON.stringify(selected));
             localStorage.setItem("activeStoreId", selected.id);
+            if (selected?.enabled_modules) {
+              localStorage.setItem(`store_modules_${selected.id}`, JSON.stringify(selected.enabled_modules));
+            }
           } catch {}
           return;
         }
@@ -387,6 +417,9 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         try {
           localStorage.setItem("activeStoreId", selected.id);
           localStorage.setItem("activeStoreObj", JSON.stringify(selected));
+          if (selected?.enabled_modules) {
+            localStorage.setItem(`store_modules_${selected.id}`, JSON.stringify(selected.enabled_modules));
+          }
         } catch {}
 
         setActiveStoreState(selected);
@@ -565,6 +598,77 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const currentTier = subscription?.tier || "PRO";
   const isExpired = Boolean(subscription?.isExpired);
 
+  const effectiveEnabledModules: ModuleKey[] = React.useMemo(() => {
+    if (activeStore?.enabled_modules && Array.isArray(activeStore.enabled_modules) && activeStore.enabled_modules.length > 0) {
+      return activeStore.enabled_modules;
+    }
+    if (typeof window !== "undefined" && activeStore?.id) {
+      try {
+        const raw = localStorage.getItem(`store_modules_${activeStore.id}`);
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        }
+      } catch {}
+    }
+    return DEFAULT_ENABLED_MODULES;
+  }, [activeStore]);
+
+  const getModuleStatus = React.useCallback((moduleKey: ModuleKey): ModuleStatus => {
+    return resolveModuleStatus(moduleKey, currentTier, effectiveEnabledModules);
+  }, [currentTier, effectiveEnabledModules]);
+
+  const isModuleActive = React.useCallback((moduleKey: ModuleKey): boolean => {
+    return getModuleStatus(moduleKey) === 'available';
+  }, [getModuleStatus]);
+
+  const updateStoreModules = async (
+    newModules: ModuleKey[],
+    newSector?: StoreSector | null
+  ): Promise<{ success: boolean; error?: string }> => {
+    if (!activeStore?.id || role !== "admin") {
+      return { success: false, error: "Action réservée à l'administrateur de la boutique" };
+    }
+
+    try {
+      const updates: any = {
+        enabled_modules: newModules,
+      };
+      if (newSector !== undefined) {
+        updates.business_sector = newSector;
+      }
+
+      const { error } = await supabase
+        .from("stores")
+        .update(updates)
+        .eq("id", activeStore.id);
+
+      if (error) throw error;
+
+      const updatedStore = {
+        ...activeStore,
+        enabled_modules: newModules,
+        ...(newSector !== undefined ? { business_sector: newSector } : {}),
+      };
+
+      handleSetActiveStore(updatedStore);
+      setStores((prev) =>
+        prev.map((s) => (s.id === activeStore.id ? updatedStore : s))
+      );
+
+      if (typeof window !== "undefined") {
+        try {
+          localStorage.setItem(`store_modules_${activeStore.id}`, JSON.stringify(newModules));
+        } catch {}
+      }
+
+      return { success: true };
+    } catch (err: any) {
+      console.error("Erreur mise à jour modules:", err);
+      return { success: false, error: err.message || "Erreur lors de l'enregistrement" };
+    }
+  };
+
   return (
     <AuthContext.Provider
       value={{
@@ -586,6 +690,11 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         canUseAdvancedAnalytics: currentLimits.canUseAdvancedAnalytics && !isExpired,
         canManageTeam: currentLimits.canManageTeam && !isExpired,
         hasMultiStore: currentLimits.hasMultiStore && !isExpired,
+        enabledModules: effectiveEnabledModules,
+        businessSector: activeStore?.business_sector || null,
+        getModuleStatus,
+        isModuleActive,
+        updateStoreModules,
       }}
     >
       {children}

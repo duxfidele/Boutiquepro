@@ -5,7 +5,8 @@ import React, { useState, useEffect } from "react";
 import { useStore } from "@/context/StoreContext";
 import { useAuth } from "@/context/AuthContext";
 import { supabase } from "@/lib/supabase";
-import { Save, Sparkles, Trash2, Image as ImageIcon, CreditCard, Store, DollarSign, Percent, MapPin, Mail, Phone, Loader2, User } from "lucide-react";
+import Link from "next/link";
+import { Save, Sparkles, Trash2, Image as ImageIcon, CreditCard, Store, DollarSign, Percent, MapPin, Mail, Phone, Loader2, User, Layers, ArrowRight } from "lucide-react";
 import { useRouter } from "next/navigation";
 
 export default function SettingsPage() {
@@ -151,6 +152,28 @@ export default function SettingsPage() {
           Personnalisez votre espace comme dans un vrai SaaS.
         </p>
       </div>
+
+      {/* Tuile d'accès aux Modules de la boutique */}
+      <Link
+        href="/settings/modules"
+        className="group flex items-center justify-between p-4 rounded-2xl border border-primary/30 bg-primary/5 hover:bg-primary/10 transition-all shadow-xs"
+      >
+        <div className="flex items-center gap-3.5">
+          <div className="p-2.5 rounded-xl bg-primary text-white shadow-xs">
+            <Layers className="w-5 h-5" />
+          </div>
+          <div>
+            <h3 className="text-sm font-bold text-foreground group-hover:text-primary transition-colors flex items-center gap-2">
+              <span>Modules & Options de la boutique</span>
+              <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded-full bg-primary/20 text-primary">Nouveau</span>
+            </h3>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              Activer ou masquer les modules (dettes, factures, inventaires, etc.)
+            </p>
+          </div>
+        </div>
+        <ArrowRight className="w-5 h-5 text-muted-foreground group-hover:text-primary group-hover:translate-x-1 transition-all" />
+      </Link>
 
       <div className="bg-card border border-border/40 rounded-2xl p-6 space-y-6">
         {/* Nom de la boutique */}

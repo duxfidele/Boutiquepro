@@ -55,7 +55,7 @@ const paymentLabels: Record<string, string> = {
 };
 
 export default function Dashboard() {
-  const { role, activeStore } = useAuth();
+  const { role, activeStore, isModuleActive } = useAuth();
   const router = useRouter();
 
   const {
@@ -403,7 +403,13 @@ export default function Dashboard() {
     }
   ];
 
-  const kpis = role === 'cashier' ? cashierKpis : adminKpis;
+  const rawKpis = role === 'cashier' ? cashierKpis : adminKpis;
+  const kpis = rawKpis.filter((kpi) => {
+    if ((kpi.label.includes("Créances") || kpi.label.includes("Crédits accordés")) && !isModuleActive("debts")) {
+      return false;
+    }
+    return true;
+  });
 
   // Weekly sales chart data : Semaine calendaire stricte du Lundi au Dimanche (remise à 0 le lundi)
   const weekDays = ["Lun", "Mar", "Mer", "Jeu", "Ven", "Sam", "Dim"];
@@ -471,10 +477,12 @@ export default function Dashboard() {
           />
 
           <div className="flex gap-2">
-            <Link href="/debts" className="flex items-center gap-2 rounded-xl border border-amber-500/40 bg-amber-500/10 text-amber-500 px-3.5 py-2 text-sm font-semibold hover:bg-amber-500/20 transition-colors">
-              <BookOpen className="h-4 w-4" />
-              Carnet de Dettes ({unpaidDebts.length})
-            </Link>
+            {isModuleActive("debts") && (
+              <Link href="/debts" className="flex items-center gap-2 rounded-xl border border-amber-500/40 bg-amber-500/10 text-amber-500 px-3.5 py-2 text-sm font-semibold hover:bg-amber-500/20 transition-colors">
+                <BookOpen className="h-4 w-4" />
+                Carnet de Dettes ({unpaidDebts.length})
+              </Link>
+            )}
             <Link href="/pos" className="flex items-center gap-2 rounded-xl bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground hover:opacity-90 transition-opacity shadow-sm">
               <ShoppingCart className="h-4 w-4" />
               Nouvelle vente
@@ -844,9 +852,11 @@ export default function Dashboard() {
                 {periodStats.filteredSales.length} opération(s) enregistrée(s)
               </p>
             </div>
-            <Link href="/debts" className="text-xs text-primary hover:underline font-medium">
-              Voir carnet de dettes →
-            </Link>
+            {isModuleActive("debts") && (
+              <Link href="/debts" className="text-xs text-primary hover:underline font-medium">
+                Voir carnet de dettes →
+              </Link>
+            )}
           </div>
           <div className="space-y-3">
             {periodStats.filteredSales.length === 0 ? (
@@ -907,11 +917,13 @@ export default function Dashboard() {
             <h2 className="text-base font-semibold mb-4">Actions rapides</h2>
             <div className="grid grid-cols-2 gap-3">
               {[
-                { href: "/pos", label: "Caisse POS", icon: ShoppingCart, color: "bg-primary/10 text-primary hover:bg-primary/20" },
-                { href: "/debts", label: "Recouvrement", icon: BookOpen, color: "bg-amber-500/10 text-amber-500 hover:bg-amber-500/20" },
-                { href: "/products", label: "Produits", icon: Package, color: "bg-accent/10 text-accent hover:bg-accent/20" },
-                { href: "/analytics", label: "Analytique", icon: BarChart3, color: "bg-chart-3/15 text-chart-3 hover:bg-chart-3/25" },
-              ].map((action) => {
+                { href: "/pos", label: "Caisse POS", icon: ShoppingCart, color: "bg-primary/10 text-primary hover:bg-primary/20", moduleKey: "core" as const },
+                { href: "/debts", label: "Recouvrement", icon: BookOpen, color: "bg-amber-500/10 text-amber-500 hover:bg-amber-500/20", moduleKey: "debts" as const },
+                { href: "/products", label: "Produits", icon: Package, color: "bg-accent/10 text-accent hover:bg-accent/20", moduleKey: "core" as const },
+                { href: "/analytics", label: "Analytique", icon: BarChart3, color: "bg-chart-3/15 text-chart-3 hover:bg-chart-3/25", moduleKey: "analytics" as const },
+              ]
+                .filter((action) => isModuleActive(action.moduleKey))
+                .map((action) => {
                 const Icon = action.icon;
                 return (
                   <Link

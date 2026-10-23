@@ -8,6 +8,7 @@ import { useAuth } from "@/context/AuthContext";
 import { supabase } from "@/lib/supabase";
 import SubscriptionModal from "@/components/subscription/SubscriptionModal";
 import { SubscriptionTier } from "@/lib/subscriptionPlans";
+import { ModuleKey } from "@/types/modules";
 import {
   LogOut,
   BookOpen,
@@ -30,18 +31,25 @@ import {
   Lock,
 } from "lucide-react";
 
-const navItems = [
-  { href: "/", label: "Tableau de bord", icon: LayoutDashboard, adminOnly: false },
-  { href: "/pos", label: "Point de Vente", icon: ShoppingCart, adminOnly: false },
-  { href: "/debts", label: "Carnet de Dettes", icon: BookOpen, adminOnly: false, proFeature: true },
-  { href: "/products", label: "Produits & Stock", icon: Package, adminOnly: false },
-  { href: "/inventory", label: "Inventaire", icon: ClipboardList, adminOnly: true, proFeature: true },
-  { href: "/expenses", label: "Dépenses", icon: Receipt, adminOnly: true },
-  { href: "/analytics", label: "Analytique", icon: BarChart3, adminOnly: true, proFeature: true },
-  { href: "/orders", label: "Commandes", icon: Truck, adminOnly: true, proFeature: true },
-  { href: "/team", label: "Mon Équipe", icon: Users, adminOnly: true, proFeature: true },
-  { href: "/settings", label: "Paramètres", icon: Settings, adminOnly: true },
-  { href: "/support", label: "Aide & Support", icon: HelpCircle, adminOnly: false },
+const navItems: {
+  href: string;
+  label: string;
+  icon: any;
+  adminOnly: boolean;
+  proFeature?: boolean;
+  moduleKey: ModuleKey;
+}[] = [
+  { href: "/", label: "Tableau de bord", icon: LayoutDashboard, adminOnly: false, moduleKey: "core" },
+  { href: "/pos", label: "Point de Vente", icon: ShoppingCart, adminOnly: false, moduleKey: "core" },
+  { href: "/debts", label: "Carnet de Dettes", icon: BookOpen, adminOnly: false, proFeature: true, moduleKey: "debts" },
+  { href: "/products", label: "Produits & Stock", icon: Package, adminOnly: false, moduleKey: "core" },
+  { href: "/inventory", label: "Inventaire", icon: ClipboardList, adminOnly: true, proFeature: true, moduleKey: "inventory" },
+  { href: "/expenses", label: "Dépenses", icon: Receipt, adminOnly: true, moduleKey: "expenses" },
+  { href: "/analytics", label: "Analytique", icon: BarChart3, adminOnly: true, proFeature: true, moduleKey: "analytics" },
+  { href: "/orders", label: "Commandes", icon: Truck, adminOnly: true, proFeature: true, moduleKey: "orders" },
+  { href: "/team", label: "Mon Équipe", icon: Users, adminOnly: true, proFeature: true, moduleKey: "team" },
+  { href: "/settings", label: "Paramètres", icon: Settings, adminOnly: true, moduleKey: "core" },
+  { href: "/support", label: "Aide & Support", icon: HelpCircle, adminOnly: false, moduleKey: "core" },
 ];
 
 export default function Sidebar({ isOpen, onClose }: { isOpen?: boolean; onClose?: () => void }) {
@@ -64,6 +72,7 @@ export default function Sidebar({ isOpen, onClose }: { isOpen?: boolean; onClose
     canUseAdvancedAnalytics,
     canManageTeam,
     hasMultiStore,
+    getModuleStatus,
   } = useAuth();
   const [cashierName, setCashierName] = useState<string | null>(null);
 
@@ -185,6 +194,14 @@ export default function Sidebar({ isOpen, onClose }: { isOpen?: boolean; onClose
             {navItems
               .filter((item) => !item.adminOnly || role === "admin")
               .map((item) => {
+                // Vérification du statut du module (3 états : available, locked, disabled)
+                const moduleStatus = getModuleStatus ? getModuleStatus(item.moduleKey) : 'available';
+
+                // Si désactivé par le gérant : masqué complètement du menu
+                if (moduleStatus === 'disabled') {
+                  return null;
+                }
+
                 // Role based filtering : le caissier a accès à son tableau de bord, à la caisse, aux produits et au support
                 if (role === "cashier" && !["/", "/pos", "/products", "/debts", "/support"].includes(item.href)) {
                   return null;
@@ -198,8 +215,8 @@ export default function Sidebar({ isOpen, onClose }: { isOpen?: boolean; onClose
                 const badgeCount = isProductsBadge ? lowStockProducts?.length || 0 : isDebtsBadge ? unpaidDebts?.length || 0 : 0;
                 const badgeColor = isDebtsBadge ? "bg-amber-500" : "bg-destructive";
 
-                // Vérification du verrouillage Pro
-                let isLockedForUser = false;
+                // Vérification du verrouillage Pro / Formule (3ème état : locked par la formule)
+                let isLockedForUser = moduleStatus === 'locked';
                 if (item.href === "/debts" && !canOfferCredit) isLockedForUser = true;
                 if (item.href === "/inventory" && !canUseInventory) isLockedForUser = true;
                 if (item.href === "/orders" && !canUseManualOrders) isLockedForUser = true;

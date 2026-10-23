@@ -12,13 +12,14 @@ import MobileBottomNav from "@/components/layout/MobileBottomNav";
 import SubscriptionModal from "@/components/subscription/SubscriptionModal";
 import { Loader2, Lock, LogOut, Sparkles } from "lucide-react";
 import { usePathname, useRouter } from "next/navigation";
+import { ModuleKey } from "@/types/modules";
 
 export default function AppWrapper({ children }: { children: React.ReactNode }) {
   const [showAuth, setShowAuth] = useState(false);
   const [isSignUpMode, setIsSignUpMode] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
-  const { user, role, loading, subscription, signOut } = useAuth();
+  const { user, role, loading, subscription, signOut, getModuleStatus } = useAuth();
   const pathname = usePathname();
   const router = useRouter();
 
@@ -28,15 +29,35 @@ export default function AppWrapper({ children }: { children: React.ReactNode }) 
       const allowedPaths = ["/", "/pos", "/debts", "/products", "/customers", "/support", "/profile"];
       if (!allowedPaths.includes(pathname)) {
         router.replace("/pos");
+        return;
       } else if (pathname === "/") {
         // Rediriger automatiquement le caissier vers le Point de Vente (/pos) à la connexion initiale
         const hasSeenDashboard = typeof window !== "undefined" && sessionStorage.getItem("cashier_viewed_dashboard");
         if (!hasSeenDashboard) {
           router.replace("/pos");
+          return;
         }
       }
     }
-  }, [role, pathname, router]);
+
+    // Protection d'accès direct par URL à un module désactivé par le gérant
+    const routeToModuleMap: Record<string, ModuleKey> = {
+      "/debts": "debts",
+      "/inventory": "inventory",
+      "/orders": "orders",
+      "/expenses": "expenses",
+      "/analytics": "analytics",
+      "/team": "team",
+    };
+
+    const targetModule = routeToModuleMap[pathname];
+    if (targetModule && getModuleStatus) {
+      const status = getModuleStatus(targetModule);
+      if (status === "disabled") {
+        router.replace("/");
+      }
+    }
+  }, [role, pathname, router, getModuleStatus]);
 
   // 1. Route publique : Réinitialisation de mot de passe (sans contrôle d'accès)
   if (pathname === "/reset-password") {

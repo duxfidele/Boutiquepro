@@ -68,7 +68,7 @@ export default function POSPage() {
     clearOfflineSalesQueue,
     isRealtimeActive
   } = useStore();
-  const { user, role, subscription, canOfferCredit, canPrintReceipts, signOut } = useAuth();
+  const { user, role, subscription, canOfferCredit, canPrintReceipts, signOut, isModuleActive, getModuleStatus } = useAuth();
   const [subModalOpen, setSubModalOpen] = useState(false);
   // Profil du caissier chargé depuis la base de données
   const [cashierProfile, setCashierProfile] = useState<{ full_name?: string; phone?: string } | null>(null);
@@ -984,7 +984,9 @@ export default function POSPage() {
 
               {/* Modes de paiement compacts */}
               <div className="grid grid-cols-4 gap-1.5">
-                {paymentMethods.map((pm) => {
+                {paymentMethods
+                  .filter((pm) => pm.id !== "credit" || (getModuleStatus ? getModuleStatus("debts") !== "disabled" : true))
+                  .map((pm) => {
                   const Icon = pm.icon;
                   const isCreditLocked = pm.id === "credit" && !canOfferCredit;
                   return (
@@ -1159,13 +1161,15 @@ export default function POSPage() {
               <Receipt className="h-3.5 w-3.5" />
               Reçu
             </button>
-            <button
-              onClick={() => { setShowInvoice(true); setShowSuccess(false); }}
-              className="flex items-center gap-1.5 rounded-lg bg-primary/20 px-3 py-1.5 text-xs font-medium text-primary hover:bg-primary/30 transition-colors"
-            >
-              <FileText className="h-3.5 w-3.5" />
-              Facture
-            </button>
+            {(!isModuleActive || isModuleActive("receipts_invoices")) && (
+              <button
+                onClick={() => { setShowInvoice(true); setShowSuccess(false); }}
+                className="flex items-center gap-1.5 rounded-lg bg-primary/20 px-3 py-1.5 text-xs font-medium text-primary hover:bg-primary/30 transition-colors"
+              >
+                <FileText className="h-3.5 w-3.5" />
+                Facture
+              </button>
+            )}
             <button onClick={() => setShowSuccess(false)} className="p-1 shrink-0">
               <X className="h-4 w-4 text-muted-foreground" />
             </button>
