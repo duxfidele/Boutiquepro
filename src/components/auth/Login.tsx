@@ -136,7 +136,7 @@ export default function Login({
       }
 
       // Supporte l'email direct (admin/caissier) OU l'identifiant caissier (ex: caisse1)
-      const cleanEmail = cleanInput.includes("@")
+      let cleanEmail = cleanInput.includes("@")
         ? cleanInput
         : `${cleanInput}@caisse.maboutique.app`;
 
@@ -144,10 +144,33 @@ export default function Login({
         sessionStorage.setItem("auth_portal_mode", portalMode);
       }
 
-      const { data: authData, error } = await supabase.auth.signInWithPassword({
+      let { data: authData, error } = await supabase.auth.signInWithPassword({
         email: cleanEmail,
         password,
       });
+
+      // En mode caissier : si échec, l'utilisateur a peut-être saisi son prénom/nom (ex: "Pascaline") au lieu de l'identifiant (ex: "caisse2")
+      if (error && portalMode === "cashier") {
+        try {
+          const { data: profileMatch } = await supabase
+            .from("profiles")
+            .select("email")
+            .ilike("full_name", `%${cleanInput}%`)
+            .maybeSingle();
+
+          if (profileMatch?.email && profileMatch.email !== cleanEmail) {
+            const retryRes = await supabase.auth.signInWithPassword({
+              email: profileMatch.email,
+              password,
+            });
+            if (!retryRes.error) {
+              authData = retryRes.data;
+              error = null;
+              cleanEmail = profileMatch.email;
+            }
+          }
+        } catch {}
+      }
 
       if (error) {
         if (error.message?.includes("Email not confirmed")) {
