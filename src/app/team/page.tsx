@@ -248,16 +248,11 @@ export default function TeamPage() {
       return;
     }
 
-    const confirmText = window.prompt(
-      `⚠️ ATTENTION : La suppression de la boutique "${storeNameToDelete}" est IRRÉVERSIBLE !\n\nToutes ses ventes, ses produits, ses stocks et ses accès associés seront définitivement effacés.\n\nPour confirmer, veuillez taper exactement : SUPPRIMER`
+    const confirmDelete = window.confirm(
+      `⚠️ ATTENTION : La suppression de la boutique "${storeNameToDelete}" est IRRÉVERSIBLE !\n\nToutes ses ventes, ses produits, ses stocks et ses accès associés seront définitivement effacés.\n\nVoulez-vous vraiment confirmer la suppression de cette boutique ?`
     );
 
-    if (confirmText !== "SUPPRIMER") {
-      if (confirmText !== null) {
-        alert("Suppression annulée : vous n'avez pas saisi 'SUPPRIMER'.");
-      }
-      return;
-    }
+    if (!confirmDelete) return;
 
     setSubmitting(true);
     setMessage(null);

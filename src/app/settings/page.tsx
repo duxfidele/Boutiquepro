@@ -82,13 +82,10 @@ export default function SettingsPage() {
       return;
     }
     const currentName = state.settings.name || activeStore?.name || "cette boutique";
-    const confirmText = window.prompt(
-      `⚠️ ATTENTION : La suppression définitive de la boutique "${currentName}" est IRRÉVERSIBLE !\n\nToutes les données (produits, stocks, ventes, caisses) seront supprimées.\n\nPour confirmer, veuillez taper : SUPPRIMER`
+    const confirmDelete = window.confirm(
+      `⚠️ ATTENTION : La suppression définitive de la boutique "${currentName}" est IRRÉVERSIBLE !\n\nToutes ses données (produits, stocks, ventes, caisses) seront supprimées.\n\nVoulez-vous vraiment confirmer la suppression de cette boutique ?`
     );
-    if (confirmText !== "SUPPRIMER") {
-      if (confirmText !== null) alert("Suppression annulée.");
-      return;
-    }
+    if (!confirmDelete) return;
     try {
       const { data, error } = await supabase.rpc("delete_store", { p_store_id: activeStore.id });
       if (error) throw error;

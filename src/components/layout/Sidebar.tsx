@@ -110,13 +110,10 @@ export default function Sidebar({ isOpen, onClose }: { isOpen?: boolean; onClose
       alert("Action impossible : Vous devez toujours conserver au moins une boutique active.");
       return;
     }
-    const confirmText = window.prompt(
-      `⚠️ ATTENTION : La suppression de la boutique "${storeNameToDelete}" est IRRÉVERSIBLE !\n\nToutes ses données (ventes, produits, stocks) seront définitivement effacées.\n\nPour confirmer, veuillez taper : SUPPRIMER`
+    const confirmDelete = window.confirm(
+      `⚠️ ATTENTION : La suppression de la boutique "${storeNameToDelete}" est IRRÉVERSIBLE !\n\nToutes ses données (ventes, produits, stocks) seront définitivement effacées.\n\nVoulez-vous vraiment confirmer la suppression de cette boutique ?`
     );
-    if (confirmText !== "SUPPRIMER") {
-      if (confirmText !== null) alert("Suppression annulée.");
-      return;
-    }
+    if (!confirmDelete) return;
     try {
       const { data, error } = await supabase.rpc("delete_store", { p_store_id: storeIdToDelete });
       if (error) throw error;
