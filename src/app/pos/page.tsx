@@ -36,10 +36,13 @@ import {
   RefreshCw,
   CloudOff,
   Zap,
+  MessageCircle,
 } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import SubscriptionModal from "@/components/subscription/SubscriptionModal";
 import { exportElementToPdf } from "@/lib/pdf";
+import { WhatsAppModal } from "@/components/ui/WhatsAppModal";
+import { buildWhatsAppReceiptText, getWhatsAppUrl, formatWhatsAppNumber } from "@/lib/whatsapp";
 
 const paymentMethods = [
   { id: "cash" as const, label: "Espèces", icon: Banknote, color: "bg-green-500/10 text-green-600 border-green-500/30" },
@@ -118,6 +121,46 @@ export default function POSPage() {
   const [isDownloadingReceipt, setIsDownloadingReceipt] = useState(false);
   const [isDownloadingInvoice, setIsDownloadingInvoice] = useState(false);
   const [isDownloadingRapportZ, setIsDownloadingRapportZ] = useState(false);
+
+  const [whatsappModalData, setWhatsappModalData] = useState<{
+    isOpen: boolean;
+    phone: string;
+    customerName: string;
+    messageText: string;
+    saleId?: string;
+  }>({
+    isOpen: false,
+    phone: "",
+    customerName: "",
+    messageText: "",
+  });
+
+  const handleOpenWhatsAppForSale = (sale: Sale) => {
+    const cashierName = role === "cashier" ? (user?.name || "Caissier") : (state.settings?.managerName || user?.name || "Vendeur");
+    const text = buildWhatsAppReceiptText(sale, state.settings, cashierName);
+    const cleanPhone = formatWhatsAppNumber(sale.customerPhone);
+    
+    if (cleanPhone) {
+      const url = getWhatsAppUrl(cleanPhone, text);
+      window.open(url, "_blank", "noopener,noreferrer");
+    } else {
+      setWhatsappModalData({
+        isOpen: true,
+        phone: sale.customerPhone || "",
+        customerName: sale.customerName || "",
+        messageText: text,
+        saleId: sale.id,
+      });
+    }
+  };
+
+  const handleWhatsAppPhoneUpdated = (newPhone: string) => {
+    if (whatsappModalData.saleId) {
+      if (lastSale && lastSale.id === whatsappModalData.saleId) {
+        setLastSale({ ...lastSale, customerPhone: newPhone });
+      }
+    }
+  };
 
   const allCategories = ["Tous", ...state.categories.map(c => c.name)];
 
@@ -962,6 +1005,14 @@ export default function POSPage() {
           </div>
           <div className="flex gap-2 ml-4">
             <button
+              onClick={() => handleOpenWhatsAppForSale(lastSale)}
+              className="flex items-center gap-1.5 rounded-lg bg-emerald-500/20 px-3 py-1.5 text-xs font-semibold text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/30 transition-colors"
+              title="Envoyer le ticket par WhatsApp"
+            >
+              <MessageCircle className="h-3.5 w-3.5" />
+              WhatsApp
+            </button>
+            <button
               onClick={() => { setShowReceipt(true); setShowSuccess(false); }}
               className="flex items-center gap-1.5 rounded-lg bg-accent/20 px-3 py-1.5 text-xs font-medium text-accent hover:bg-accent/30 transition-colors"
             >
@@ -1165,6 +1216,15 @@ export default function POSPage() {
                 className="flex-1 rounded-xl border border-gray-300 py-2.5 text-xs font-semibold text-gray-700 hover:bg-gray-100 transition-colors"
               >
                 Fermer
+              </button>
+              <button
+                type="button"
+                onClick={() => handleOpenWhatsAppForSale(lastSale)}
+                className="flex-1 flex items-center justify-center gap-1.5 rounded-xl bg-emerald-600 text-white py-2.5 text-xs font-bold hover:bg-emerald-700 transition-colors shadow-md"
+                title="Partager ce ticket sur WhatsApp"
+              >
+                <MessageCircle className="h-3.5 w-3.5" />
+                <span>WhatsApp</span>
               </button>
               <button
                 type="button"
@@ -1398,6 +1458,15 @@ export default function POSPage() {
                 className="flex-1 rounded-xl border border-gray-300 py-3 text-xs font-semibold text-gray-700 hover:bg-gray-100 transition-colors"
               >
                 Fermer
+              </button>
+              <button
+                type="button"
+                onClick={() => handleOpenWhatsAppForSale(lastSale)}
+                className="flex-[1.5] flex items-center justify-center gap-2 rounded-xl bg-emerald-600 text-white py-3 text-xs font-bold hover:bg-emerald-700 transition-colors shadow-md"
+                title="Partager cette facture sur WhatsApp"
+              >
+                <MessageCircle className="h-4 w-4" />
+                <span>WhatsApp</span>
               </button>
               <button
                 type="button"
@@ -2068,6 +2137,17 @@ export default function POSPage() {
         isOpen={subModalOpen}
         onClose={() => setSubModalOpen(false)}
         defaultPlan="PRO"
+      />
+
+      {/* Modal WhatsApp Saisie Rapide si numéro absent */}
+      <WhatsAppModal
+        isOpen={whatsappModalData.isOpen}
+        onClose={() => setWhatsappModalData(prev => ({ ...prev, isOpen: false }))}
+        title="Partager le ticket sur WhatsApp"
+        defaultPhone={whatsappModalData.phone}
+        customerName={whatsappModalData.customerName}
+        messageText={whatsappModalData.messageText}
+        onPhoneUpdated={handleWhatsAppPhoneUpdated}
       />
     </div>
   );

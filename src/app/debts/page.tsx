@@ -6,6 +6,13 @@ import Link from "next/link";
 import { useStore, Sale, DebtPayment } from "@/context/StoreContext";
 import { useAuth } from "@/context/AuthContext";
 import SubscriptionModal from "@/components/subscription/SubscriptionModal";
+import { WhatsAppModal } from "@/components/ui/WhatsAppModal";
+import {
+  buildWhatsAppDebtReminderText,
+  buildWhatsAppDebtPaymentReceiptText,
+  formatWhatsAppNumber,
+  getWhatsAppUrl,
+} from "@/lib/whatsapp";
 import { 
   BookOpen, 
   Search, 
@@ -92,6 +99,21 @@ export default function DebtsPage() {
   const receiptRef = useRef<HTMLDivElement>(null);
   const [isDownloadingReceipt, setIsDownloadingReceipt] = useState(false);
   const [paymentSuccess, setPaymentSuccess] = useState<string | null>(null);
+
+  const [whatsappModalData, setWhatsappModalData] = useState<{
+    isOpen: boolean;
+    phone: string;
+    customerName: string;
+    messageText: string;
+    title: string;
+    debtId?: string;
+  }>({
+    isOpen: false,
+    phone: "",
+    customerName: "",
+    messageText: "",
+    title: "Relancer sur WhatsApp",
+  });
 
   if (!canOfferCredit) {
     return (
@@ -294,48 +316,59 @@ export default function DebtsPage() {
     }
   };
 
-  // Formateur intelligent du numéro WhatsApp pour le Togo (+228 / 00228) et international
-  const formatWhatsAppNumber = (phone?: string) => {
-    if (!phone) return null;
-    let clean = phone.replace(/\D/g, "");
-    if (clean.startsWith("00")) clean = clean.substring(2);
-    // Au Togo, les numéros ont 8 chiffres (ex: 90/91/92/70...). On préfixe par l'indicatif Togo 228
-    if (clean.length === 8) clean = "228" + clean;
-    return clean;
-  };
-
-  // WhatsApp link generator for reminders
-  const generateWhatsAppReminder = (debt: Sale) => {
-    if (!debt.customerPhone) return null;
-    const cleanPhone = formatWhatsAppNumber(debt.customerPhone);
-    if (!cleanPhone) return null;
-    
+  const handleOpenWhatsAppReminder = (debt: Sale) => {
     const remaining = getDebtRemaining(debt);
-    const storeName = activeStore?.name || state.settings?.name || "Notre Boutique";
-    const msg = encodeURIComponent(
-      `Bonjour ${debt.customerName || "cher client"}, nous vous remercions pour votre confiance auprès de ${storeName}. ` +
-      `Sauf erreur de notre part, il reste un solde de ${remaining.toLocaleString("fr-FR")} FCFA sur votre achat (Réf: #${debt.id.slice(-6)}). ` +
-      `Merci de nous contacter pour votre règlement. Excellente journée !`
-    );
-    return `https://wa.me/${cleanPhone}?text=${msg}`;
+    const storeSettings = activeStore ? { ...state.settings, name: activeStore.name } : state.settings;
+    const text = buildWhatsAppDebtReminderText(debt, storeSettings, remaining);
+    const cleanPhone = formatWhatsAppNumber(debt.customerPhone);
+
+    if (cleanPhone) {
+      const url = getWhatsAppUrl(cleanPhone, text);
+      window.open(url, "_blank", "noopener,noreferrer");
+    } else {
+      setWhatsappModalData({
+        isOpen: true,
+        phone: debt.customerPhone || "",
+        customerName: debt.customerName || "",
+        messageText: text,
+        title: "Relancer le client sur WhatsApp",
+        debtId: debt.id,
+      });
+    }
   };
 
-  // WhatsApp link for recovery receipt confirmation
-  const generateWhatsAppReceiptMessage = (debt: Sale, payment: DebtPayment, rem: number) => {
-    if (!debt.customerPhone) return null;
-    const cleanPhone = formatWhatsAppNumber(debt.customerPhone);
-    if (!cleanPhone) return null;
-    
-    const storeName = activeStore?.name || state.settings?.name || "Notre Boutique";
-    const statusTxt = rem === 0 ? "Votre dette est désormais TOTALEMENT SOLDÉE. Félicitations !" : `Il vous reste un solde de ${rem.toLocaleString("fr-FR")} FCFA.`;
-    const msg = encodeURIComponent(
-      `Bonjour ${debt.customerName || "cher client"},\n\n` +
-      `Nous confirmons la bonne réception de votre versement de ${payment.amount.toLocaleString("fr-FR")} FCFA effectué le ${new Date(payment.paidAt).toLocaleDateString("fr-FR")} auprès de ${storeName}.\n\n` +
-      `Quittance N° #${payment.id.slice(-6)}\n` +
-      `${statusTxt}\n\n` +
-      `Merci pour votre fidélité et bonne journée !`
-    );
-    return `https://wa.me/${cleanPhone}?text=${msg}`;
+  const handleOpenWhatsAppPaymentReceipt = (receipt: { debt: Sale; payment: DebtPayment; newRemaining: number }) => {
+    const storeSettings = activeStore ? { ...state.settings, name: activeStore.name } : state.settings;
+    const text = buildWhatsAppDebtPaymentReceiptText(receipt.debt, receipt.payment, receipt.newRemaining, storeSettings);
+    const cleanPhone = formatWhatsAppNumber(receipt.debt.customerPhone);
+
+    if (cleanPhone) {
+      const url = getWhatsAppUrl(cleanPhone, text);
+      window.open(url, "_blank", "noopener,noreferrer");
+    } else {
+      setWhatsappModalData({
+        isOpen: true,
+        phone: receipt.debt.customerPhone || "",
+        customerName: receipt.debt.customerName || "",
+        messageText: text,
+        title: "Envoyer la quittance sur WhatsApp",
+        debtId: receipt.debt.id,
+      });
+    }
+  };
+
+  const handleWhatsAppPhoneUpdated = (newPhone: string) => {
+    if (whatsappModalData.debtId) {
+      if (selectedDebt && selectedDebt.id === whatsappModalData.debtId) {
+        setSelectedDebt({ ...selectedDebt, customerPhone: newPhone });
+      }
+      if (selectedReceipt && selectedReceipt.debt.id === whatsappModalData.debtId) {
+        setSelectedReceipt({
+          ...selectedReceipt,
+          debt: { ...selectedReceipt.debt, customerPhone: newPhone },
+        });
+      }
+    }
   };
 
   const handleDownloadReceipt = async () => {
@@ -603,7 +636,7 @@ export default function DebtsPage() {
                       const isFullyPaid = remaining <= 0;
                       const isPartial = paid > 0 && remaining > 0;
                       const isOverdue = remaining > 0 && debt.dueDate && new Date(debt.dueDate) < new Date();
-                      const waLink = generateWhatsAppReminder(debt);
+
                       const itemsDesc = (debt.items || []).map((i) => `${i.quantity}x ${i.productName}`).join(", ") || debt.notes || "Achat à crédit";
 
                       return (
@@ -683,17 +716,16 @@ export default function DebtsPage() {
 
                           <td className="py-3.5 px-4 text-right whitespace-nowrap">
                             <div className="flex items-center justify-end gap-1.5">
-                              {/* WhatsApp Reminder */}
-                              {waLink && remaining > 0 && (
-                                <a
-                                  href={waLink}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  title="Envoyer un rappel de paiement sur WhatsApp"
-                                  className="p-2 rounded-xl bg-emerald-500/10 text-emerald-500 hover:bg-emerald-500/20 border border-emerald-500/20 transition-colors inline-flex items-center justify-center"
+                              {/* WhatsApp Reminder Button */}
+                              {remaining > 0 && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleOpenWhatsAppReminder(debt)}
+                                  title={debt.customerPhone ? "Envoyer un rappel de paiement sur WhatsApp" : "Renseigner le numéro et relancer sur WhatsApp"}
+                                  className="p-2 rounded-xl bg-emerald-500/10 text-emerald-500 hover:bg-emerald-500/20 border border-emerald-500/20 transition-colors inline-flex items-center justify-center shadow-xs"
                                 >
                                   <MessageCircle className="w-4 h-4" />
-                                </a>
+                                </button>
                               )}
 
                               {/* Recouvrer / Consulter */}
@@ -904,17 +936,14 @@ export default function DebtsPage() {
                               </button>
 
                               {/* WhatsApp share */}
-                              {sale.customerPhone && (
-                                <a
-                                  href={generateWhatsAppReceiptMessage(sale, payment, remaining) || "#"}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="p-1.5 rounded-xl bg-emerald-500/10 text-emerald-500 hover:bg-emerald-500/20 transition-colors"
-                                  title="Partager la quittance sur WhatsApp"
-                                >
-                                  <MessageCircle className="w-3.5 h-3.5" />
-                                </a>
-                              )}
+                              <button
+                                type="button"
+                                onClick={() => handleOpenWhatsAppPaymentReceipt({ debt: sale, payment, newRemaining: remaining })}
+                                className="p-1.5 rounded-xl bg-emerald-500/10 text-emerald-500 hover:bg-emerald-500/20 transition-colors"
+                                title="Partager la quittance sur WhatsApp"
+                              >
+                                <MessageCircle className="w-3.5 h-3.5" />
+                              </button>
                             </div>
                           </td>
                         </tr>
@@ -1005,6 +1034,19 @@ export default function DebtsPage() {
                       {getDebtRemaining(selectedDebt).toLocaleString("fr-FR")} FCFA
                     </span>
                   </div>
+
+                  {getDebtRemaining(selectedDebt) > 0 && (
+                    <div className="pt-2">
+                      <button
+                        type="button"
+                        onClick={() => handleOpenWhatsAppReminder(selectedDebt)}
+                        className="w-full flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs transition-colors shadow-sm"
+                      >
+                        <MessageCircle className="w-4 h-4" />
+                        <span>Relancer le client sur WhatsApp</span>
+                      </button>
+                    </div>
+                  )}
 
                   {/* Bouton pour afficher et télécharger le reçu de cette vente à crédit */}
                   <div className="pt-2">
@@ -1352,17 +1394,14 @@ export default function DebtsPage() {
                 Imprimer le reçu (Ticket 80mm)
               </button>
 
-              {selectedReceipt.debt.customerPhone && (
-                <a
-                  href={generateWhatsAppReceiptMessage(selectedReceipt.debt, selectedReceipt.payment, selectedReceipt.newRemaining) || "#"}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="w-full py-2.5 rounded-xl bg-emerald-600 text-white font-bold text-xs hover:bg-emerald-700 transition-all flex items-center justify-center gap-2 shadow-md text-center"
-                >
-                  <MessageCircle className="w-4 h-4" />
-                  Envoyer la quittance sur WhatsApp
-                </a>
-              )}
+              <button
+                type="button"
+                onClick={() => handleOpenWhatsAppPaymentReceipt(selectedReceipt)}
+                className="w-full py-2.5 rounded-xl bg-emerald-600 text-white font-bold text-xs hover:bg-emerald-700 transition-all flex items-center justify-center gap-2 shadow-md text-center"
+              >
+                <MessageCircle className="w-4 h-4" />
+                Envoyer la quittance sur WhatsApp
+              </button>
 
               <button
                 type="button"

@@ -43,6 +43,7 @@ import {
   DateFilterOptions
 } from "@/lib/accountingExport";
 import { ProductAvatar } from "@/components/ui/ProductAvatar";
+import { formatWhatsAppNumber, getWhatsAppUrl } from "@/lib/whatsapp";
 import {
   DatePeriodFilter,
   PeriodType,
@@ -592,12 +593,9 @@ export default function AnalyticsPage() {
               ) : (
                 analytics.topDebtors.map((debtor) => {
                   const isOverdue = debtor.dueDate && new Date(debtor.dueDate) < new Date();
-                  const waRaw = debtor.phone ? debtor.phone.replace(/\D/g, "") : "";
-                   const waClean = waRaw ? (waRaw.startsWith("00") ? waRaw.substring(2) : (waRaw.length === 8 ? "228" + waRaw : waRaw)) : null;
-                  const waMsg = encodeURIComponent(
-                    `Bonjour ${debtor.name}, sauf erreur de notre part, il reste un solde de ${debtor.remaining.toLocaleString("fr-FR")} FCFA sur votre compte client auprès de ${state.settings.name || "BoutiquePro"}. Merci de nous contacter pour votre règlement.`
-                  );
-                  const waUrl = waClean ? `https://wa.me/${waClean}?text=${waMsg}` : null;
+                  const waClean = formatWhatsAppNumber(debtor.phone);
+                  const waMsg = `Bonjour ${debtor.name},\n\nSauf erreur de notre part, il reste un solde de ${debtor.remaining.toLocaleString("fr-FR")} FCFA sur votre compte client auprès de *${state.settings.name || "BoutiquePro"}*.\n\nMerci de bien vouloir nous contacter pour votre règlement. Excellente journée ! 🙏`;
+                  const waUrl = waClean ? getWhatsAppUrl(waClean, waMsg) : null;
 
                   return (
                     <div
