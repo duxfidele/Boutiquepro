@@ -299,7 +299,7 @@ export default function SubscriptionModal({
                 {defaultPlan !== "BUSINESS" && (
                   <div className="absolute -top-3 left-4 px-2.5 py-0.5 rounded-full bg-gradient-to-r from-emerald-600 to-teal-600 text-white text-[10px] font-black uppercase tracking-wider shadow-sm flex items-center gap-1">
                     <Sparkles className="w-3 h-3 text-amber-300" />
-                    <span>Recommandé</span>
+                    <span>⭐ RECOMMANDÉ</span>
                   </div>
                 )}
                 <div>
@@ -317,9 +317,19 @@ export default function SubscriptionModal({
                     <span>PRO</span>
                     <Zap className="w-4 h-4 text-emerald-500" />
                   </h4>
-                  <div className="text-2xl font-black text-on-surface mb-3">
-                    {isAnnual ? "50 000" : "5 000"}{" "}
-                    <span className="text-xs font-bold text-outline">FCFA / {isAnnual ? "an" : "mois"}</span>
+                  <div className="mb-3">
+                    <div className="flex items-center gap-1.5 mb-0.5">
+                      <span className="text-xs font-bold text-outline line-through opacity-75">
+                        {isAnnual ? "60 000" : "6 000"} FCFA
+                      </span>
+                      <span className="px-1.5 py-0.2 rounded-full bg-rose-500/10 text-rose-600 text-[9px] font-black uppercase border border-rose-500/20">
+                        {isAnnual ? "-10 000 F Réduction" : "-1 000 F Réduction"}
+                      </span>
+                    </div>
+                    <div className="text-2xl font-black text-on-surface">
+                      {isAnnual ? "50 000" : "5 000"}{" "}
+                      <span className="text-xs font-bold text-outline">FCFA / {isAnnual ? "an" : "mois"}</span>
+                    </div>
                   </div>
                   <ul className="space-y-2 text-xs text-on-surface-variant font-medium">
                     <li className="flex items-center gap-2 font-bold text-emerald-600 dark:text-emerald-400">
@@ -481,9 +491,14 @@ export default function SubscriptionModal({
           <div className="p-5 sm:p-6 border-t border-outline-variant/20 bg-surface-container-low/60 flex flex-col sm:flex-row items-center justify-between gap-4">
             <div className="flex items-center gap-4 w-full sm:w-auto justify-between sm:justify-start">
               <div>
-                <span className="text-xs text-outline font-medium flex items-center gap-1">
+                <span className="text-xs text-outline font-medium flex items-center gap-1.5">
                   <span>Montant total :</span>
                   <span className="text-[10px] px-1.5 py-0.2 rounded bg-emerald-500/10 text-emerald-600 font-bold uppercase">Sans frais cachés</span>
+                  {selectedTier === "PRO" && (
+                    <span className="text-[11px] font-bold text-rose-500 line-through">
+                      {isAnnual ? "60 000 FCFA" : "6 000 FCFA"}
+                    </span>
+                  )}
                 </span>
                 <div className="text-2xl font-black text-on-surface tracking-tight">{priceFormatted}</div>
               </div>

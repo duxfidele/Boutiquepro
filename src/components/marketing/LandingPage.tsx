@@ -274,7 +274,7 @@ export default function LandingPage({ onLoginClick }: LandingPageProps) {
               <div className="bg-surface-container-lowest p-8 rounded-3xl border-2 border-emerald-600 shadow-2xl shadow-emerald-600/20 flex flex-col justify-between relative transform lg:-translate-y-2 hover:-translate-y-3 transition-all duration-300 ring-4 ring-emerald-600/10">
                 <div className="absolute -top-4 left-1/2 -translate-x-1/2 px-4 py-1.5 rounded-full bg-gradient-to-r from-emerald-600 to-teal-600 text-white text-[11px] font-black uppercase tracking-wider shadow-lg shadow-emerald-600/30 flex items-center gap-1.5 whitespace-nowrap">
                   <span className="material-symbols-outlined text-yellow-300 text-sm" style={{ fontVariationSettings: "'FILL' 1" }}>star</span>
-                  <span>⭐ Recommandé • Boutique Complète</span>
+                  <span>⭐ RECOMMANDÉ</span>
                 </div>
                 <div>
                   <div className="inline-block px-3.5 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 text-[11px] font-black uppercase tracking-wider w-fit mb-4 mt-2">
@@ -284,6 +284,14 @@ export default function LandingPage({ onLoginClick }: LandingPageProps) {
                   <p className="text-xs text-on-surface-variant mb-6 font-medium">Pour boutiques actives avec reçus, dettes clients et 1 caissier inclus.</p>
                   
                   <div className="mb-6">
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="text-sm sm:text-base font-bold text-outline line-through opacity-75">
+                        {isAnnual ? "60 000" : "6 000"} FCFA
+                      </span>
+                      <span className="px-2 py-0.5 rounded-full bg-rose-500/10 text-rose-600 text-[10px] font-black uppercase border border-rose-500/20">
+                        {isAnnual ? "-10 000 F Réduction" : "-1 000 F Réduction"}
+                      </span>
+                    </div>
                     <div className="text-4xl font-black text-emerald-600">
                       {isAnnual ? "50 000" : "5 000"}{" "}
                       <span className="text-sm font-bold text-outline">FCFA / {isAnnual ? "an" : "mois"}</span>
