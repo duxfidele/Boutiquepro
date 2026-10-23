@@ -296,16 +296,15 @@ export default function SubscriptionModal({
                     : "border-outline-variant/30 hover:border-outline-variant/70 bg-surface-container-lowest hover:bg-surface-container-low/40"
                 }`}
               >
-                {defaultPlan !== "BUSINESS" && (
-                  <div className="absolute -top-3 left-4 px-2.5 py-0.5 rounded-full bg-gradient-to-r from-emerald-600 to-teal-600 text-white text-[10px] font-black uppercase tracking-wider shadow-sm flex items-center gap-1">
-                    <Sparkles className="w-3 h-3 text-amber-300" />
-                    <span>⭐ RECOMMANDÉ</span>
-                  </div>
-                )}
+                <div className="absolute -top-3 left-4 px-2.5 py-0.5 rounded-full bg-gradient-to-r from-emerald-600 to-teal-600 text-white text-[10px] font-black uppercase tracking-wider shadow-sm flex items-center gap-1 z-10">
+                  <Sparkles className="w-3 h-3 text-amber-300" />
+                  <span>⭐ RECOMMANDÉ</span>
+                </div>
                 <div>
                   <div className="flex justify-between items-start mb-2.5">
-                    <span className="px-2.5 py-0.5 rounded-full bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 text-[10px] font-black uppercase">
-                      Boutique Complète
+                    <span className="px-2.5 py-0.5 rounded-full bg-emerald-600 text-white text-[10px] font-black uppercase tracking-wide flex items-center gap-1 shadow-xs">
+                      <Sparkles className="w-3 h-3 text-yellow-300 fill-yellow-300" />
+                      <span>RECOMMANDÉ • Boutique Complète</span>
                     </span>
                     <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all ${
                       selectedTier === "PRO" ? "border-emerald-600 bg-emerald-600 text-white scale-110" : "border-outline-variant"
