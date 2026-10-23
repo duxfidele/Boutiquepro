@@ -314,8 +314,42 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
           })
           .filter((d: any) => d.id);
 
-        // ISOLATION STRICTE : Si l'utilisateur est un caissier
+        // CONTRÔLE D'ÉTANCHÉITÉ STRICTE DU PORTAIL DE CONNEXION
         const cashierStores = valid.filter((d: any) => d.role === "cashier");
+        const adminStores = valid.filter((d: any) => d.role === "admin");
+
+        if (typeof window !== "undefined") {
+          const requestedPortal = sessionStorage.getItem("auth_portal_mode");
+          if (requestedPortal === "manager" && cashierStores.length > 0 && adminStores.length === 0) {
+            sessionStorage.removeItem("auth_portal_mode");
+            sessionStorage.setItem(
+              "login_error_message",
+              "Accès refusé sur cet espace : Ce compte est un profil Caissier. Veuillez utiliser l'onglet 'Espace Caisse' pour vous connecter."
+            );
+            await supabase.auth.signOut();
+            setUser(null);
+            setRole(null);
+            setStores([]);
+            setActiveStoreState(null);
+            return;
+          }
+
+          if (requestedPortal === "cashier" && adminStores.length > 0 && cashierStores.length === 0) {
+            sessionStorage.removeItem("auth_portal_mode");
+            sessionStorage.setItem(
+              "login_error_message",
+              "Accès refusé sur cet espace : Ce compte est un profil Administrateur / Gérant. Veuillez utiliser l'onglet 'Gérant / Admin' pour accéder à votre espace."
+            );
+            await supabase.auth.signOut();
+            setUser(null);
+            setRole(null);
+            setStores([]);
+            setActiveStoreState(null);
+            return;
+          }
+        }
+
+        // ISOLATION STRICTE : Si l'utilisateur est un caissier
 
         if (cashierStores.length > 0) {
           // Le caissier ne voit QUE les boutiques auxquelles il est affecté

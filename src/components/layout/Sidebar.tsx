@@ -18,6 +18,7 @@ import {
   ShoppingCart,
   BarChart3,
   Settings,
+  Trash2,
   Sparkles, ShieldCheck, ArrowRight, Clock,
   ChevronLeft,
   ChevronRight,
@@ -103,6 +104,40 @@ export default function Sidebar({ isOpen, onClose }: { isOpen?: boolean; onClose
     };
     fetchCashier();
   }, [activeStore]);
+
+  const handleDeleteStore = async (storeIdToDelete: string, storeNameToDelete: string) => {
+    if (!stores || stores.length <= 1) {
+      alert("Action impossible : Vous devez toujours conserver au moins une boutique active.");
+      return;
+    }
+    const confirmText = window.prompt(
+      `⚠️ ATTENTION : La suppression de la boutique "${storeNameToDelete}" est IRRÉVERSIBLE !\n\nToutes ses données (ventes, produits, stocks) seront définitivement effacées.\n\nPour confirmer, veuillez taper : SUPPRIMER`
+    );
+    if (confirmText !== "SUPPRIMER") {
+      if (confirmText !== null) alert("Suppression annulée.");
+      return;
+    }
+    try {
+      const { data, error } = await supabase.rpc("delete_store", { p_store_id: storeIdToDelete });
+      if (error) throw error;
+      if (data?.success === false) {
+        alert(data.message);
+      } else {
+        alert(data?.message || "Boutique supprimée avec succès !");
+        const remaining = stores.filter((x: any) => x.id !== storeIdToDelete);
+        if (remaining.length > 0) {
+          try {
+            localStorage.setItem("activeStoreId", remaining[0].id);
+            localStorage.setItem("activeStoreObj", JSON.stringify(remaining[0]));
+          } catch {}
+          setActiveStore(remaining[0]);
+        }
+        window.location.reload();
+      }
+    } catch (err: any) {
+      alert("Erreur lors de la suppression : " + err.message);
+    }
+  };
 
   const handleCreateStore = async (storeName: string) => {
     if (!hasMultiStore || (stores && stores.length >= limits.maxStores)) {
@@ -229,7 +264,7 @@ export default function Sidebar({ isOpen, onClose }: { isOpen?: boolean; onClose
           <div className="block border-t border-border/50 p-3 animate-fade-in space-y-2">
             {role === "admin" ? (
               /* ADMIN : Sélecteur de ses boutiques */
-              <div className="flex items-center gap-3 rounded-xl bg-secondary/50 px-3 py-2.5">
+              <div className="flex items-center gap-2 rounded-xl bg-secondary/50 px-3 py-2.5">
                 <Store className="h-4 w-4 text-primary shrink-0" />
                 <div className="flex-1 min-w-0">
                   <select
@@ -266,6 +301,19 @@ export default function Sidebar({ isOpen, onClose }: { isOpen?: boolean; onClose
                     <span className="text-primary font-medium">{cashierName ? `Caisse: ${cashierName}` : "Gérant"}</span>
                   </p>
                 </div>
+                {stores && stores.length > 1 && activeStore && (
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleDeleteStore(activeStore.id, activeStore.name);
+                    }}
+                    className="p-1 rounded-lg text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors shrink-0"
+                    title={`Supprimer la boutique "${activeStore.name}"`}
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                )}
               </div>
             ) : stores && stores.length > 1 ? (
               /* CAISSIER : Choix entre ses boutiques d'affectation */

@@ -5,7 +5,7 @@ import React, { useState, useEffect } from "react";
 import { useStore } from "@/context/StoreContext";
 import { useAuth } from "@/context/AuthContext";
 import { supabase } from "@/lib/supabase";
-import { Save, Sparkles, Image as ImageIcon, CreditCard, Store, DollarSign, Percent, MapPin, Mail, Phone, Loader2, User } from "lucide-react";
+import { Save, Sparkles, Trash2, Image as ImageIcon, CreditCard, Store, DollarSign, Percent, MapPin, Mail, Phone, Loader2, User } from "lucide-react";
 import { useRouter } from "next/navigation";
 
 export default function SettingsPage() {
@@ -17,7 +17,7 @@ export default function SettingsPage() {
   const [city, setCity] = useState(state.settings.city && state.settings.city !== "Dakar" ? state.settings.city : "Lomé");
   const [country, setCountry] = useState(state.settings.country && state.settings.country !== "Sénégal" ? state.settings.country : "Togo");
   const [email, setEmail] = useState(state.settings.email || "");
-  const { user } = useAuth();
+  const { user, stores, activeStore, setActiveStore, role } = useAuth();
   const [phone, setPhone] = useState(state.settings.phone || "");
   const [managerName, setManagerName] = useState(state.settings.managerName || user?.user_metadata?.full_name || "Fr Fidèle");
   const [saved, setSaved] = useState(false);
@@ -73,6 +73,41 @@ export default function SettingsPage() {
         img.src = event.target?.result as string;
       };
       reader.readAsDataURL(file);
+    }
+  };
+
+  const handleDeleteActiveStore = async () => {
+    if (!stores || stores.length <= 1) {
+      alert("Action impossible : Vous devez toujours conserver au moins une boutique active.");
+      return;
+    }
+    const currentName = state.settings.name || activeStore?.name || "cette boutique";
+    const confirmText = window.prompt(
+      `⚠️ ATTENTION : La suppression définitive de la boutique "${currentName}" est IRRÉVERSIBLE !\n\nToutes les données (produits, stocks, ventes, caisses) seront supprimées.\n\nPour confirmer, veuillez taper : SUPPRIMER`
+    );
+    if (confirmText !== "SUPPRIMER") {
+      if (confirmText !== null) alert("Suppression annulée.");
+      return;
+    }
+    try {
+      const { data, error } = await supabase.rpc("delete_store", { p_store_id: activeStore.id });
+      if (error) throw error;
+      if (data?.success === false) {
+        alert(data.message);
+      } else {
+        alert(data?.message || "Boutique supprimée avec succès !");
+        const remaining = stores.filter((x: any) => x.id !== activeStore.id);
+        if (remaining.length > 0) {
+          try {
+            localStorage.setItem("activeStoreId", remaining[0].id);
+            localStorage.setItem("activeStoreObj", JSON.stringify(remaining[0]));
+          } catch {}
+          setActiveStore(remaining[0]);
+        }
+        window.location.reload();
+      }
+    } catch (err: any) {
+      alert("Erreur lors de la suppression : " + err.message);
     }
   };
 
@@ -314,6 +349,41 @@ export default function SettingsPage() {
           </button>
         </div>
       </div>
+
+      {/* Zone de Danger : Suppression de la boutique */}
+      {role === "admin" && (
+        <div className="bg-destructive/5 border border-destructive/20 rounded-2xl p-6 space-y-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="text-lg font-bold flex items-center gap-2 text-destructive">
+                <Trash2 className="w-5 h-5 text-destructive" />
+                Zone de Danger : Supprimer cette boutique
+              </h2>
+              <p className="text-xs text-muted-foreground mt-1">
+                La suppression de la boutique <b>{state.settings.name || activeStore?.name}</b> effacera définitivement tous ses produits, ventes, stocks et données associées. Cette action est irréversible.
+              </p>
+            </div>
+          </div>
+
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-2 border-t border-destructive/10">
+            <span className="text-xs text-muted-foreground font-medium">
+              {stores && stores.length <= 1
+                ? "Impossible de supprimer : votre compte doit conserver au moins 1 boutique active."
+                : `Vous avez ${stores?.length || 1} boutiques enregistrées.`}
+            </span>
+
+            <button
+              type="button"
+              disabled={!stores || stores.length <= 1}
+              onClick={handleDeleteActiveStore}
+              className="px-4 py-2.5 rounded-xl bg-destructive text-white hover:bg-destructive/90 transition-all font-bold text-xs disabled:opacity-50 disabled:pointer-events-none flex items-center gap-2 shadow-sm shadow-destructive/20 shrink-0"
+            >
+              <Trash2 className="w-4 h-4" />
+              <span>Supprimer cette boutique</span>
+            </button>
+          </div>
+        </div>
+      )}
 
       <SubscriptionModal
         isOpen={showSubModal}

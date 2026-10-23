@@ -241,6 +241,56 @@ export default function TeamPage() {
     }
   };
 
+  // Supprimer définitivement une boutique
+  const handleDeleteStore = async (storeIdToDelete: string, storeNameToDelete: string) => {
+    if (adminStores.length <= 1) {
+      alert("Action impossible : Vous devez toujours conserver au moins une boutique active sur votre compte.");
+      return;
+    }
+
+    const confirmText = window.prompt(
+      `⚠️ ATTENTION : La suppression de la boutique "${storeNameToDelete}" est IRRÉVERSIBLE !\n\nToutes ses ventes, ses produits, ses stocks et ses accès associés seront définitivement effacés.\n\nPour confirmer, veuillez taper exactement : SUPPRIMER`
+    );
+
+    if (confirmText !== "SUPPRIMER") {
+      if (confirmText !== null) {
+        alert("Suppression annulée : vous n'avez pas saisi 'SUPPRIMER'.");
+      }
+      return;
+    }
+
+    setSubmitting(true);
+    setMessage(null);
+
+    try {
+      const { data, error } = await supabase.rpc('delete_store', {
+        p_store_id: storeIdToDelete
+      });
+
+      if (error) throw error;
+
+      if (data && data.success === false) {
+        setMessage({ type: 'error', text: data.message });
+      } else {
+        alert(data?.message || `La boutique "${storeNameToDelete}" a été supprimée avec succès.`);
+        const remaining = adminStores.filter((s: any) => s.id !== storeIdToDelete);
+        if (remaining.length > 0) {
+          try {
+            localStorage.setItem("activeStoreId", remaining[0].id);
+            localStorage.setItem("activeStoreObj", JSON.stringify(remaining[0]));
+          } catch {}
+          setActiveStore(remaining[0]);
+        }
+        window.location.reload();
+      }
+    } catch (err: any) {
+      console.error(err);
+      setMessage({ type: 'error', text: err.message || "Erreur lors de la suppression de la boutique." });
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   const selectedStore = adminStores.find((s: any) => s.id === selectedStoreId);
 
   if (!canManageTeam) {
@@ -294,24 +344,38 @@ export default function TeamPage() {
           </p>
         </div>
 
-        {/* Sélecteur de boutique dynamique */}
-        <div className="flex items-center gap-3 bg-secondary/50 p-2 rounded-2xl border border-border/40">
-          <span className="text-xs font-semibold text-muted-foreground pl-2 whitespace-nowrap">Boutique :</span>
-          <select
-            value={selectedStoreId}
-            onChange={(e) => {
-              setSelectedStoreId(e.target.value);
-              const storeObj = stores.find((s: any) => s.id === e.target.value);
-              if (storeObj) setActiveStore(storeObj);
-            }}
-            className="bg-background text-foreground text-sm font-bold px-3 py-2 rounded-xl border border-border/60 outline-none focus:ring-2 focus:ring-primary cursor-pointer"
-          >
-            {adminStores.map((s: any) => (
-              <option key={s.id} value={s.id}>
-                🏪 {s.name}
-              </option>
-            ))}
-          </select>
+        {/* Sélecteur de boutique dynamique avec action de suppression */}
+        <div className="flex items-center gap-2">
+          <div className="flex items-center gap-3 bg-secondary/50 p-2 rounded-2xl border border-border/40">
+            <span className="text-xs font-semibold text-muted-foreground pl-2 whitespace-nowrap">Boutique :</span>
+            <select
+              value={selectedStoreId}
+              onChange={(e) => {
+                setSelectedStoreId(e.target.value);
+                const storeObj = stores.find((s: any) => s.id === e.target.value);
+                if (storeObj) setActiveStore(storeObj);
+              }}
+              className="bg-background text-foreground text-sm font-bold px-3 py-2 rounded-xl border border-border/60 outline-none focus:ring-2 focus:ring-primary cursor-pointer"
+            >
+              {adminStores.map((s: any) => (
+                <option key={s.id} value={s.id}>
+                  🏪 {s.name}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {adminStores.length > 1 && (
+            <button
+              type="button"
+              onClick={() => handleDeleteStore(selectedStoreId, selectedStore?.name || "cette boutique")}
+              className="p-2.5 rounded-2xl bg-destructive/10 text-destructive hover:bg-destructive hover:text-white transition-all shadow-sm border border-destructive/20 flex items-center gap-1.5 text-xs font-bold"
+              title={`Supprimer définitivement la boutique "${selectedStore?.name || ''}"`}
+            >
+              <Trash2 className="w-4 h-4" />
+              <span className="hidden sm:inline">Supprimer la boutique</span>
+            </button>
+          )}
         </div>
       </div>
 
@@ -575,6 +639,92 @@ export default function TeamPage() {
               ))
             )}
           </div>
+        </div>
+      </div>
+
+      {/* Section Gestion de Toutes Mes Boutiques */}
+      <div className="glass-panel p-6 rounded-3xl border border-border/50 space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-border/40 pb-4">
+          <div>
+            <h2 className="text-lg font-bold flex items-center gap-2 text-foreground">
+              <Store className="h-5 w-5 text-primary" />
+              Mes Boutiques Enregistrées ({adminStores.length})
+            </h2>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              Consultez et gérez vos boutiques. Vous pouvez supprimer les boutiques secondaires tout en conservant toujours au moins une boutique principale.
+            </p>
+          </div>
+          <span className="text-xs font-extrabold px-3 py-1 rounded-full bg-secondary text-foreground w-fit border border-border/50">
+            {adminStores.length} boutique{adminStores.length > 1 ? "s" : ""}
+          </span>
+        </div>
+
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 pt-1">
+          {adminStores.map((s: any) => {
+            const isCurrent = s.id === selectedStoreId;
+            return (
+              <div
+                key={s.id}
+                className={`p-4 rounded-2xl border transition-all flex flex-col justify-between gap-3 ${
+                  isCurrent
+                    ? "bg-primary/5 border-primary/40 shadow-sm"
+                    : "bg-card border-border/60 hover:border-border"
+                }`}
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <div className={`w-9 h-9 rounded-xl flex items-center justify-center font-bold text-sm shrink-0 ${
+                      isCurrent ? "bg-primary text-white" : "bg-secondary text-foreground"
+                    }`}>
+                      🏪
+                    </div>
+                    <div className="min-w-0">
+                      <h3 className="font-bold text-sm text-foreground truncate">{s.name}</h3>
+                      <p className="text-[10px] text-muted-foreground uppercase font-semibold">
+                        {isCurrent ? "Boutique Active" : "Boutique secondaire"}
+                      </p>
+                    </div>
+                  </div>
+                  {isCurrent && (
+                    <span className="px-2 py-0.5 rounded-md bg-primary/10 text-primary text-[10px] font-black uppercase shrink-0">
+                      Active
+                    </span>
+                  )}
+                </div>
+
+                <div className="flex items-center justify-between gap-2 pt-2 border-t border-border/30">
+                  {!isCurrent ? (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSelectedStoreId(s.id);
+                        setActiveStore(s);
+                      }}
+                      className="text-xs font-bold text-primary hover:underline"
+                    >
+                      Basculer ici
+                    </button>
+                  ) : (
+                    <span className="text-xs font-semibold text-muted-foreground">Sélectionnée</span>
+                  )}
+
+                  {adminStores.length > 1 ? (
+                    <button
+                      type="button"
+                      onClick={() => handleDeleteStore(s.id, s.name)}
+                      className="p-1.5 rounded-lg text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors flex items-center gap-1 text-xs font-semibold"
+                      title={`Supprimer la boutique "${s.name}"`}
+                    >
+                      <Trash2 className="w-3.5 h-3.5 text-destructive" />
+                      <span className="text-destructive text-[11px]">Supprimer</span>
+                    </button>
+                  ) : (
+                    <span className="text-[10px] text-muted-foreground italic">Boutique principale</span>
+                  )}
+                </div>
+              </div>
+            );
+          })}
         </div>
       </div>
     </div>

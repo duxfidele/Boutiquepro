@@ -40,6 +40,16 @@ export default function Login({
   const [honeypot, setHoneypot] = useState<string>("");
   const [formMountedAt] = useState<number>(() => Date.now());
 
+  React.useEffect(() => {
+    if (typeof window !== "undefined") {
+      const savedErr = sessionStorage.getItem("login_error_message");
+      if (savedErr) {
+        setMessage({ type: "error", text: savedErr });
+        sessionStorage.removeItem("login_error_message");
+      }
+    }
+  }, []);
+
   const handleAuth = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
@@ -103,12 +113,38 @@ export default function Login({
       }
     } else {
       const cleanInput = email.trim().toLowerCase();
+
+      // 1. Contrôle préalable selon le portail sélectionné
+      if (portalMode === "manager") {
+        if (!cleanInput.includes("@")) {
+          setMessage({
+            type: "error",
+            text: "Veuillez saisir une adresse e-mail administrateur valide (ex: admin@boutique.com). Pour un identifiant caissier court (ex: caisse1), veuillez utiliser l'onglet 'Espace Caisse'.",
+          });
+          setLoading(false);
+          return;
+        }
+
+        if (cleanInput.endsWith("@caisse.maboutique.app")) {
+          setMessage({
+            type: "error",
+            text: "Cet identifiant correspond à un compte Caissier. Veuillez vous connecter via l'onglet 'Espace Caisse'.",
+          });
+          setLoading(false);
+          return;
+        }
+      }
+
       // Supporte l'email direct (admin/caissier) OU l'identifiant caissier (ex: caisse1)
       const cleanEmail = cleanInput.includes("@")
         ? cleanInput
         : `${cleanInput}@caisse.maboutique.app`;
 
-      const { error } = await supabase.auth.signInWithPassword({
+      if (typeof window !== "undefined") {
+        sessionStorage.setItem("auth_portal_mode", portalMode);
+      }
+
+      const { data: authData, error } = await supabase.auth.signInWithPassword({
         email: cleanEmail,
         password,
       });
@@ -131,6 +167,53 @@ export default function Login({
               ? "Identifiant de caisse ou mot de passe incorrect."
               : "Email ou mot de passe incorrect.",
           });
+        }
+        setLoading(false);
+        return;
+      }
+
+      // 2. Contrôle d'étanchéité stricte des rôles après authentification réussie
+      if (authData?.user) {
+        try {
+          const userId = authData.user.id;
+
+          // Récupération des rôles dans store_members, profiles et stores
+          const [profileRes, membersRes, ownedStoresRes] = await Promise.all([
+            supabase.from("profiles").select("role").eq("id", userId).maybeSingle(),
+            supabase.from("store_members").select("role").eq("user_id", userId),
+            supabase.from("stores").select("id", { count: "exact", head: true }).eq("owner_id", userId),
+          ]);
+
+          const isStoreOwner = (ownedStoresRes.count ?? 0) > 0;
+          const hasAdminMemberRole = membersRes.data?.some((m: any) => m.role === "admin") ?? false;
+          const isProfileAdmin = profileRes.data?.role === "admin" || (!profileRes.data?.role && isStoreOwner);
+          const isAdmin = isStoreOwner || hasAdminMemberRole || isProfileAdmin;
+
+          const hasCashierMemberRole = membersRes.data?.some((m: any) => m.role === "cashier") ?? false;
+          const isProfileCashier = profileRes.data?.role === "cashier" || cleanEmail.endsWith("@caisse.maboutique.app");
+          const isCashier = hasCashierMemberRole || isProfileCashier;
+
+          if (portalMode === "manager" && isCashier && !isAdmin) {
+            await supabase.auth.signOut();
+            setMessage({
+              type: "error",
+              text: "Accès refusé sur cet espace : Ce compte est un profil Caissier. Veuillez utiliser l'onglet 'Espace Caisse' pour vous connecter.",
+            });
+            setLoading(false);
+            return;
+          }
+
+          if (portalMode === "cashier" && isAdmin && !isCashier) {
+            await supabase.auth.signOut();
+            setMessage({
+              type: "error",
+              text: "Ce compte est un profil Administrateur / Gérant. Veuillez utiliser l'onglet 'Gérant / Admin' pour accéder à votre espace.",
+            });
+            setLoading(false);
+            return;
+          }
+        } catch (roleErr) {
+          console.warn("Vérification étanchéité rôle:", roleErr);
         }
       }
     }
@@ -200,6 +283,8 @@ export default function Login({
               onClick={() => {
                 setPortalMode("manager");
                 setMessage(null);
+                setEmail("");
+                setPassword("");
               }}
               className={`flex items-center justify-center gap-2 py-2 px-3 rounded-xl text-xs font-bold transition-all ${
                 portalMode === "manager"
@@ -215,6 +300,8 @@ export default function Login({
               onClick={() => {
                 setPortalMode("cashier");
                 setMessage(null);
+                setEmail("");
+                setPassword("");
               }}
               className={`flex items-center justify-center gap-2 py-2 px-3 rounded-xl text-xs font-bold transition-all ${
                 portalMode === "cashier"
@@ -350,7 +437,7 @@ export default function Login({
 
             <div className="space-y-1.5">
               <label className="text-xs font-semibold text-foreground ml-1">
-                {portalMode === "cashier" ? "Identifiant ou Nom de Caisse" : isSignUp ? "Adresse Email" : "Adresse Email ou Identifiant"}
+                {portalMode === "cashier" ? "Identifiant de caisse" : isSignUp ? "Adresse Email" : "Adresse Email Administrateur"}
               </label>
               <div className="relative">
                 {portalMode === "cashier" ? (
@@ -359,7 +446,7 @@ export default function Login({
                   <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                 )}
                 <input
-                  type={portalMode === "cashier" ? "text" : isSignUp ? "email" : "text"}
+                  type={portalMode === "cashier" ? "text" : "email"}
                   required
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
@@ -367,11 +454,9 @@ export default function Login({
                   placeholder={
                     portalMode === "cashier"
                       ? "caisse1 ou caissier@boutique.com"
-                      : isSignUp
-                      ? "admin@boutique.com"
-                      : "admin@boutique.com ou caisse1"
+                      : "admin@boutique.com"
                   }
-                  autoComplete={isSignUp ? "email" : "username"}
+                  autoComplete={isSignUp ? "email" : portalMode === "cashier" ? "username" : "email"}
                 />
               </div>
             </div>

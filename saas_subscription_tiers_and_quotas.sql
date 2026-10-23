@@ -343,7 +343,11 @@ BEGIN
   JOIN public.stores s ON s.id = sm.store_id
   WHERE s.owner_id = v_owner_id AND sm.role = 'cashier';
 
-  IF v_total_cashiers >= v_sub.max_cashiers THEN
+  -- Vérifier si l'utilisateur existe déjà
+  SELECT id INTO v_target_user_id FROM auth.users WHERE LOWER(email) = v_clean_email;
+
+  -- Si l'utilisateur n'existe pas encore et que le quota est déjà atteint : bloquer
+  IF v_target_user_id IS NULL AND v_total_cashiers >= v_sub.max_cashiers THEN
     IF v_sub.plan_tier = 'PRO' THEN
       RETURN jsonb_build_object(
         'success', false,
@@ -357,30 +361,74 @@ BEGIN
     END IF;
   END IF;
 
-  -- 4. Vérifier si l'utilisateur existe déjà
-  SELECT id INTO v_target_user_id FROM auth.users WHERE LOWER(email) = v_clean_email;
-
+  -- 4. CAS OÙ L'UTILISATEUR EXISTE DÉJÀ : MISE À JOUR PROPRE DU MOT DE PASSE ET DES JETONS
   IF v_target_user_id IS NOT NULL THEN
+    v_encrypted_pw := extensions.crypt(p_password, extensions.gen_salt('bf'));
+    
+    UPDATE auth.users
+    SET 
+      encrypted_password = v_encrypted_pw,
+      confirmation_token = '',
+      recovery_token = '',
+      email_change_token_new = '',
+      email_change = '',
+      email_change_token_current = '',
+      phone_change = '',
+      phone_change_token = '',
+      reauthentication_token = '',
+      email_confirmed_at = COALESCE(email_confirmed_at, now()),
+      is_sso_user = false,
+      is_anonymous = false,
+      aud = 'authenticated',
+      role = 'authenticated',
+      updated_at = now()
+    WHERE id = v_target_user_id;
+
+    INSERT INTO auth.identities (
+      id, user_id, identity_data, provider, provider_id, last_sign_in_at, created_at, updated_at
+    ) VALUES (
+      v_target_user_id,
+      v_target_user_id,
+      jsonb_build_object('sub', v_target_user_id::text, 'email', v_clean_email, 'email_verified', true),
+      'email',
+      v_target_user_id::text,
+      now(), now(), now()
+    )
+    ON CONFLICT (provider, provider_id) DO UPDATE SET
+      identity_data = EXCLUDED.identity_data,
+      updated_at = now();
+
+    INSERT INTO public.profiles (id, email, full_name, role)
+    VALUES (v_target_user_id, v_clean_email, p_name, 'cashier')
+    ON CONFLICT (id) DO UPDATE SET full_name = EXCLUDED.full_name, role = 'cashier';
+
     INSERT INTO public.store_members (id, store_id, user_id, role)
     VALUES (gen_random_uuid(), p_store_id, v_target_user_id, 'cashier')
     ON CONFLICT (store_id, user_id) DO UPDATE SET role = 'cashier';
 
     RETURN jsonb_build_object(
       'success', true, 
-      'message', 'L''utilisateur ' || p_email || ' existe déjà et a été relié avec succès à ' || COALESCE(v_store_name, 'la boutique') || ' en tant que caissier !'
+      'message', 'Le compte caissier existant (' || p_email || ') a été synchronisé, son mot de passe mis à jour et relié à ' || COALESCE(v_store_name, 'la boutique') || ' !'
     );
   END IF;
 
-  -- 5. Créer l'utilisateur dans auth.users
+  -- 5. CAS D'UN NOUVEAU CAISSIER : CRÉATION AVEC JETONS PROPRES (ZÉRO NULL)
   v_target_user_id := gen_random_uuid();
-  v_encrypted_pw := crypt(p_password, gen_salt('bf'));
+  v_encrypted_pw := extensions.crypt(p_password, extensions.gen_salt('bf'));
 
   INSERT INTO auth.users (
     id, instance_id, email, encrypted_password, email_confirmed_at,
+    confirmation_token, recovery_token, email_change_token_new, email_change,
+    email_change_token_current, phone_change, phone_change_token, reauthentication_token,
+    is_sso_user, is_anonymous,
     raw_app_meta_data, raw_user_meta_data, created_at, updated_at, role, aud
   ) VALUES (
     v_target_user_id, '00000000-0000-0000-0000-000000000000', v_clean_email,
-    v_encrypted_pw, now(), '{"provider":"email","providers":["email"]}'::jsonb,
+    v_encrypted_pw, now(),
+    '', '', '', '',
+    '', '', '', '',
+    false, false,
+    '{"provider":"email","providers":["email"]}'::jsonb,
     jsonb_build_object('full_name', p_name), now(), now(), 'authenticated', 'authenticated'
   );
 
