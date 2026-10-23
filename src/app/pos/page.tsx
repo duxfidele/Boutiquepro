@@ -41,6 +41,7 @@ import {
 import { useAuth } from "@/context/AuthContext";
 import SubscriptionModal from "@/components/subscription/SubscriptionModal";
 import { exportElementToPdf } from "@/lib/pdf";
+import { supabase } from "@/lib/supabase";
 import { WhatsAppModal } from "@/components/ui/WhatsAppModal";
 import { buildWhatsAppReceiptText, getWhatsAppUrl, formatWhatsAppNumber } from "@/lib/whatsapp";
 
@@ -69,12 +70,62 @@ export default function POSPage() {
   } = useStore();
   const { user, role, subscription, canOfferCredit, canPrintReceipts, signOut } = useAuth();
   const [subModalOpen, setSubModalOpen] = useState(false);
-  // Résolution propre de l'identité du caissier/gérant (Bannit l'affichage d'un email comme 'boutiquepro89')
+  // Profil du caissier chargé depuis la base de données
+  const [cashierProfile, setCashierProfile] = useState<{ full_name?: string; phone?: string } | null>(null);
+
+  React.useEffect(() => {
+    if (user?.id) {
+      supabase
+        .from("profiles")
+        .select("full_name")
+        .eq("id", user.id)
+        .maybeSingle()
+        .then(({ data }) => {
+          if (data && data.full_name) {
+            setCashierProfile(prev => ({ ...prev, full_name: data.full_name }));
+          }
+        });
+    }
+  }, [user?.id]);
+
+  // Résolution propre de l'identité et du numéro du caissier/gérant
+  const getCashierInfo = () => {
+    // 1. Nom réel du caissier
+    let name = "";
+    if (activeCashSession?.cashierName && activeCashSession.cashierName !== "Caissier" && !activeCashSession.cashierName.includes("@")) {
+      name = activeCashSession.cashierName;
+    } else if (cashierProfile?.full_name && cashierProfile.full_name !== "Caissier") {
+      name = cashierProfile.full_name;
+    } else if (user?.user_metadata?.full_name && user.user_metadata.full_name !== "Caissier") {
+      name = user.user_metadata.full_name;
+    } else if (user?.user_metadata?.name && user.user_metadata.name !== "Caissier") {
+      name = user.user_metadata.name;
+    } else if (typeof window !== "undefined" && localStorage.getItem("cashier_name")) {
+      name = localStorage.getItem("cashier_name") || "";
+    } else if (user?.email) {
+      const clean = user.email.split("@")[0];
+      name = clean.charAt(0).toUpperCase() + clean.slice(1);
+    } else if (role === "admin") {
+      name = state.settings?.managerName || "Gérant";
+    }
+
+    // 2. Numéro du caissier enregistré dans son compte ou en session
+    let phone = user?.user_metadata?.phone || user?.phone || cashierProfile?.phone || "";
+    if (!phone && typeof window !== "undefined") {
+      phone = localStorage.getItem("cashier_phone") || "";
+    }
+
+    return { 
+      name: name.trim() || (role === "admin" ? "Gérant" : "Caissier"), 
+      phone: phone.trim() 
+    };
+  };
+
   const getCashierDisplayName = (rawName?: string) => {
-    if (rawName && !rawName.includes("@") && rawName !== user?.email?.split("@")[0] && rawName !== user?.email) {
+    if (rawName && !rawName.includes("@") && rawName !== user?.email?.split("@")[0] && rawName !== user?.email && rawName !== "Caissier") {
       return rawName;
     }
-    return user?.user_metadata?.full_name || state.settings?.managerName || (role === "admin" ? "Gérant" : "Caissier");
+    return getCashierInfo().name;
   };
 
 
@@ -136,8 +187,11 @@ export default function POSPage() {
   });
 
   const handleOpenWhatsAppForSale = (sale: Sale) => {
-    const cashierName = role === "cashier" ? (user?.name || "Caissier") : (state.settings?.managerName || user?.name || "Vendeur");
-    const text = buildWhatsAppReceiptText(sale, state.settings, cashierName);
+    const cashier = getCashierInfo();
+    const text = buildWhatsAppReceiptText(sale, state.settings, {
+      cashierName: cashier.name,
+      cashierPhone: cashier.phone,
+    });
     const cleanPhone = formatWhatsAppNumber(sale.customerPhone);
     
     if (cleanPhone) {
@@ -312,7 +366,7 @@ export default function POSPage() {
 
   const handleStartSession = async () => {
     const val = Number(openingAmountInput) || 0;
-    const name = getCashierDisplayName(user?.user_metadata?.full_name || state.settings?.managerName);
+    const name = getCashierInfo().name;
     await openCashSession(val, name);
     setShowOpenModal(false);
   };
@@ -1077,9 +1131,17 @@ export default function POSPage() {
                   <div className="flex justify-between items-center">
                     <span className="text-gray-700">Caissier</span>
                     <span className="font-medium text-black">
-                      {getCashierDisplayName(activeCashSession?.cashierName)}
+                      {getCashierInfo().name}
                     </span>
                   </div>
+                  {getCashierInfo().phone && (
+                    <div className="flex justify-between items-center">
+                      <span className="text-gray-700">Tél. Caissier</span>
+                      <span className="font-medium text-black">
+                        {getCashierInfo().phone}
+                      </span>
+                    </div>
+                  )}
                   {lastSale.customerName && (
                     <div className="flex justify-between items-center">
                       <span className="text-gray-700">Client</span>
@@ -1323,8 +1385,13 @@ export default function POSPage() {
                       Mode : <span className="text-primary font-extrabold">{paymentMethods.find(p => p.id === lastSale.paymentMethod)?.label || "Espèces"}</span>
                     </p>
                     <p className="text-xs text-gray-500 mt-0.5">
-                      Caissier : {getCashierDisplayName(activeCashSession?.cashierName)}
+                      Caissier : {getCashierInfo().name}
                     </p>
+                    {getCashierInfo().phone && (
+                      <p className="text-xs text-gray-500 mt-0.5">
+                        Tél. Caissier : {getCashierInfo().phone}
+                      </p>
+                    )}
                   </div>
                 </div>
 
@@ -1530,7 +1597,12 @@ export default function POSPage() {
                 </label>
                 <div className="p-3 rounded-xl bg-secondary/40 border border-border/40 text-sm font-bold text-foreground flex items-center gap-2">
                   <User className="h-4 w-4 text-primary" />
-                  {user?.user_metadata?.full_name || user?.email || "Caissier"}
+                  <span>{getCashierInfo().name}</span>
+                  {getCashierInfo().phone && (
+                    <span className="text-xs text-muted-foreground font-normal ml-auto">
+                      ({getCashierInfo().phone})
+                    </span>
+                  )}
                 </div>
               </div>
 

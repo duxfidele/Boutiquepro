@@ -8,47 +8,49 @@ import { Sale, StoreSettings, DebtPayment } from "@/context/StoreContext";
 export function formatWhatsAppNumber(phone?: string, defaultCountryCode: string = "228"): string | null {
   if (!phone) return null;
   
-  // Supprime tous les caractères non numériques sauf éventuellement le '+' initial
   let clean = phone.trim().replace(/[^\d+]/g, "");
   if (!clean) return null;
 
-  // Gère le préfixe '+' ou '00'
   if (clean.startsWith("+")) {
     clean = clean.substring(1);
   } else if (clean.startsWith("00")) {
     clean = clean.substring(2);
   } else {
-    // Si le numéro commence par un 0 local (ex: 07 12 34 56 en CI ou France)
     if (clean.startsWith("0") && clean.length > 8) {
       clean = clean.substring(1);
       clean = defaultCountryCode + clean;
     } else if (clean.length === 8) {
-      // Numéro standard à 8 chiffres au Togo ou Bénin
       clean = defaultCountryCode + clean;
     } else if (clean.length === 10 && defaultCountryCode === "225") {
       clean = "225" + clean;
     }
   }
 
-  // Ne retourne le numéro que s'il a au moins 8 chiffres
   return clean.length >= 8 ? clean : null;
 }
 
 /**
- * Construit l'URL wa.me avec le message encodé
+ * Construit l'URL wa.me avec le message encodé de façon sûre (sans caractères corrompus)
  */
 export function getWhatsAppUrl(phone: string, text: string): string {
   const cleanPhone = formatWhatsAppNumber(phone) || phone.replace(/\D/g, "");
   return `https://wa.me/${cleanPhone}?text=${encodeURIComponent(text)}`;
 }
 
+export interface WhatsAppCashierOptions {
+  cashierName?: string;
+  cashierPhone?: string;
+}
+
 /**
  * Génère le texte d'un Ticket de Caisse / Reçu de Vente formaté pour WhatsApp
+ * Garanti 100% universel et propre : zéro emoji fragile qui se transforme en symbole '',
+ * nom et numéro du caissier inclus, sans mention de marque superflue.
  */
 export function buildWhatsAppReceiptText(
   sale: Sale,
   settings?: StoreSettings | null,
-  cashierName?: string
+  cashierOpt?: string | WhatsAppCashierOptions
 ): string {
   const storeName = settings?.name || "Notre Boutique";
   const currency = settings?.currency || "FCFA";
@@ -58,16 +60,17 @@ export function buildWhatsAppReceiptText(
 
   const ticketRef = `BTQ-${sale.id.slice(0, 8).toUpperCase()}`;
 
-  // Mapping mode de paiement
+  const cashierName = typeof cashierOpt === "string" ? cashierOpt : cashierOpt?.cashierName;
+  const cashierPhone = typeof cashierOpt === "object" ? cashierOpt?.cashierPhone : undefined;
+
   const paymentLabels: Record<string, string> = {
     cash: "Espèces (Comptant)",
-    mobile_money: "Mobile Money (T-Money / Flooz)",
+    mobile_money: "Mobile Money",
     card: "Carte bancaire",
     credit: "Vente à Crédit (Carnet de Dettes)",
   };
   const paymentMethodLabel = paymentLabels[sale.paymentMethod] || sale.paymentMethod;
 
-  // Formatage des articles
   const itemsText = (sale.items || [])
     .map((item) => {
       const priceStr = new Intl.NumberFormat("fr-FR").format(item.total);
@@ -78,36 +81,38 @@ export function buildWhatsAppReceiptText(
   const subtotalStr = new Intl.NumberFormat("fr-FR").format(sale.subtotal);
   const totalStr = new Intl.NumberFormat("fr-FR").format(sale.total);
 
-  let message = `🧾 *TICKET DE CAISSE — ${storeName.toUpperCase()}*\n`;
+  let message = `*TICKET DE CAISSE — ${storeName.toUpperCase()}*\n`;
   if (settings?.city || settings?.country) {
-    message += `📍 ${[settings.city, settings.country].filter(Boolean).join(", ")}\n`;
+    message += `${[settings.city, settings.country].filter(Boolean).join(", ")}\n`;
   }
   if (settings?.phone) {
-    message += `📞 Contact : ${settings.phone}\n`;
+    message += `Contact : ${settings.phone}\n`;
   }
   message += `━━━━━━━━━━━━━━━━━━━━━━\n`;
-  message += `*Ticket N°* : \`${ticketRef}\`\n`;
-  message += `*Date* : ${dateStr} à ${timeStr}\n`;
+  message += `Ticket N° : ${ticketRef}\n`;
+  message += `Date : ${dateStr} à ${timeStr}\n`;
   if (sale.customerName) {
-    message += `*Client* : ${sale.customerName}\n`;
+    message += `Client : ${sale.customerName}\n`;
   }
   if (cashierName) {
-    message += `*Caissier* : ${cashierName}\n`;
+    message += `Caissier : ${cashierName}\n`;
+  }
+  if (cashierPhone) {
+    message += `Tél. Caissier : ${cashierPhone}\n`;
   }
   message += `━━━━━━━━━━━━━━━━━━━━━━\n\n`;
-  message += `🛒 *DÉTAIL DES ACHATS :*\n${itemsText}\n\n`;
+  message += `*DÉTAIL DES ACHATS :*\n${itemsText}\n\n`;
   message += `━━━━━━━━━━━━━━━━━━━━━━\n`;
   
   if (sale.discount && sale.discount > 0) {
     const discountStr = new Intl.NumberFormat("fr-FR").format(sale.discount);
     message += `Sous-total : ${subtotalStr} ${currency}\n`;
-    message += `Remise commerciale : -${discountStr} ${currency}\n`;
+    message += `Remise : -${discountStr} ${currency}\n`;
   }
 
   message += `*TOTAL NET : ${totalStr} ${currency}*\n`;
   message += `Règlement : ${paymentMethodLabel}\n`;
 
-  // Détails spécifiques selon le mode de paiement
   if (sale.paymentMethod === "cash" && sale.amountGiven && sale.amountGiven > sale.total) {
     const givenStr = new Intl.NumberFormat("fr-FR").format(sale.amountGiven);
     const changeStr = new Intl.NumberFormat("fr-FR").format(sale.change || (sale.amountGiven - sale.total));
@@ -118,7 +123,7 @@ export function buildWhatsAppReceiptText(
     const remaining = sale.remainingAmount ?? (sale.total - (sale.amountPaid || 0));
     const remainingStr = new Intl.NumberFormat("fr-FR").format(remaining);
     message += `Acompte versé : ${paidStr} ${currency}\n`;
-    message += `👉 *Solde restant dû : ${remainingStr} ${currency}*\n`;
+    message += `*Solde restant dû : ${remainingStr} ${currency}*\n`;
     if (sale.dueDate) {
       const dueStr = new Date(sale.dueDate).toLocaleDateString("fr-FR");
       message += `Date limite de règlement : ${dueStr}\n`;
@@ -126,14 +131,14 @@ export function buildWhatsAppReceiptText(
   }
 
   message += `━━━━━━━━━━━━━━━━━━━━━━\n`;
-  message += `🙏 *Merci pour votre confiance et à très bientôt !*\n`;
-  message += `✨ _Généré par MaBoutiquePro_`;
+  message += `Merci pour votre confiance et à très bientôt !`;
 
   return message;
 }
 
 /**
  * Génère le texte de relance courtoise pour une créance client (Carnet de Dettes)
+ * Sans emojis corrompus, clair et professionnel.
  */
 export function buildWhatsAppDebtReminderText(
   debt: Sale,
@@ -151,30 +156,30 @@ export function buildWhatsAppDebtReminderText(
   const ticketRef = `BTQ-${debt.id.slice(0, 8).toUpperCase()}`;
 
   let msg = `Bonjour *${clientName}*,\n\n`;
-  msg += `Nous vous remercions sincèrement pour votre confiance auprès de *${storeName}*.\n\n`;
-  msg += `Nous vous adressons ce petit rappel amical concernant votre achat du ${dateStr} (Réf : \`${ticketRef}\`).\n\n`;
-  msg += `📊 *Point sur votre compte client :*\n`;
+  msg += `Nous vous remercions pour votre confiance auprès de *${storeName}*.\n\n`;
+  msg += `Nous vous adressons ce petit rappel amical concernant votre achat du ${dateStr} (Réf : ${ticketRef}).\n\n`;
+  msg += `*Point sur votre compte client :*\n`;
   msg += `• Total de vos achats : ${totalStr} ${currency}\n`;
   if ((debt.amountPaid || 0) > 0) {
     msg += `• Acompte déjà réglé : ${paidStr} ${currency}\n`;
   }
-  msg += `👉 *Solde restant à régler : ${remStr} ${currency}*\n`;
+  msg += `*Solde restant à régler : ${remStr} ${currency}*\n`;
 
   if (debt.dueDate) {
     const dueDateStr = new Date(debt.dueDate).toLocaleDateString("fr-FR");
     const isOverdue = new Date(debt.dueDate) < new Date();
     if (isOverdue) {
-      msg += `⚠️ *Échéance convenue dépassée depuis le :* ${dueDateStr}\n`;
+      msg += `Échéance dépassée depuis le : ${dueDateStr}\n`;
     } else {
-      msg += `📅 *Date limite de règlement :* ${dueDateStr}\n`;
+      msg += `Date limite de règlement : ${dueDateStr}\n`;
     }
   }
 
-  msg += `\nMerci de bien vouloir nous contacter ou passer à la boutique pour régulariser votre compte.\n\n`;
+  msg += `\nMerci de bien vouloir nous contacter ou passer à la boutique pour régulariser votre compte.\n`;
   if (settings?.phone) {
-    msg += `📞 Vous pouvez nous joindre directement au : ${settings.phone}\n\n`;
+    msg += `Contact Boutique : ${settings.phone}\n`;
   }
-  msg += `Excellente journée à vous ! 🙏\n`;
+  msg += `\nExcellente journée à vous !\n`;
   msg += `_${storeName}_`;
 
   return msg;
@@ -182,6 +187,7 @@ export function buildWhatsAppDebtReminderText(
 
 /**
  * Génère le texte de quittance de paiement après un versement de recouvrement
+ * Sans emojis corrompus, clair et professionnel.
  */
 export function buildWhatsAppDebtPaymentReceiptText(
   debt: Sale,
@@ -200,7 +206,7 @@ export function buildWhatsAppDebtPaymentReceiptText(
 
   let msg = `Bonjour *${clientName}*,\n\n`;
   msg += `Nous vous confirmons la bonne réception de votre versement auprès de *${storeName}* :\n\n`;
-  msg += `🧾 *QUITTANCE DE RÈGLEMENT ${paymentRef}*\n`;
+  msg += `*QUITTANCE DE RÈGLEMENT ${paymentRef}*\n`;
   msg += `• Date : ${dateStr} à ${timeStr}\n`;
   msg += `• Montant versé : *${paymentAmountStr} ${currency}*\n`;
   if (payment.paymentMethod) {
@@ -210,13 +216,13 @@ export function buildWhatsAppDebtPaymentReceiptText(
   msg += `━━━━━━━━━━━━━━━━━━━━━━\n`;
 
   if (newRemaining <= 0) {
-    msg += `🎉 *FÉLICITATIONS ! Votre dette est désormais TOTALEMENT SOLDÉE.* Merci infiniment pour votre sérieux et votre fidélité !\n`;
+    msg += `*Félicitations ! Votre dette est désormais TOTALEMENT SOLDÉE.* Merci pour votre sérieux et votre fidélité !\n`;
   } else {
-    msg += `👉 *Nouveau solde restant dû : ${remainingStr} ${currency}*\n`;
+    msg += `*Nouveau solde restant dû : ${remainingStr} ${currency}*\n`;
   }
 
   msg += `━━━━━━━━━━━━━━━━━━━━━━\n`;
-  msg += `Merci pour votre confiance et à très bientôt ! 🙏\n`;
+  msg += `Merci pour votre confiance et à très bientôt !\n`;
   msg += `_${storeName}_`;
 
   return msg;

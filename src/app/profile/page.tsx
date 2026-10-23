@@ -66,6 +66,18 @@ export default function ProfilePage() {
     if (error) {
       setMessageInfo({ type: 'error', text: "Erreur lors de la mise à jour des informations." });
     } else {
+      if (typeof window !== "undefined") {
+        localStorage.setItem("cashier_phone", phone);
+        localStorage.setItem("cashier_name", fullName);
+      }
+      if (user?.id) {
+        try {
+          await supabase
+            .from('profiles')
+            .update({ full_name: fullName })
+            .eq('id', user.id);
+        } catch (err) {}
+      }
       setMessageInfo({ type: 'success', text: 'Vos informations ont été mises à jour avec succès.' });
     }
     setLoadingInfo(false);
