@@ -179,14 +179,15 @@ export default function Dashboard() {
     // Dépenses totales sur la période
     const periodExpenses = filteredExpenses.reduce((acc, e) => acc + (Number(e.amount) || 0), 0);
 
-    // Coût d'achat des marchandises vendues (COGS) sur la période
+    // Coût d'achat des marchandises vendues (COGS) sur la période (coût figé prioritaire)
     let totalCost = 0;
     filteredSales.forEach((s) => {
-      (s.items || []).forEach((item) => {
+      (s.items || []).forEach((item: any) => {
         const prod = (state.products || []).find((p) => p.id === item.productId);
-        if (prod) {
-          totalCost += (Number(prod.cost) || 0) * (Number(item.quantity) || 0);
-        }
+        const unitCost = (item as any).cost !== undefined && (item as any).cost !== null
+          ? Number((item as any).cost)
+          : (Number(prod?.cost) || 0);
+        totalCost += unitCost * (Number(item.quantity) || 0);
       });
     });
 
@@ -881,7 +882,7 @@ export default function Dashboard() {
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium truncate flex items-center gap-2">
-                      <span>{(sale.items || []).map((i) => i?.productName || "").join(", ") || "Vente"}</span>
+                      <span>{(sale.items || []).map((i: any) => i?.productName || "").join(", ") || "Vente"}</span>
                       {isCredit && (
                         <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${
                           isSold 

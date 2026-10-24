@@ -90,6 +90,30 @@ export async function saveOfflineSale(storeId: string, sale: Sale): Promise<void
   }
 }
 
+export async function updateOfflineSale(item: OfflineSaleItem): Promise<void> {
+  if (!isIndexedDBAvailable()) {
+    const list = getLocalStorageQueue();
+    const updated = [item, ...list.filter((i) => i.id !== item.id)];
+    saveLocalStorageQueue(updated);
+    return;
+  }
+
+  try {
+    const db = await openDB();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(STORE_NAME, 'readwrite');
+      const store = tx.objectStore(STORE_NAME);
+      const req = store.put(item);
+      req.onsuccess = () => resolve();
+      req.onerror = () => reject(req.error);
+    });
+  } catch {
+    const list = getLocalStorageQueue();
+    const updated = [item, ...list.filter((i) => i.id !== item.id)];
+    saveLocalStorageQueue(updated);
+  }
+}
+
 export async function getOfflineSales(storeId?: string): Promise<OfflineSaleItem[]> {
   if (!isIndexedDBAvailable()) {
     const all = getLocalStorageQueue();

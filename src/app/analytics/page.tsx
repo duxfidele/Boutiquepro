@@ -244,14 +244,15 @@ export default function AnalyticsPage() {
       paymentBreakdown[sale.paymentMethod].amount += sale.total;
     });
 
-    // Coût total des produits vendus (Achats)
+    // Coût total des produits vendus (Achats) avec priorité au coût figé
     let totalCost = 0;
     filteredSales.forEach((sale) => {
       (sale.items || []).forEach((item) => {
         const product = state.products.find((p) => p.id === item.productId);
-        if (product) {
-          totalCost += (product.cost || 0) * item.quantity;
-        }
+        const unitCost = (item as any).cost !== undefined && (item as any).cost !== null
+          ? Number((item as any).cost)
+          : (Number(product?.cost) || 0);
+        totalCost += unitCost * item.quantity;
       });
     });
 

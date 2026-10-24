@@ -438,14 +438,15 @@ export function exportGeneralLedger(
   const discountTotal = filteredSales.reduce((sum, s) => sum + (Number(s.discount) || 0), 0);
   const grossRevenue = revenue + discountTotal;
 
-  // Calcul du coût d'achat des marchandises vendues (COGS)
+  // Calcul du coût d'achat des marchandises vendues (COGS) avec priorité au coût figé
   let cogs = 0;
   filteredSales.forEach((sale) => {
     (sale.items || []).forEach((item) => {
       const prod = products.find((p) => p.id === item.productId);
-      if (prod) {
-        cogs += (Number(prod.cost) || 0) * item.quantity;
-      }
+      const unitCost = (item as any).cost !== undefined && (item as any).cost !== null
+        ? Number((item as any).cost)
+        : (Number(prod?.cost) || 0);
+      cogs += unitCost * item.quantity;
     });
   });
 

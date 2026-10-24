@@ -1,5 +1,5 @@
 "use client";
-import { saveOfflineSale, getOfflineSales, removeOfflineSale, getOfflineSalesCount, clearOfflineQueue } from "@/lib/offlineQueue";
+import { saveOfflineSale, getOfflineSales, removeOfflineSale, getOfflineSalesCount, clearOfflineQueue, updateOfflineSale } from "@/lib/offlineQueue";
 
 import React, { createContext, useContext, useReducer, useEffect, useState, useMemo, ReactNode } from "react";
 import { useAuth } from '@/context/AuthContext';
@@ -54,9 +54,20 @@ export interface DebtPayment {
   note?: string;
 }
 
+export interface SaleItem {
+  id?: string;
+  productId: string;
+  productName: string;
+  quantity: number;
+  unitPrice: number;
+  total: number;
+  cost?: number;
+  isEstimated?: boolean;
+}
+
 export interface Sale {
   id: string;
-  items: { productId: string; productName: string; quantity: number; unitPrice: number; total: number }[];
+  items: SaleItem[];
   subtotal: number;
   tax: number;
   discount: number;
@@ -1066,22 +1077,19 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         });
 
         if (saleError) {
-          await supabase.from("sales").insert([{
-            id: sale.id,
-            store_id: activeStore.id,
-            subtotal: sale.subtotal,
-            tax: 0,
-            discount: 0,
-            total: sale.total,
-            payment_method: "credit",
-            customer_name: sale.customerName,
-            customer_phone: sale.customerPhone,
-            amount_paid: sale.amountPaid,
-            remaining_amount: sale.remainingAmount,
-            payment_status: sale.paymentStatus,
-            due_date: sale.dueDate,
-            created_at: sale.createdAt
-          }]);
+          const isNet = !navigator.onLine ||
+            saleError.message?.toLowerCase().includes("failed to fetch") ||
+            saleError.message?.toLowerCase().includes("network") ||
+            saleError.message?.toLowerCase().includes("timeout");
+          if (isNet) {
+            console.warn("Réseau indisponible, basculement en file d'attente hors-ligne:", saleError);
+            await saveOfflineSale(activeStore.id, sale);
+            setPendingSyncCount((prev) => prev + 1);
+          } else {
+            console.error("Erreur RPC create_sale pour dette:", saleError);
+            alert();
+            return sale;
+          }
         } else {
           try {
             await supabase.from("sales").update({
@@ -1179,43 +1187,32 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             await removeOfflineSale(s.id);
             success++;
           } else {
-            // ÉTAPE ANTI-DOUBLON 3 : Fallback direct upsert si la RPC échoue
-            console.warn("RPC create_sale a échoué, tentative d'upsert direct de secours:", saleError);
-            const { error: directErr } = await supabase.from("sales").upsert([{
-              id: s.id,
-              store_id: targetStoreId,
-              subtotal: s.subtotal,
-              tax: s.tax,
-              discount: s.discount,
-              total: s.total,
-              payment_method: s.paymentMethod,
-              customer_name: s.customerName || null,
-              customer_phone: s.customerPhone || null,
-              amount_paid: s.amountPaid ?? (s.paymentMethod === 'credit' ? 0 : s.total),
-              remaining_amount: s.remainingAmount ?? (s.paymentMethod === 'credit' ? s.total : 0),
-              payment_status: s.paymentStatus || (s.paymentMethod === 'credit' ? 'unpaid' : 'paid'),
-              due_date: s.dueDate || null,
-              created_at: s.createdAt
-            }], { onConflict: 'id' });
+            console.error(`Erreur sync vente offline ${s.id}:`, saleError);
+            const isNet = !navigator.onLine ||
+              saleError.message?.toLowerCase().includes("failed to fetch") ||
+              saleError.message?.toLowerCase().includes("network") ||
+              saleError.message?.toLowerCase().includes("timeout");
 
-            if (!directErr) {
-              if (s.items && s.items.length > 0) {
-                const saleItems = s.items.map((it: any) => ({
-                  id: `si_${Math.random().toString(36).substring(2, 9)}`,
-                  sale_id: s.id,
-                  store_id: targetStoreId,
-                  product_id: it.productId,
-                  product_name: it.productName,
-                  quantity: it.quantity,
-                  unit_price: it.unitPrice,
-                  total: it.total
-                }));
-                await supabase.from("sale_items").insert(saleItems);
-              }
-              await removeOfflineSale(s.id);
-              success++;
+            if (isNet) {
+              // Coupure réseau temporaire, laisser dans la file pour le prochain cycle
+              failed++;
             } else {
-              console.error("Échec persistance vente offline:", directErr);
+              // Erreur SQL réelle : incrémenter retryCount pour éviter rejouer à l'infini
+              const currentRetries = (item.retryCount || 0) + 1;
+              const errorMsg = saleError.message || "Erreur SQL";
+              if (currentRetries >= 3) {
+                console.error(`Vente ${s.id} abandonnée après 3 tentatives suite à l'erreur SQL: ${errorMsg}`);
+                await removeOfflineSale(s.id);
+                if (typeof window !== "undefined") {
+                  alert(`Attention : la vente hors-ligne ${s.id} n'a pas pu être synchronisée après 3 tentatives (Erreur : ${errorMsg}).`);
+                }
+              } else {
+                await updateOfflineSale({
+                  ...item,
+                  retryCount: currentRetries,
+                  lastError: errorMsg
+                });
+              }
               failed++;
             }
           }
@@ -1540,7 +1537,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           { data: inventory },
           { data: expenses },
           { data: cashSessionsData },
-          productCostsRes
+          productCostsRes,
+          saleItemCostsRes
         ] = await Promise.all([
           supabase.from('settings').select('*').eq('store_id', activeStore.id).maybeSingle(),
           supabase.from('categories').select('*').eq('store_id', activeStore.id),
@@ -1554,15 +1552,30 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           // Charger product_costs UNIQUEMENT pour l'admin (ne jamais interroger pour le caissier)
           isAdminUser
             ? supabase.from('product_costs').select('product_id, cost').eq('store_id', activeStore.id)
+            : Promise.resolve({ data: [] as any[] }),
+          // Charger sale_item_costs UNIQUEMENT pour l'admin (coûts d'achat figés au moment de la vente)
+          isAdminUser
+            ? supabase.from('sale_item_costs').select('sale_item_id, sale_id, unit_cost, is_estimated').eq('store_id', activeStore.id)
             : Promise.resolve({ data: [] as any[] })
         ]);
 
         const productCostsData = productCostsRes?.data;
+        const saleItemCostsData = (saleItemCostsRes as any)?.data;
 
         const costsMap = new Map<string, number>();
         if (isAdminUser && Array.isArray(productCostsData)) {
           productCostsData.forEach((c: any) => {
             costsMap.set(c.product_id, Number(c.cost) || 0);
+          });
+        }
+
+        const frozenCostsMap = new Map<string, { unit_cost: number; is_estimated: boolean }>();
+        if (isAdminUser && Array.isArray(saleItemCostsData)) {
+          saleItemCostsData.forEach((sc: any) => {
+            frozenCostsMap.set(sc.sale_item_id, {
+              unit_cost: Number(sc.unit_cost) || 0,
+              is_estimated: Boolean(sc.is_estimated)
+            });
           });
         }
 
@@ -1723,12 +1736,20 @@ export function StoreProvider({ children }: { children: ReactNode }) {
               dueDate: s.due_date,
               createdAt: s.created_at,
               payments: resolvedPayments,
-              items: s.items ? s.items.map((i: any) => ({
-                ...i,
-                productId: i.product_id,
-                productName: i.product_name,
-                unitPrice: i.unit_price
-              })) : []
+              items: s.items ? s.items.map((i: any) => {
+                const frozen = frozenCostsMap.get(i.id);
+                const unitCost = frozen !== undefined
+                  ? Number(frozen.unit_cost)
+                  : (costsMap.get(i.product_id) ?? 0);
+                return {
+                  ...i,
+                  productId: i.product_id,
+                  productName: i.product_name,
+                  unitPrice: i.unit_price,
+                  cost: isAdminUser ? unitCost : undefined,
+                  isEstimated: isAdminUser && frozen ? frozen.is_estimated : undefined,
+                };
+              }) : []
             };
           });
         }
@@ -2073,32 +2094,18 @@ export function StoreProvider({ children }: { children: ReactNode }) {
                 alert("Abonnement expiré : impossible d'enregistrer la vente. Veuillez renouveler votre formule Moneriz.");
                 return;
               }
-              console.warn("Erreur serveur Supabase create_sale, tentative insert direct:", saleError);
-              const { error: directInsertError } = await supabase.from("sales").insert([{
-                id: s.id,
-                store_id: activeStore.id,
-                subtotal: s.subtotal,
-                tax: s.tax || 0,
-                discount: s.discount || 0,
-                total: s.total,
-                payment_method: s.paymentMethod,
-                customer_name: s.customerName || null,
-                customer_phone: s.customerPhone || null,
-                amount_paid: s.amountPaid ?? (s.paymentMethod === 'credit' ? 0 : s.total),
-                remaining_amount: s.remainingAmount ?? (s.paymentMethod === 'credit' ? s.total : 0),
-                payment_status: s.paymentStatus || (s.paymentMethod === 'credit' ? 'unpaid' : 'paid'),
-                due_date: s.dueDate || null,
-                created_at: s.createdAt
-              }]);
-
-              if (directInsertError) {
-                if (isSubscriptionExpiredError(directInsertError)) {
-                  alert("Abonnement expiré : impossible d'enregistrer la vente. Veuillez renouveler votre formule Moneriz.");
-                  return;
-                }
-                console.warn("Basculement en sauvegarde hors-ligne sécurisée:", directInsertError);
+              const isNet = !navigator.onLine ||
+                saleError.message?.toLowerCase().includes("failed to fetch") ||
+                saleError.message?.toLowerCase().includes("network") ||
+                saleError.message?.toLowerCase().includes("timeout");
+              if (isNet) {
+                console.warn("Réseau indisponible, basculement en sauvegarde hors-ligne sécurisée:", saleError);
                 await saveOfflineSale(activeStore.id, s);
                 setPendingSyncCount((prev) => prev + 1);
+              } else {
+                console.error("Erreur serveur SQL create_sale:", saleError);
+                alert(`Erreur d'enregistrement : ${saleError.message || "Erreur base de données"}`);
+                return;
               }
             } else {
               // Si la vente comporte des métadonnées de crédit, garantir la mise à jour
@@ -2278,9 +2285,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     (sale.items || []).forEach(item => {
       if (!item) return;
       const product = (state.products || []).find(p => p.id === item.productId);
-      if (product) {
-        totalCOGS += (product.cost * item.quantity);
-      }
+      // Coût d'achat unitaire figé au moment de la vente en priorité, repli sur le coût catalogue actuel si absent
+      const effectiveUnitCost = (item.cost !== undefined && item.cost !== null)
+        ? Number(item.cost)
+        : (Number(product?.cost) || 0);
+      totalCOGS += (effectiveUnitCost * item.quantity);
     });
   });
 

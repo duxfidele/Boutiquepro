@@ -148,6 +148,11 @@ const AuthContext = createContext<AuthContextType>({
   canUseAdvancedAnalytics: true,
   canManageTeam: true,
   hasMultiStore: false,
+  enabledModules: DEFAULT_ENABLED_MODULES,
+  businessSector: null,
+  getModuleStatus: () => "available",
+  isModuleActive: () => true,
+  updateStoreModules: async () => ({ success: true }),
 });
 
 export const AuthProvider = ({ children }: { children: React.ReactNode }) => {

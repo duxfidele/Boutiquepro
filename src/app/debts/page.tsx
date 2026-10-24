@@ -212,7 +212,7 @@ export default function DebtsPage() {
     const list: Array<{ payment: DebtPayment; sale: Sale }> = [];
     (debtSales || []).forEach((sale) => {
       if (sale.payments && Array.isArray(sale.payments)) {
-        sale.payments.forEach((p) => {
+        sale.payments.forEach((p: any) => {
           list.push({ payment: p, sale });
         });
       }
@@ -292,7 +292,7 @@ export default function DebtsPage() {
         const nameMatch = s.customerName?.toLowerCase().includes(query);
         const phoneMatch = s.customerPhone?.toLowerCase().includes(query);
         const idMatch = s.id.toLowerCase().includes(query);
-        const descMatch = (s.items || []).some(i => i.productName.toLowerCase().includes(query));
+        const descMatch = (s.items || []).some((i: any) => i.productName.toLowerCase().includes(query));
         return nameMatch || phoneMatch || idMatch || descMatch;
       }
 
@@ -727,7 +727,7 @@ export default function DebtsPage() {
                       const isPartial = paid > 0 && remaining > 0;
                       const isOverdue = remaining > 0 && debt.dueDate && new Date(debt.dueDate) < new Date();
 
-                      const itemsDesc = (debt.items || []).map((i) => `${i.quantity}x ${i.productName}`).join(", ") || debt.notes || "Achat à crédit";
+                      const itemsDesc = (debt.items || []).map((i: any) => `${i.quantity}x ${i.productName}`).join(", ") || debt.notes || "Achat à crédit";
 
                       return (
                         <tr key={debt.id} className="hover:bg-secondary/20 transition-colors">
