@@ -260,7 +260,8 @@ export default function POSPage() {
   const cart = (state.cart || []).filter((c) => c && c.product);
   const subtotal = cart.reduce((sum, c) => {
     const itemPrice = c.unitPrice ?? (c.selectedUnit ? (c.selectedUnit.price ?? (c.product.price * c.selectedUnit.multiplier)) : (c.product?.price || 0));
-    return sum + itemPrice * (c.quantity || 1);
+    const lineTotal = c.customTotal !== undefined ? c.customTotal : Math.round(itemPrice * (c.quantity || 1));
+    return sum + lineTotal;
   }, 0);
   const taxAmount = 0; // TVA Supprimée
   
@@ -322,12 +323,13 @@ export default function POSPage() {
         const uPrice = c.unitPrice ?? (c.selectedUnit ? (c.selectedUnit.price ?? (c.product.price * mult)) : c.product.price);
         const uName = c.selectedUnit?.name ?? (c.product.unit || 'Unité');
         const qtyRef = Math.round((c.quantity * mult) * 1000) / 1000;
+        const lineTotal = c.customTotal !== undefined ? c.customTotal : Math.round(uPrice * c.quantity);
         return {
           productId: c.product.id,
           productName: c.product.name,
           quantity: c.quantity,
           unitPrice: uPrice,
-          total: Math.round(uPrice * c.quantity),
+          total: lineTotal,
           unitName: uName,
           unitMultiplier: mult,
           quantityReference: qtyRef,
@@ -891,66 +893,178 @@ export default function POSPage() {
                   })()}
                 </div>
 
-                {/* Contrôles de quantité : Moins, Saisie directe au clavier, Plus */}
-                <div className="flex items-center gap-1 shrink-0">
-                  <button
-                    type="button"
-                    onClick={() => dispatch({ type: "UPDATE_CART_QTY", payload: { productId: item.product.id, quantity: item.quantity - 1 } })}
-                    className="flex h-7 w-7 items-center justify-center rounded-lg bg-secondary hover:bg-secondary/80 text-foreground transition-colors active:scale-95"
-                    title="Diminuer la quantité (-1)"
-                  >
-                    <Minus className="h-3.5 w-3.5" />
-                  </button>
+                {(() => {
+                  const effectivePrice = item.unitPrice ?? (item.selectedUnit ? (item.selectedUnit.price ?? (item.product.price * item.selectedUnit.multiplier)) : item.product.price);
+                  const lineTotal = item.customTotal !== undefined ? item.customTotal : Math.round(effectivePrice * item.quantity);
+                  const isAmount = Boolean(item.isAmountMode);
+                  const unitLabel = item.selectedUnit?.name || item.product.unit || 'unité';
 
-                  {/* Saisie directe du nombre d'articles */}
-                  <input
-                    type="number"
-                    min="1"
-                    max={item.product.stock}
-                    value={item.quantity}
-                    onChange={(e) => {
-                      const raw = e.target.value;
-                      if (raw === "") return;
-                      const val = parseInt(raw, 10);
-                      if (!isNaN(val)) {
-                        const finalQty = Math.min(item.product.stock, Math.max(1, val));
-                        dispatch({ type: "UPDATE_CART_QTY", payload: { productId: item.product.id, quantity: finalQty } });
-                      }
-                    }}
-                    onFocus={(e) => e.target.select()}
-                    className="w-12 h-7 text-center text-xs font-bold rounded-lg border border-border/80 bg-background text-foreground focus:ring-2 focus:ring-primary/20 focus:border-primary focus:outline-none"
-                    title="Cliquez pour taper directement la quantité à acheter"
-                  />
+                  return (
+                    <>
+                      {/* Contrôles : Mode Montant vs Mode Quantité */}
+                      <div className="flex flex-col items-center gap-1 shrink-0">
+                        {isAmount ? (
+                          /* Saisie directe du montant souhaité par le client (ex: 100, 250, 500) */
+                          <div className="flex items-center gap-1">
+                            <div className="relative">
+                              <input
+                                type="number"
+                                step="5"
+                                min="5"
+                                placeholder="Montant"
+                                value={item.customTotal !== undefined ? item.customTotal : lineTotal}
+                                onChange={(e) => {
+                                  const raw = e.target.value;
+                                  if (raw === "") return;
+                                  const amount = parseFloat(raw);
+                                  if (!isNaN(amount) && amount > 0) {
+                                    const computedQty = Math.round((amount / effectivePrice) * 1000) / 1000;
+                                    dispatch({
+                                      type: "UPDATE_CART_QTY",
+                                      payload: {
+                                        productId: item.product.id,
+                                        unitId: item.selectedUnit?.id,
+                                        quantity: computedQty,
+                                        customTotal: amount,
+                                        isAmountMode: true,
+                                      },
+                                    });
+                                  }
+                                }}
+                                onFocus={(e) => e.target.select()}
+                                className="w-20 h-7 text-center text-xs font-black rounded-lg border-2 border-primary bg-primary/10 text-primary focus:ring-2 focus:ring-primary/30 focus:outline-none"
+                                title="Tapez directement le montant (ex: 100 F, 250 F, 500 F)"
+                              />
+                            </div>
+                            <span className="text-[10px] font-bold text-primary">F</span>
+                          </div>
+                        ) : (
+                          /* Saisie standard de la quantité (avec décimales acceptées) */
+                          <div className="flex items-center gap-1">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const newQty = item.quantity <= 1 ? Math.max(0.1, Math.round((item.quantity - 0.1) * 10) / 10) : item.quantity - 1;
+                                dispatch({
+                                  type: "UPDATE_CART_QTY",
+                                  payload: { productId: item.product.id, unitId: item.selectedUnit?.id, quantity: Math.round(newQty * 1000) / 1000, isAmountMode: false, customTotal: undefined },
+                                });
+                              }}
+                              className="flex h-7 w-7 items-center justify-center rounded-lg bg-secondary hover:bg-secondary/80 text-foreground transition-colors active:scale-95"
+                              title="Diminuer la quantité"
+                            >
+                              <Minus className="h-3.5 w-3.5" />
+                            </button>
 
-                  <button
-                    type="button"
-                    onClick={() => dispatch({ type: "UPDATE_CART_QTY", payload: { productId: item.product.id, quantity: item.quantity + 1 } })}
-                    className="flex h-7 w-7 items-center justify-center rounded-lg bg-secondary hover:bg-secondary/80 text-foreground transition-colors disabled:opacity-40 disabled:cursor-not-allowed active:scale-95"
-                    disabled={item.quantity >= item.product.stock}
-                    title={item.quantity >= item.product.stock ? "Stock maximum atteint" : "Augmenter la quantité (+1)"}
-                  >
-                    <Plus className="h-3.5 w-3.5" />
-                  </button>
-                </div>
+                            <input
+                              type="number"
+                              step="any"
+                              min="0.001"
+                              value={item.quantity}
+                              onChange={(e) => {
+                                const raw = e.target.value;
+                                if (raw === "") return;
+                                const val = parseFloat(raw);
+                                if (!isNaN(val) && val > 0) {
+                                  const finalQty = Math.round(val * 1000) / 1000;
+                                  dispatch({
+                                    type: "UPDATE_CART_QTY",
+                                    payload: { productId: item.product.id, unitId: item.selectedUnit?.id, quantity: finalQty, isAmountMode: false, customTotal: undefined },
+                                  });
+                                }
+                              }}
+                              onFocus={(e) => e.target.select()}
+                              className="w-14 h-7 text-center text-xs font-bold rounded-lg border border-border/80 bg-background text-foreground focus:ring-2 focus:ring-primary/20 focus:border-primary focus:outline-none"
+                              title="Tapez la quantité (ex: 1, 0.5, 2.5)"
+                            />
 
-                <div className="text-right ml-1 shrink-0">
-                  <p className="text-xs font-bold text-primary">
-                    {formatPrice(
-                      (item.unitPrice ?? (item.selectedUnit ? (item.selectedUnit.price ?? (item.product.price * item.selectedUnit.multiplier)) : item.product.price)) * item.quantity
-                    )}
-                  </p>
-                  <button
-                    type="button"
-                    onClick={() => dispatch({
-                      type: "REMOVE_FROM_CART",
-                      payload: { productId: item.product.id, unitId: item.selectedUnit?.id }
-                    })}
-                    className="mt-0.5 inline-flex p-1 hover:bg-destructive/10 rounded transition-colors"
-                    title="Retirer cet article du panier"
-                  >
-                    <Trash2 className="h-3.5 w-3.5 text-destructive/70 hover:text-destructive" />
-                  </button>
-                </div>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const newQty = item.quantity < 1 ? Math.round((item.quantity + 0.1) * 10) / 10 : item.quantity + 1;
+                                dispatch({
+                                  type: "UPDATE_CART_QTY",
+                                  payload: { productId: item.product.id, unitId: item.selectedUnit?.id, quantity: Math.round(newQty * 1000) / 1000, isAmountMode: false, customTotal: undefined },
+                                });
+                              }}
+                              className="flex h-7 w-7 items-center justify-center rounded-lg bg-secondary hover:bg-secondary/80 text-foreground transition-colors active:scale-95"
+                              title="Augmenter la quantité"
+                            >
+                              <Plus className="h-3.5 w-3.5" />
+                            </button>
+                          </div>
+                        )}
+
+                        {/* Bascule rapide Mode Montant / Mode Quantité */}
+                        <div className="flex items-center gap-1.5 mt-0.5">
+                          {isAmount ? (
+                            <>
+                              <span className="text-[9px] text-muted-foreground font-medium">
+                                ≈ {item.quantity} {unitLabel}
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  dispatch({
+                                    type: "UPDATE_CART_QTY",
+                                    payload: {
+                                      productId: item.product.id,
+                                      unitId: item.selectedUnit?.id,
+                                      quantity: Math.max(0.1, item.quantity),
+                                      customTotal: undefined,
+                                      isAmountMode: false,
+                                    },
+                                  });
+                                }}
+                                className="text-[9px] text-primary hover:underline font-bold"
+                              >
+                                Mode Qté
+                              </button>
+                            </>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const currentTotal = Math.round(effectivePrice * item.quantity);
+                                dispatch({
+                                  type: "UPDATE_CART_QTY",
+                                  payload: {
+                                    productId: item.product.id,
+                                    unitId: item.selectedUnit?.id,
+                                    quantity: item.quantity,
+                                    customTotal: currentTotal,
+                                    isAmountMode: true,
+                                  },
+                                });
+                              }}
+                              className="text-[9px] text-primary/80 hover:text-primary hover:underline font-semibold flex items-center gap-0.5"
+                              title="Vendre pour un montant précis (ex: 100 F, 250 F, 500 F)"
+                            >
+                              💰 Au montant
+                            </button>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="text-right ml-1 shrink-0">
+                        <p className="text-xs font-bold text-primary">
+                          {formatPrice(lineTotal)}
+                        </p>
+                        <button
+                          type="button"
+                          onClick={() => dispatch({
+                            type: "REMOVE_FROM_CART",
+                            payload: { productId: item.product.id, unitId: item.selectedUnit?.id }
+                          })}
+                          className="mt-0.5 inline-flex p-1 hover:bg-destructive/10 rounded transition-colors"
+                          title="Retirer cet article du panier"
+                        >
+                          <Trash2 className="h-3.5 w-3.5 text-destructive/70 hover:text-destructive" />
+                        </button>
+                      </div>
+                    </>
+                  );
+                })()}
               </div>
             ))
           )}

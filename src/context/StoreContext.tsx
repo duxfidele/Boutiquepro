@@ -38,6 +38,8 @@ export interface CartItem {
   quantity: number;
   selectedUnit?: ProductUnit;
   unitPrice?: number;
+  customTotal?: number;
+  isAmountMode?: boolean;
 }
 
 
@@ -203,7 +205,7 @@ type Action =
   | { type: "DELETE_PRODUCT"; payload: string }
   | { type: "ADD_TO_CART"; payload: Product | { product: Product; selectedUnit?: ProductUnit } }
   | { type: "REMOVE_FROM_CART"; payload: string | { productId: string; unitId?: string } }
-  | { type: "UPDATE_CART_QTY"; payload: { productId: string; quantity: number; unitId?: string } }
+  | { type: "UPDATE_CART_QTY"; payload: { productId: string; quantity: number; unitId?: string; customTotal?: number; isAmountMode?: boolean } }
   | { type: "UPDATE_CART_UNIT"; payload: { productId: string; oldUnitId?: string; selectedUnit?: ProductUnit } }
   | { type: "CLEAR_CART" }
   | { type: "COMPLETE_SALE"; payload: Sale }
@@ -570,8 +572,8 @@ function storeReducer(state: StoreState, action: Action): StoreState {
       };
     }
     case "UPDATE_CART_QTY": {
-      const { productId, quantity, unitId } = action.payload as any;
-      if (quantity <= 0) {
+      const { productId, quantity, unitId, customTotal, isAmountMode } = action.payload as any;
+      if (quantity <= 0 && (!customTotal || customTotal <= 0)) {
         return {
           ...state,
           cart: state.cart.filter((c) => !(c.product.id === productId && (unitId ? (c.selectedUnit?.id || 'ref') === unitId : true)))
@@ -581,7 +583,12 @@ function storeReducer(state: StoreState, action: Action): StoreState {
         ...state,
         cart: state.cart.map((c) => {
           if (c.product.id === productId && (!unitId || (c.selectedUnit?.id || 'ref') === unitId)) {
-            return { ...c, quantity };
+            return {
+              ...c,
+              quantity: Math.max(0, quantity),
+              customTotal: customTotal !== undefined ? customTotal : (isAmountMode === false ? undefined : c.customTotal),
+              isAmountMode: isAmountMode !== undefined ? isAmountMode : c.isAmountMode
+            };
           }
           return c;
         })
