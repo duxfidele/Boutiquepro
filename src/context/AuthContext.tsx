@@ -283,10 +283,22 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         }
       }
 
-      const { data } = await supabase
+      let data: any = null;
+      const res = await supabase
         .from("store_members")
         .select("role, store_id, stores ( id, name, created_at, owner_id, subscription_plan, subscription_status, subscription_ends_at, enabled_modules, business_sector )")
         .eq("user_id", userId);
+
+      if (res.error) {
+        // Repli rétrocompatible si la migration enabled_modules n'''est pas encore appliquée sur la base !
+        const fallbackRes = await supabase
+          .from("store_members")
+          .select("role, store_id, stores ( id, name, created_at, owner_id, subscription_plan, subscription_status, subscription_ends_at )")
+          .eq("user_id", userId);
+        data = fallbackRes.data;
+      } else {
+        data = res.data;
+      }
 
       // C. Si l'utilisateur est un caissier, il hérite automatiquement de l'abonnement du propriétaire de sa boutique
       const cashierMember = data?.find((d: any) => d.role === "cashier");
@@ -342,8 +354,12 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
           .filter((d: any) => d.id);
 
         // CONTRÔLE D'ÉTANCHÉITÉ STRICTE DU PORTAIL DE CONNEXION
+        const isCashierAccount = (user?.email?.toLowerCase().endsWith("@caisse.maboutique.app")) ||
+          (typeof window !== "undefined" && sessionStorage.getItem("auth_portal_mode") === "cashier");
+
+        // Si compte caissier, interdire formellement toute boutique admin
         const cashierStores = valid.filter((d: any) => d.role === "cashier");
-        const adminStores = valid.filter((d: any) => d.role === "admin");
+        const adminStores = isCashierAccount ? [] : valid.filter((d: any) => d.role === "admin");
 
         if (typeof window !== "undefined") {
           const requestedPortal = sessionStorage.getItem("auth_portal_mode");
@@ -425,11 +441,15 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         setActiveStoreState(selected);
         setSubscription(computeSubscription(selected, adminSub));
       } else {
+        const isCashierUser = (user?.email?.toLowerCase().endsWith("@caisse.maboutique.app")) ||
+          (typeof window !== "undefined" && sessionStorage.getItem("auth_portal_mode") === "cashier");
+        const defaultRole = isCashierUser ? "cashier" : "admin";
+
         if (!activeStore) {
           const fallback = {
             id: "default",
             name: "Ma Boutique",
-            role: "admin",
+            role: defaultRole,
             subscription_plan: adminSub?.plan_tier || "TRIAL",
             subscription_status: adminSub?.status || "trial",
             subscription_ends_at: adminSub?.current_period_ends_at || new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString(),
@@ -437,7 +457,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
           setStores([fallback]);
           setActiveStoreState(fallback);
           setSubscription(computeSubscription(fallback, adminSub));
-          setRole("admin");
+          setRole(defaultRole);
         }
       }
     } catch (e) {

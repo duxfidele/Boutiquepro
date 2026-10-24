@@ -1999,6 +1999,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           try {
             const { error: upsertErr } = await supabase.from('settings').upsert({
               store_id: activeStore.id,
+              currency: s.currency || state.settings?.currency || "FCFA",
+              tax_rate: s.taxRate !== undefined ? s.taxRate : (state.settings?.taxRate ?? 0),
               ...updates
             }, { onConflict: 'store_id' });
 

@@ -25,6 +25,13 @@ export default function SettingsPage() {
   const [isSaving, setIsSaving] = useState(false);
   const [showSubModal, setShowSubModal] = useState(false);
   const router = useRouter();
+
+  // Protection caissier : accès strictement interdit, redirection immédiate vers /pos
+  useEffect(() => {
+    if (role === "cashier") {
+      router.replace("/pos");
+    }
+  }, [role, router]);
   useEffect(() => {
     setName(state.settings.name);
     setCurrency(state.settings.currency);
