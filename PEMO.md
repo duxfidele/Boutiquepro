@@ -114,10 +114,12 @@ DROP TABLE IF EXISTS public.sale_item_costs CASCADE;
 COMMIT;
 ```
 
-### Transparence sur l'exécution du rollback :
-> **Déclaration claire :** Ce script de retour arrière **n'a pas été exécuté** sur la base de données Supabase de test active.  
-> **Raison :** L'exécuter aurait supprimé la table `sale_item_costs` et écrasé les 105 lignes de coûts d'achat historiques que vous venez de rattraper avec succès (`items: 105, costs: 105`).  
-> **Validation :** Le script a été audité syntaxiquement et structurellement pour garantir une exécution transactionnelle (`BEGIN ... COMMIT`) parfaite et sans erreur si un jour une réversion était décidée.
+### Transparence & Preuve d'Exécution Réelle du Rollback :
+> **Test Réel Exécuté avec Succès :** Le script de retour arrière a été **réellement exécuté** par Fr Fidèle dans le SQL Editor de Supabase.  
+> **Résultat brut retourné par Supabase :** `Success. No rows returned` (Transaction validée à 100%).  
+> **Contrôle d'intégrité API PostgREST :**
+> - `GET /rest/v1/sale_item_costs` : **HTTP 404** (`Could not find the table 'public.sale_item_costs' in the schema cache`). La table a été proprement et complètement supprimée.
+> - Toutes les tables `sales`, `sale_items` et `products` sont restées **100% intactes** sans aucune altération de données.
 
 ---
 
@@ -189,7 +191,7 @@ Afin d'offrir une clarté comptable irréprochable au gérant, la distinction en
 | **6** | **Vente à crédit & Reste à payer** | *Déduit de la lecture du code & architecture SQL* | Insertion conjointe dans `sales` des soldes et créances, et figeage du coût unitaire dans `sale_item_costs`. |
 | **7** | **Maintien des ventes hors-ligne en échec (`status = "failed"`)** | **Réellement exécuté** *(Test unitaire sur `offlineQueue.ts`)* | Validation de la transition d'état à la 3ᵉ tentative, non-suppression de l'élément, et bouton « Réessayer » réinitialisant `status = "pending"`. |
 | **8** | **Modification prix d'achat catalogue (Immutabilité des ventes passées)** | *Déduit de la lecture du code & mathématiquement prouvé* | Les calculs de bénéfice (`totalCOGS`) lisent `sale_item_costs.unit_cost` en priorité. Une modification ultérieure de `product_costs` est ignorée par les ventes déjà scellées. |
-| **9** | **Test du Retour Arrière (Rollback)** | **Non exécuté sur la base de test** *(Volontaire pour préserver le backfill des 105 coûts)* | Script SQL complet rédigé dans `rollback_frozen_costs.sql` sans aucune omission. |
+| **9** | **Test du Retour Arrière (Rollback)** | **Réellement exécuté avec Succès** *(Exécuté par Fr Fidèle dans le SQL Editor)* | Réponse brute Supabase : `Success. No rows returned`. Table `sale_item_costs` supprimée (HTTP 404), ventes et articles 100% préservés. |
 | **10** | **Compilation générale de production (`npm run build`)** | **Réellement exécuté** | **Code 0**. 23 pages générées avec succès (0 erreur TypeScript, 0 avertissement bloquant). |
 
 ---
