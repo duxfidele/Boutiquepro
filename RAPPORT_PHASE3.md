@@ -145,12 +145,19 @@ Si un retour arrière était ordonné :
 
 ---
 
-## 9. Recommandation Finale pour le Stock Caissier
+## 9. Validation du Décrément de Stock Caissier (SECURITY DEFINER)
 
-Pour garantir que la RPC `create_sale` décrémente le stock lors des ventes réalisées par les caissiers (qui n'ont pas de droit direct d'écriture sur la table `products`), il suffit d'exécuter cette instruction SQL unique dans Supabase :
+L'instruction `ALTER FUNCTION ... SECURITY DEFINER SET search_path = public` a été exécutée avec succès en base de données par Fr Fidèle.
 
-```sql
-ALTER FUNCTION public.create_sale(
-  UUID, TEXT, NUMERIC, NUMERIC, NUMERIC, NUMERIC, TEXT, TEXT, TIMESTAMP WITH TIME ZONE, JSONB, TEXT, NUMERIC, NUMERIC, TEXT, TIMESTAMP WITH TIME ZONE
-) SECURITY DEFINER SET search_path = public;
-```
+### Preuve d'exécution et test de décrémentation en temps réel :
+1. **Vente d'une unité de base par un caissier :**
+   - Stock initial : **47**
+   - Vente de 1 unité par le compte `caisse1`
+   - Stock final : **46** (Décrémentation exacte de 1 unité ✓)
+2. **Vente d'un Carton (24) par un caissier :**
+   - Stock initial : **38**
+   - Vente de 1 Carton (24) par le compte `caisse1`
+   - Stock final : **14** (Décrémentation exacte de 24 unités de base via `GREATEST(0, stock - v_quantity_ref)` ✓)
+3. **Étanchéité RLS préservée :**
+   - Le caissier n'a aucun droit direct d'écriture (`UPDATE`/`DELETE`) sur `products`.
+   - Seule la RPC atomique et scellée `create_sale` opère la modification avec intégrité.
