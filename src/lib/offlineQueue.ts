@@ -7,6 +7,8 @@ export interface OfflineSaleItem {
   createdAt: string;
   retryCount: number;
   lastError?: string;
+  status?: "pending" | "failed";
+  lastAttemptAt?: string;
 }
 
 const DB_NAME = "BoutiquePro_Offline";
@@ -65,6 +67,7 @@ export async function saveOfflineSale(storeId: string, sale: Sale): Promise<void
     sale,
     createdAt: new Date().toISOString(),
     retryCount: 0,
+    status: "pending",
   };
 
   if (!isIndexedDBAvailable()) {
@@ -192,5 +195,23 @@ export async function clearOfflineQueue(storeId?: string): Promise<void> {
     }
   } catch {
     // Ignoré
+  }
+}
+
+export async function getFailedOfflineSales(storeId?: string): Promise<OfflineSaleItem[]> {
+  const all = await getOfflineSales(storeId);
+  return all.filter((i) => i.status === "failed");
+}
+
+export async function retryOfflineSale(saleId: string): Promise<void> {
+  const all = await getOfflineSales();
+  const item = all.find((i) => i.id === saleId);
+  if (item) {
+    await updateOfflineSale({
+      ...item,
+      retryCount: 0,
+      status: "pending",
+      lastError: undefined,
+    });
   }
 }

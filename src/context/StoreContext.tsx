@@ -1,5 +1,5 @@
 "use client";
-import { saveOfflineSale, getOfflineSales, removeOfflineSale, getOfflineSalesCount, clearOfflineQueue, updateOfflineSale } from "@/lib/offlineQueue";
+import { saveOfflineSale, getOfflineSales, removeOfflineSale, getOfflineSalesCount, clearOfflineQueue, updateOfflineSale, getFailedOfflineSales, retryOfflineSale, OfflineSaleItem } from "@/lib/offlineQueue";
 
 import React, { createContext, useContext, useReducer, useEffect, useState, useMemo, ReactNode } from "react";
 import { useAuth } from '@/context/AuthContext';
@@ -770,6 +770,9 @@ interface StoreContextType {
   isSyncing: boolean;
   syncOfflineSales: () => Promise<{ success: number; failed: number }>;
   clearOfflineSalesQueue: () => Promise<void>;
+  failedOfflineSales: OfflineSaleItem[];
+  retryFailedSale: (saleId: string) => Promise<{ success: number; failed: number }>;
+  refreshFailedOfflineSales: () => Promise<void>;
   isRealtimeActive: boolean;
   unpaidDebts: Sale[];
   totalDebtsAmount: number;
@@ -829,6 +832,24 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [isInitialized, setIsInitialized] = useState(false);
   const [isOnline, setIsOnline] = useState<boolean>(() => (typeof window !== "undefined" ? navigator.onLine : true));
   const [pendingSyncCount, setPendingSyncCount] = useState<number>(0);
+  const [failedOfflineSales, setFailedOfflineSales] = useState<OfflineSaleItem[]>([]);
+
+  const refreshFailedOfflineSales = async () => {
+    if (activeStore?.id) {
+      const failed = await getFailedOfflineSales(activeStore.id);
+      setFailedOfflineSales(failed);
+    }
+  };
+
+  useEffect(() => {
+    refreshFailedOfflineSales();
+  }, [activeStore?.id]);
+
+  const retryFailedSale = async (saleId: string) => {
+    await retryOfflineSale(saleId);
+    await refreshFailedOfflineSales();
+    return syncOfflineSales();
+  };
   const [isSyncing, setIsSyncing] = useState<boolean>(false);
 
   // Synchronisation des ventes hors-ligne
@@ -1125,7 +1146,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         pendingItems = allPending.filter((i) => !i.storeId || i.storeId === activeStore.id);
       }
 
-      for (const item of pendingItems) {
+      const actionableItems = pendingItems.filter((i) => i.status !== "failed");
+      for (const item of actionableItems) {
         const s = item.sale;
         const targetStoreId = activeStore.id || item.storeId;
         try {
@@ -1201,16 +1223,21 @@ export function StoreProvider({ children }: { children: ReactNode }) {
               const currentRetries = (item.retryCount || 0) + 1;
               const errorMsg = saleError.message || "Erreur SQL";
               if (currentRetries >= 3) {
-                console.error(`Vente ${s.id} abandonnée après 3 tentatives suite à l'erreur SQL: ${errorMsg}`);
-                await removeOfflineSale(s.id);
-                if (typeof window !== "undefined") {
-                  alert(`Attention : la vente hors-ligne ${s.id} n'a pas pu être synchronisée après 3 tentatives (Erreur : ${errorMsg}).`);
-                }
+                console.error(`Vente ${s.id} marquée en échec après 3 tentatives: ${errorMsg}`);
+                // RÈGLE CRITIQUE : NE JAMAIS SUPPRIMER LA VENTE ! La garder dans la file avec statut "failed"
+                await updateOfflineSale({
+                  ...item,
+                  retryCount: currentRetries,
+                  lastError: errorMsg,
+                  status: "failed",
+                  lastAttemptAt: new Date().toISOString()
+                });
               } else {
                 await updateOfflineSale({
                   ...item,
                   retryCount: currentRetries,
-                  lastError: errorMsg
+                  lastError: errorMsg,
+                  status: "pending"
                 });
               }
               failed++;
@@ -1224,6 +1251,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     } finally {
       const remaining = await getOfflineSalesCount(activeStore.id);
       setPendingSyncCount(remaining);
+      await refreshFailedOfflineSales();
       setIsSyncing(false);
     }
 
@@ -2574,6 +2602,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       isSyncing,
       syncOfflineSales,
       clearOfflineSalesQueue,
+      failedOfflineSales,
+      retryFailedSale,
+      refreshFailedOfflineSales,
       isRealtimeActive,
       unpaidDebts,
       totalDebtsAmount,

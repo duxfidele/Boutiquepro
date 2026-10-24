@@ -9,6 +9,7 @@ import {
   TrendingUp,
   ShoppingBag,
   AlertTriangle,
+  Info,
   Receipt,
   ArrowUpRight,
   ArrowDownRight,
@@ -91,6 +92,8 @@ export default function Dashboard() {
     activeCashSession,
     currentSessionStats,
     currentSessionSales,
+    failedOfflineSales,
+    retryFailedSale,
   } = useStore();
 
   const [period, setPeriod] = useState<PeriodType>("today");
@@ -250,6 +253,12 @@ export default function Dashboard() {
       sunday,
     };
   }, [state.sales, state.expenses, state.products, closedCashSessions, period, selectedDate, startDate, endDate]);
+
+  const hasEstimatedCosts = useMemo(() => {
+    return (periodStats.filteredSales || []).some((s: any) =>
+      (s.items || []).some((i: any) => i?.isEstimated)
+    );
+  }, [periodStats.filteredSales]);
 
   const periodLabel = useMemo(() => {
     if (period === "today") return "Aujourd'hui";
@@ -883,6 +892,11 @@ export default function Dashboard() {
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium truncate flex items-center gap-2">
                       <span>{(sale.items || []).map((i: any) => i?.productName || "").join(", ") || "Vente"}</span>
+                      {role === "admin" && (sale.items || []).some((i: any) => i?.isEstimated) && (
+                        <span className="text-[9px] px-1.5 py-0.5 rounded font-medium bg-amber-500/10 text-amber-700 dark:text-amber-300 border border-amber-500/20" title="Vente antérieure à la migration : coût d'achat estimé au jour de la migration">
+                          Coût estimé
+                        </span>
+                      )}
                       {isCredit && (
                         <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${
                           isSold 
