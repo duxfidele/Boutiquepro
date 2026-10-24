@@ -228,7 +228,10 @@ export default function AnalyticsPage() {
           const product = state.products.find((p) => p.id === item.productId);
           productSales[item.productId] = { name: item.productName, qty: 0, revenue: 0, image: product?.image || "📦" };
         }
-        productSales[item.productId].qty += item.quantity;
+        const refQty = ((item as any).quantityReference !== undefined && (item as any).quantityReference !== null && Number((item as any).quantityReference) > 0)
+          ? Number((item as any).quantityReference)
+          : (Number(item.quantity) * (Number((item as any).unitMultiplier) || 1));
+        productSales[item.productId].qty += refQty;
         productSales[item.productId].revenue += Math.round(item.total * discountRatio);
       });
     });
@@ -252,7 +255,10 @@ export default function AnalyticsPage() {
         const unitCost = (item as any).cost !== undefined && (item as any).cost !== null
           ? Number((item as any).cost)
           : (Number(product?.cost) || 0);
-        totalCost += unitCost * item.quantity;
+        const refQty = ((item as any).quantityReference !== undefined && (item as any).quantityReference !== null && Number((item as any).quantityReference) > 0)
+          ? Number((item as any).quantityReference)
+          : (Number(item.quantity) * (Number((item as any).unitMultiplier) || 1));
+        totalCost += unitCost * refQty;
       });
     });
 

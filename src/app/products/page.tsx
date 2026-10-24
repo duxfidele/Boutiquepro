@@ -1,8 +1,9 @@
 "use client";
 
 import React, { useState, useMemo } from "react";
-import { useStore, Product } from "@/context/StoreContext";
+import { useStore, Product, ProductUnit } from "@/context/StoreContext";
 import { useAuth } from "@/context/AuthContext";
+import { resolveModuleStatus } from "@/types/modules";
 import { ProductAvatar } from "@/components/ui/ProductAvatar";
 import { exportInventoryValuation } from "@/lib/accountingExport";
 import { FileSpreadsheet, Download, Upload } from "lucide-react";
@@ -20,11 +21,18 @@ import {
   X,
   Save,
   Tag,
+  Layers,
 } from "lucide-react";
 
 export default function ProductsPage() {
-  const { role } = useAuth();
+  const { role, activeStore } = useAuth();
   const { state, dispatch, formatPrice } = useStore();
+  const isMultiUnitsEnabled = useMemo(() => {
+    if (!activeStore) return false;
+    return resolveModuleStatus('multi_units', activeStore.tier, activeStore.enabled_modules) === 'available';
+  }, [activeStore]);
+
+  const [formUnits, setFormUnits] = useState<{ id?: string; name: string; multiplier: number; price: string | number; barcode: string }[]>([]);
   const [search, setSearch] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("Tous");
   const [stockFilter, setStockFilter] = useState<"all" | "low" | "ok">("all");
@@ -55,6 +63,7 @@ export default function ProductsPage() {
   const openCreate = () => {
     setEditProduct(null);
     setForm({ ...emptyForm, category: state.categories[0]?.name || "Divers" });
+    setFormUnits([]);
     setShowModal(true);
   };
 
@@ -70,6 +79,15 @@ export default function ProductsPage() {
       minStock: p.minStock,
       image: p.image
     });
+    setFormUnits(
+      (p.units || []).map((u) => ({
+        id: u.id,
+        name: u.name,
+        multiplier: u.multiplier,
+        price: u.price !== null && u.price !== undefined ? u.price : "",
+        barcode: u.barcode || "",
+      }))
+    );
     setShowModal(true);
   };
 
@@ -79,15 +97,32 @@ export default function ProductsPage() {
     const finalSku = form.sku.trim() || (form.name.substring(0, 3).toUpperCase() + "-" + Math.floor(1000 + Math.random() * 9000));
     const costToSave = role === "admin" ? (Number(form.cost) || 0) : 0;
 
+    const parsedUnits: ProductUnit[] = formUnits
+      .filter((u) => u.name.trim().length > 0 && Number(u.multiplier) > 0)
+      .map((u) => ({
+        id: u.id || ("pu_" + Math.random().toString(36).substring(7)),
+        storeId: activeStore?.id || "",
+        productId: editProduct ? editProduct.id : "",
+        name: u.name.trim(),
+        multiplier: Number(u.multiplier),
+        price: (u.price !== "" && u.price !== null && u.price !== undefined && Number(u.price) > 0) ? Number(u.price) : null,
+        barcode: u.barcode.trim() || null,
+        isReference: false,
+      }));
+
     if (editProduct) {
-      dispatch({ type: "UPDATE_PRODUCT", payload: { ...editProduct, ...form, cost: costToSave, sku: finalSku } });
+      parsedUnits.forEach((u) => (u.productId = editProduct.id));
+      dispatch({ type: "UPDATE_PRODUCT", payload: { ...editProduct, ...form, cost: costToSave, sku: finalSku, units: parsedUnits } });
     } else {
+      const newProdId = "p" + Date.now();
+      parsedUnits.forEach((u) => (u.productId = newProdId));
       const newProduct: Product = {
-        id: "p" + Date.now(),
+        id: newProdId,
         ...form,
         cost: costToSave,
         sku: finalSku,
         createdAt: new Date().toISOString().split("T")[0],
+        units: parsedUnits,
       };
       dispatch({ type: "ADD_PRODUCT", payload: newProduct });
     }
@@ -490,6 +525,110 @@ export default function ProductsPage() {
                   />
                 </div>
               </div>
+
+              {/* Section Unités & Conditionnements Multiples */}
+              {isMultiUnitsEnabled && (
+                <div className="border border-border/60 rounded-xl p-3.5 bg-secondary/15 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h4 className="text-xs font-semibold text-foreground flex items-center gap-1.5">
+                        <Layers className="h-3.5 w-3.5 text-primary" />
+                        Conditionnements & Unités Multiples
+                      </h4>
+                      <p className="text-[11px] text-muted-foreground">
+                        Vendez au carton, pack ou demi-portion tout en décomptant le stock unitaire de base.
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setFormUnits([...formUnits, { name: "", multiplier: 1, price: "", barcode: "" }])}
+                      className="text-xs bg-primary/10 text-primary hover:bg-primary/20 px-2.5 py-1 rounded-lg font-medium transition-colors flex items-center gap-1"
+                    >
+                      <Plus className="h-3 w-3" /> Ajouter
+                    </button>
+                  </div>
+
+                  {formUnits.length === 0 ? (
+                    <p className="text-[11px] text-muted-foreground italic py-1">
+                      Aucun conditionnement secondaire (vendu uniquement à l'unité de base).
+                    </p>
+                  ) : (
+                    <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
+                      {formUnits.map((u, idx) => (
+                        <div key={idx} className="grid grid-cols-12 gap-1.5 items-center bg-card p-2 rounded-lg border border-border/50 text-xs">
+                          <div className="col-span-4">
+                            <label className="text-[10px] text-muted-foreground block mb-0.5">Nom</label>
+                            <input
+                              type="text"
+                              placeholder="Ex: Carton (24)"
+                              value={u.name}
+                              onChange={(e) => {
+                                const next = [...formUnits];
+                                next[idx].name = e.target.value;
+                                setFormUnits(next);
+                              }}
+                              className="w-full bg-secondary/30 border border-border/50 rounded px-2 py-1 text-xs"
+                            />
+                          </div>
+                          <div className="col-span-2">
+                            <label className="text-[10px] text-muted-foreground block mb-0.5">Coeff.</label>
+                            <input
+                              type="number"
+                              placeholder="24"
+                              min="0.001"
+                              step="any"
+                              value={u.multiplier || ""}
+                              onChange={(e) => {
+                                const next = [...formUnits];
+                                next[idx].multiplier = Number(e.target.value);
+                                setFormUnits(next);
+                              }}
+                              className="w-full bg-secondary/30 border border-border/50 rounded px-1.5 py-1 text-xs text-center font-medium"
+                            />
+                          </div>
+                          <div className="col-span-3">
+                            <label className="text-[10px] text-muted-foreground block mb-0.5">Prix (Optionnel)</label>
+                            <input
+                              type="number"
+                              placeholder={form.price && u.multiplier ? String(form.price * u.multiplier) : "Prorata"}
+                              value={u.price || ""}
+                              onChange={(e) => {
+                                const next = [...formUnits];
+                                next[idx].price = e.target.value;
+                                setFormUnits(next);
+                              }}
+                              className="w-full bg-secondary/30 border border-border/50 rounded px-2 py-1 text-xs"
+                            />
+                          </div>
+                          <div className="col-span-2">
+                            <label className="text-[10px] text-muted-foreground block mb-0.5">Code-barres</label>
+                            <input
+                              type="text"
+                              placeholder="Optionnel"
+                              value={u.barcode || ""}
+                              onChange={(e) => {
+                                const next = [...formUnits];
+                                next[idx].barcode = e.target.value;
+                                setFormUnits(next);
+                              }}
+                              className="w-full bg-secondary/30 border border-border/50 rounded px-1.5 py-1 text-[11px]"
+                            />
+                          </div>
+                          <div className="col-span-1 flex justify-center pt-3">
+                            <button
+                              type="button"
+                              onClick={() => setFormUnits(formUnits.filter((_, i) => i !== idx))}
+                              className="text-destructive/70 hover:text-destructive p-1 rounded hover:bg-destructive/10"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
 
               {/* Preview */}
               {form.name && (

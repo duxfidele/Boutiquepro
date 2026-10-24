@@ -231,6 +231,15 @@ export default function InventoryPage() {
                             className="w-full rounded-lg border-2 border-primary/40 bg-white px-2 py-1.5 text-center text-sm font-bold text-foreground focus:border-primary focus:outline-none focus:ring-4 focus:ring-primary/10 transition-all shadow-sm"
                           />
                         </div>
+                        {p.units && p.units.length > 0 && (
+                          <div className="text-[9px] text-muted-foreground mt-1 text-center font-medium">
+                            {p.units.map((u) => {
+                              const cartons = Math.floor(actual / u.multiplier);
+                              const loose = actual % u.multiplier;
+                              return `${cartons} ${u.name} + ${loose}`;
+                            }).join(', ')}
+                          </div>
+                        )}
                       </div>
 
                       {/* Écart */}

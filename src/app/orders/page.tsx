@@ -33,7 +33,14 @@ export default function OrdersPage() {
   const [form, setForm] = useState({
     supplierName: "",
     expectedAt: "",
-    items: [] as { product: Product; quantity: number; costPrice: number }[]
+    items: [] as {
+      product: Product;
+      quantity: number;
+      costPrice: number;
+      unitName?: string;
+      unitMultiplier?: number;
+      selectedUnitId?: string;
+    }[]
   });
   const [searchProduct, setSearchProduct] = useState("");
 
@@ -55,7 +62,17 @@ export default function OrdersPage() {
     if (form.items.find(i => i.product.id === product.id)) return;
     setForm({
       ...form,
-      items: [...form.items, { product, quantity: 1, costPrice: product.cost }]
+      items: [
+        ...form.items,
+        {
+          product,
+          quantity: 1,
+          costPrice: product.cost,
+          unitName: 'Unité',
+          unitMultiplier: 1,
+          selectedUnitId: 'ref',
+        }
+      ]
     });
   };
 
@@ -78,13 +95,20 @@ export default function OrdersPage() {
     const newOrder: Order = {
       id: "CMD-" + Date.now().toString().slice(-6),
       supplierName: form.supplierName || "Fournisseur divers",
-      items: form.items.map(i => ({
-        productId: i.product.id,
-        productName: i.product.name,
-        quantity: i.quantity,
-        costPrice: i.costPrice,
-        total: i.quantity * i.costPrice
-      })),
+      items: form.items.map(i => {
+        const mult = Number(i.unitMultiplier) || 1;
+        const refQ = Math.round(i.quantity * mult * 1000) / 1000;
+        return {
+          productId: i.product.id,
+          productName: i.product.name,
+          quantity: i.quantity,
+          costPrice: i.costPrice,
+          total: i.quantity * i.costPrice,
+          unitName: i.unitName || 'Unité',
+          unitMultiplier: mult,
+          quantityReference: refQ,
+        };
+      }),
       totalCost,
       status: "pending",
       createdAt: new Date().toISOString(),
@@ -301,7 +325,9 @@ export default function OrdersPage() {
               )}
               <div className="flex justify-between items-center text-sm border-t border-border/40 pt-4">
                 <span className="text-muted-foreground flex items-center gap-1.5"><Package className="h-4 w-4" /> Articles</span>
-                <span className="font-bold">{order.items.reduce((acc, i) => acc + i.quantity, 0)} unités</span>
+                <span className="font-bold">
+                  {order.items.map(i => `${i.quantity} ${i.unitName && i.unitName !== 'Unité' ? i.unitName : 'unité(s)'}`).join(', ')}
+                </span>
               </div>
               <div className="flex justify-between items-center text-lg font-bold border-t border-border/40 pt-4 text-primary">
                 <span>Total</span>
@@ -393,9 +419,48 @@ export default function OrdersPage() {
                           <Trash2 className="h-4 w-4" />
                         </button>
                       </div>
+                      {item.product.units && item.product.units.length > 0 && (
+                        <div>
+                          <label className="text-xs text-muted-foreground block mb-1.5 font-medium">Conditionnement d'achat</label>
+                          <select
+                            value={item.selectedUnitId || "ref"}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              const u = val === "ref" ? undefined : item.product.units?.find((un) => un.id === val);
+                              const mult = u ? u.multiplier : 1;
+                              const currentCost = item.product.cost || 0;
+                              const suggestedCost = Math.round(currentCost * mult);
+                              setForm({
+                                ...form,
+                                items: form.items.map((it) =>
+                                  it.product.id === item.product.id
+                                    ? {
+                                        ...it,
+                                        selectedUnitId: u?.id || "ref",
+                                        unitName: u?.name || "Unité",
+                                        unitMultiplier: mult,
+                                        costPrice: suggestedCost > 0 ? suggestedCost : it.costPrice,
+                                      }
+                                    : it
+                                ),
+                              });
+                            }}
+                            className="w-full rounded-xl border border-border/60 px-3 py-2 text-base sm:text-sm focus:outline-none bg-secondary/30 focus:ring-2 focus:ring-primary/20"
+                          >
+                            <option value="ref">Unité de référence (x1)</option>
+                            {item.product.units.map((u) => (
+                              <option key={u.id} value={u.id}>
+                                {u.name} (x{u.multiplier} unités)
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      )}
                       <div className="grid grid-cols-2 gap-3 items-end">
                         <div>
-                          <label className="text-xs text-muted-foreground block mb-1.5 font-medium">Quantité</label>
+                          <label className="text-xs text-muted-foreground block mb-1.5 font-medium">
+                            Quantité {item.unitName && item.unitName !== 'Unité' ? `(${item.unitName})` : ''}
+                          </label>
                           <input
                             type="number" min="1" value={item.quantity}
                             onChange={e => handleUpdateItem(item.product.id, "quantity", Number(e.target.value))}

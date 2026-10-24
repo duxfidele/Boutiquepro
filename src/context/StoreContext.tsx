@@ -6,6 +6,18 @@ import { useAuth } from '@/context/AuthContext';
 import { supabase } from "@/lib/supabase";
 
 // ─── Types ───────────────────────────────────────────────────
+export interface ProductUnit {
+  id: string;
+  storeId: string;
+  productId: string;
+  name: string;
+  multiplier: number;
+  price?: number | null;
+  barcode?: string | null;
+  isReference: boolean;
+  createdAt?: string;
+}
+
 export interface Product {
   id: string;
   name: string;
@@ -17,11 +29,15 @@ export interface Product {
   minStock: number;
   image: string;
   createdAt: string;
+  unit?: string;
+  units?: ProductUnit[];
 }
 
 export interface CartItem {
   product: Product;
   quantity: number;
+  selectedUnit?: ProductUnit;
+  unitPrice?: number;
 }
 
 
@@ -37,7 +53,16 @@ export interface Expense {
 export interface Order {
   id: string;
   supplierName: string;
-  items: { productId: string; productName: string; quantity: number; costPrice: number; total: number }[];
+  items: {
+    productId: string;
+    productName: string;
+    quantity: number;
+    costPrice: number;
+    total: number;
+    unitName?: string;
+    unitMultiplier?: number;
+    quantityReference?: number;
+  }[];
   totalCost: number;
   status: "pending" | "received";
   createdAt: string;
@@ -63,6 +88,9 @@ export interface SaleItem {
   total: number;
   cost?: number;
   isEstimated?: boolean;
+  unitName?: string;
+  unitMultiplier?: number;
+  quantityReference?: number;
 }
 
 export interface Sale {
@@ -173,9 +201,10 @@ type Action =
   | { type: "BATCH_ADD_PRODUCTS"; payload: Product[] }
   | { type: "UPDATE_PRODUCT"; payload: Product }
   | { type: "DELETE_PRODUCT"; payload: string }
-  | { type: "ADD_TO_CART"; payload: Product }
-  | { type: "REMOVE_FROM_CART"; payload: string }
-  | { type: "UPDATE_CART_QTY"; payload: { productId: string; quantity: number } }
+  | { type: "ADD_TO_CART"; payload: Product | { product: Product; selectedUnit?: ProductUnit } }
+  | { type: "REMOVE_FROM_CART"; payload: string | { productId: string; unitId?: string } }
+  | { type: "UPDATE_CART_QTY"; payload: { productId: string; quantity: number; unitId?: string } }
+  | { type: "UPDATE_CART_UNIT"; payload: { productId: string; oldUnitId?: string; selectedUnit?: ProductUnit } }
   | { type: "CLEAR_CART" }
   | { type: "COMPLETE_SALE"; payload: Sale }
   | { 
@@ -509,19 +538,68 @@ function storeReducer(state: StoreState, action: Action): StoreState {
     case "DELETE_PRODUCT":
       return { ...state, products: state.products.filter((p) => p.id !== action.payload) };
     case "ADD_TO_CART": {
-      const existing = state.cart.find((c) => c.product.id === action.payload.id);
-      if (existing) {
-        return { ...state, cart: state.cart.map((c) => (c.product.id === action.payload.id ? { ...c, quantity: c.quantity + 1 } : c)) };
+      const prod = ('product' in action.payload) ? (action.payload as any).product : action.payload;
+      const unit = ('selectedUnit' in action.payload) ? (action.payload as any).selectedUnit : undefined;
+      const unitId = unit ? unit.id : 'ref';
+
+      const existingIndex = state.cart.findIndex(
+        (c) => c.product.id === prod.id && (c.selectedUnit?.id || 'ref') === unitId
+      );
+      if (existingIndex >= 0) {
+        return {
+          ...state,
+          cart: state.cart.map((c, i) =>
+            i === existingIndex ? { ...c, quantity: c.quantity + 1 } : c
+          )
+        };
       }
-      return { ...state, cart: [...state.cart, { product: action.payload, quantity: 1 }] };
+      const unitPrice = unit ? (unit.price ?? (prod.price * unit.multiplier)) : prod.price;
+      return {
+        ...state,
+        cart: [...state.cart, { product: prod, quantity: 1, selectedUnit: unit, unitPrice }]
+      };
     }
-    case "REMOVE_FROM_CART":
-      return { ...state, cart: state.cart.filter((c) => c.product.id !== action.payload) };
-    case "UPDATE_CART_QTY":
-      if (action.payload.quantity <= 0) {
-        return { ...state, cart: state.cart.filter((c) => c.product.id !== action.payload.productId) };
+    case "REMOVE_FROM_CART": {
+      if (typeof action.payload === 'string') {
+        return { ...state, cart: state.cart.filter((c) => c.product.id !== action.payload) };
       }
-      return { ...state, cart: state.cart.map((c) => (c.product.id === action.payload.productId ? { ...c, quantity: action.payload.quantity } : c)) };
+      const { productId, unitId } = action.payload as any;
+      return {
+        ...state,
+        cart: state.cart.filter((c) => !(c.product.id === productId && (c.selectedUnit?.id || 'ref') === (unitId || 'ref')))
+      };
+    }
+    case "UPDATE_CART_QTY": {
+      const { productId, quantity, unitId } = action.payload as any;
+      if (quantity <= 0) {
+        return {
+          ...state,
+          cart: state.cart.filter((c) => !(c.product.id === productId && (unitId ? (c.selectedUnit?.id || 'ref') === unitId : true)))
+        };
+      }
+      return {
+        ...state,
+        cart: state.cart.map((c) => {
+          if (c.product.id === productId && (!unitId || (c.selectedUnit?.id || 'ref') === unitId)) {
+            return { ...c, quantity };
+          }
+          return c;
+        })
+      };
+    }
+    case "UPDATE_CART_UNIT": {
+      const { productId, oldUnitId, selectedUnit } = action.payload as any;
+      return {
+        ...state,
+        cart: state.cart.map((c) => {
+          if (c.product.id === productId && (c.selectedUnit?.id || 'ref') === (oldUnitId || 'ref')) {
+            const unitPrice = selectedUnit ? (selectedUnit.price ?? (c.product.price * selectedUnit.multiplier)) : c.product.price;
+            return { ...c, selectedUnit, unitPrice };
+          }
+          return c;
+        })
+      };
+    }
     case "CLEAR_CART":
       return { ...state, cart: [] };
     case "COMPLETE_SALE": {
@@ -532,7 +610,12 @@ function storeReducer(state: StoreState, action: Action): StoreState {
 
       const updatedProducts = state.products.map((p) => {
         const soldItem = action.payload.items.find((i) => i.productId === p.id);
-        return soldItem ? { ...p, stock: Math.max(0, p.stock - soldItem.quantity) } : p;
+        const qtyToDeduct = soldItem
+          ? (soldItem.quantityReference !== undefined && soldItem.quantityReference !== null && Number(soldItem.quantityReference) > 0)
+            ? Number(soldItem.quantityReference)
+            : (Number(soldItem.quantity) * (Number(soldItem.unitMultiplier) || 1))
+          : 0;
+        return soldItem ? { ...p, stock: Math.max(0, p.stock - qtyToDeduct) } : p;
       });
 
       let updatedActiveSession = state.activeCashSession;
@@ -621,10 +704,20 @@ function storeReducer(state: StoreState, action: Action): StoreState {
       // Update order status
       const updatedOrders = state.orders.map(o => o.id === action.payload.orderId ? { ...o, status: "received" as const } : o);
       
-      // Increase product stock
+      // Increase product stock in reference units & update reference cost
       const updatedProducts = state.products.map(p => {
         const orderedItem = order.items.find(i => i.productId === p.id);
-        return orderedItem ? { ...p, stock: p.stock + orderedItem.quantity } : p;
+        if (!orderedItem) return p;
+        const mult = Number(orderedItem.unitMultiplier) || 1;
+        const refQty = (orderedItem.quantityReference !== undefined && orderedItem.quantityReference !== null && Number(orderedItem.quantityReference) > 0)
+          ? Number(orderedItem.quantityReference)
+          : (Number(orderedItem.quantity) * mult);
+        const newRefCost = mult > 0 ? (Number(orderedItem.costPrice) / mult) : Number(orderedItem.costPrice);
+        return {
+          ...p,
+          stock: p.stock + refQty,
+          cost: newRefCost > 0 ? Number(newRefCost.toFixed(4)) : p.cost
+        };
       });
 
       return { ...state, orders: updatedOrders, products: updatedProducts };
@@ -1566,7 +1659,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           { data: expenses },
           { data: cashSessionsData },
           productCostsRes,
-          saleItemCostsRes
+          saleItemCostsRes,
+          productUnitsRes
         ] = await Promise.all([
           supabase.from('settings').select('*').eq('store_id', activeStore.id).maybeSingle(),
           supabase.from('categories').select('*').eq('store_id', activeStore.id),
@@ -1584,8 +1678,30 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           // Charger sale_item_costs UNIQUEMENT pour l'admin (coûts d'achat figés au moment de la vente)
           isAdminUser
             ? supabase.from('sale_item_costs').select('sale_item_id, sale_id, unit_cost, is_estimated').eq('store_id', activeStore.id)
-            : Promise.resolve({ data: [] as any[] })
+            : Promise.resolve({ data: [] as any[] }),
+          // Charger product_units pour tous les membres (nécessaire au scan caisse et gestion produits)
+          supabase.from('product_units').select('*').eq('store_id', activeStore.id)
         ]);
+
+        const productUnitsData = productUnitsRes?.data;
+        const unitsByProduct = new Map<string, ProductUnit[]>();
+        if (Array.isArray(productUnitsData)) {
+          productUnitsData.forEach((u: any) => {
+            const list = unitsByProduct.get(u.product_id) || [];
+            list.push({
+              id: u.id,
+              storeId: u.store_id,
+              productId: u.product_id,
+              name: u.name,
+              multiplier: Number(u.multiplier) || 1,
+              price: u.price !== null && u.price !== undefined ? Number(u.price) : null,
+              barcode: u.barcode || null,
+              isReference: Boolean(u.is_reference),
+              createdAt: u.created_at,
+            });
+            unitsByProduct.set(u.product_id, list);
+          });
+        }
 
         const productCostsData = productCostsRes?.data;
         const saleItemCostsData = (saleItemCostsRes as any)?.data;
@@ -1678,6 +1794,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             createdAt: p.created_at || new Date().toISOString(),
             userId: p.user_id,
             storeId: p.store_id,
+            units: unitsByProduct.get(p.id) || [],
           }));
         }
         let localStoredPayments: DebtPayment[] = [];
@@ -1773,7 +1890,13 @@ export function StoreProvider({ children }: { children: ReactNode }) {
                   ...i,
                   productId: i.product_id,
                   productName: i.product_name,
-                  unitPrice: i.unit_price,
+                  unitPrice: Number(i.unit_price) || 0,
+                  total: Number(i.total) || 0,
+                  unitName: i.unit_name || 'Unité',
+                  unitMultiplier: Number(i.unit_multiplier) || 1,
+                  quantityReference: (i.quantity_reference !== undefined && i.quantity_reference !== null && Number(i.quantity_reference) > 0)
+                    ? Number(i.quantity_reference)
+                    : (Number(i.quantity) * (Number(i.unit_multiplier) || 1)),
                   cost: isAdminUser ? unitCost : undefined,
                   isEstimated: isAdminUser && frozen ? frozen.is_estimated : undefined,
                 };
@@ -1799,7 +1922,14 @@ export function StoreProvider({ children }: { children: ReactNode }) {
               ...i,
               productId: i.product_id,
               productName: i.product_name,
-              costPrice: i.cost_price
+              costPrice: Number(i.cost_price) || 0,
+              quantity: Number(i.quantity) || 1,
+              total: Number(i.total) || 0,
+              unitName: i.unit_name || 'Unité',
+              unitMultiplier: Number(i.unit_multiplier) || 1,
+              quantityReference: (i.quantity_reference !== undefined && i.quantity_reference !== null && Number(i.quantity_reference) > 0)
+                ? Number(i.quantity_reference)
+                : (Number(i.quantity) * (Number(i.unit_multiplier) || 1)),
             })) : []
           }));
         }
@@ -1988,6 +2118,23 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           });
           if (costError) console.error("Supabase Add Product Cost Error:", costError);
         }
+
+        // 3. Synchronisation des unités secondaires dans product_units
+        if (isAdminUser && Array.isArray(p.units)) {
+          await supabase.from('product_units').delete().eq('product_id', p.id).eq('store_id', activeStore.id);
+          if (p.units.length > 0) {
+            const unitsToInsert = p.units.map((u: any) => ({
+              store_id: activeStore.id,
+              product_id: p.id,
+              name: u.name.trim(),
+              multiplier: Number(u.multiplier) || 1,
+              price: (u.price !== null && u.price !== undefined && u.price !== '' && Number(u.price) > 0) ? Number(u.price) : null,
+              barcode: u.barcode ? u.barcode.trim() : null,
+              is_reference: false,
+            }));
+            await supabase.from('product_units').insert(unitsToInsert);
+          }
+        }
       } 
       else if (action.type === "DELETE_PRODUCT") {
         const { error } = await supabase.from('products').delete().eq('id', action.payload);
@@ -2015,6 +2162,23 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             cost: Number(p.cost) || 0
           });
           if (costError) console.error("Supabase Update Product Cost Error:", costError);
+        }
+
+        // 3. Synchronisation des unités secondaires dans product_units
+        if (isAdminUser && Array.isArray(p.units)) {
+          await supabase.from('product_units').delete().eq('product_id', p.id).eq('store_id', activeStore.id);
+          if (p.units.length > 0) {
+            const unitsToInsert = p.units.map((u: any) => ({
+              store_id: activeStore.id,
+              product_id: p.id,
+              name: u.name.trim(),
+              multiplier: Number(u.multiplier) || 1,
+              price: (u.price !== null && u.price !== undefined && u.price !== '' && Number(u.price) > 0) ? Number(u.price) : null,
+              barcode: u.barcode ? u.barcode.trim() : null,
+              is_reference: false,
+            }));
+            await supabase.from('product_units').insert(unitsToInsert);
+          }
         }
       }
       else if (action.type === "UPDATE_SETTINGS") {
@@ -2212,22 +2376,51 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         if (!error && o.items && o.items.length > 0) {
           const items = o.items.map((i: any) => ({
             id: 'oi' + Math.random().toString(36).substring(7),
-            order_id: o.id, product_id: i.productId, product_name: i.productName,
-            quantity: i.quantity, cost_price: i.costPrice, total: i.total
+            order_id: o.id,
+            product_id: i.productId,
+            product_name: i.productName,
+            quantity: i.quantity,
+            cost_price: i.costPrice,
+            total: i.total,
+            unit_name: i.unitName || 'Unité',
+            unit_multiplier: Number(i.unitMultiplier) || 1,
+            quantity_reference: (i.quantityReference !== undefined && i.quantityReference !== null && Number(i.quantityReference) > 0)
+              ? Number(i.quantityReference)
+              : (Number(i.quantity) * (Number(i.unitMultiplier) || 1))
           }));
           await supabase.from('order_items').insert(items);
         }
       }
       else if (action.type === "UPDATE_ORDER_STATUS") {
-        const { error } = await supabase.from('orders').update({ status: 'received' }).eq('id', action.payload.orderId);
-        if (!error) {
-           // update stock for each item
+        // VERROU IDEMPOTENT ANTI-DOUBLE RÉCEPTION : ne mettre à jour que si status = 'pending'
+        const { data: updatedRows, error } = await supabase
+          .from('orders')
+          .update({ status: 'received' })
+          .eq('id', action.payload.orderId)
+          .eq('status', 'pending')
+          .select('id');
+
+        if (!error && updatedRows && updatedRows.length > 0) {
            const order = state.orders.find((o: any) => o.id === action.payload.orderId);
            if (order) {
               for (const item of order.items) {
                 const prod = state.products.find((p: any) => p.id === item.productId);
                 if (prod) {
-                   await supabase.from('products').update({ stock: prod.stock + item.quantity }).eq('id', prod.id);
+                   const mult = Number(item.unitMultiplier) || 1;
+                   const refQty = (item.quantityReference !== undefined && item.quantityReference !== null && Number(item.quantityReference) > 0)
+                     ? Number(item.quantityReference)
+                     : (Number(item.quantity) * mult);
+                   const newRefCost = mult > 0 ? (Number(item.costPrice) / mult) : Number(item.costPrice);
+
+                   await supabase.from('products').update({ stock: prod.stock + refQty }).eq('id', prod.id);
+                   if (isAdminUser && newRefCost > 0 && activeStore?.id) {
+                     await supabase.from('product_costs').upsert({
+                       product_id: prod.id,
+                       store_id: activeStore.id,
+                       cost: Number(newRefCost.toFixed(4)),
+                       updated_at: new Date().toISOString()
+                     });
+                   }
                 }
               }
            }
@@ -2317,7 +2510,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       const effectiveUnitCost = (item.cost !== undefined && item.cost !== null)
         ? Number(item.cost)
         : (Number(product?.cost) || 0);
-      totalCOGS += (effectiveUnitCost * item.quantity);
+      const refQty = (item.quantityReference !== undefined && item.quantityReference !== null && Number(item.quantityReference) > 0)
+        ? Number(item.quantityReference)
+        : (Number(item.quantity) * (Number(item.unitMultiplier) || 1));
+      totalCOGS += (effectiveUnitCost * refQty);
     });
   });
 

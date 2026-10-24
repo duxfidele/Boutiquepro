@@ -190,7 +190,10 @@ export default function Dashboard() {
         const unitCost = (item as any).cost !== undefined && (item as any).cost !== null
           ? Number((item as any).cost)
           : (Number(prod?.cost) || 0);
-        totalCost += unitCost * (Number(item.quantity) || 0);
+        const refQty = ((item as any).quantityReference !== undefined && (item as any).quantityReference !== null && Number((item as any).quantityReference) > 0)
+          ? Number((item as any).quantityReference)
+          : (Number(item.quantity) * (Number((item as any).unitMultiplier) || 1));
+        totalCost += unitCost * (refQty || Number(item.quantity) || 0);
       });
     });
 

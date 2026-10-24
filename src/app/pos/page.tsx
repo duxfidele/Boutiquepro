@@ -69,6 +69,7 @@ export default function POSPage() {
     isRealtimeActive
   } = useStore();
   const { user, role, subscription, canOfferCredit, canPrintReceipts, signOut, isModuleActive, getModuleStatus } = useAuth();
+  const isMultiUnits = isModuleActive('multi_units');
   const [subModalOpen, setSubModalOpen] = useState(false);
   // Profil du caissier chargé depuis la base de données
   const [cashierProfile, setCashierProfile] = useState<{ full_name?: string; phone?: string } | null>(null);
@@ -242,15 +243,25 @@ export default function POSPage() {
   const allCategories = ["Tous", ...state.categories.map(c => c.name)];
 
   const filteredProducts = useMemo(() => {
+    const sLower = search.toLowerCase();
     return state.products.filter((p) => {
-      const matchSearch = p.name.toLowerCase().includes(search.toLowerCase()) || p.sku.toLowerCase().includes(search.toLowerCase());
+      const matchSearch =
+        p.name.toLowerCase().includes(sLower) ||
+        p.sku.toLowerCase().includes(sLower) ||
+        (isMultiUnits && (p.units || []).some((u) =>
+          u.name.toLowerCase().includes(sLower) ||
+          (u.barcode && u.barcode.toLowerCase() === sLower)
+        ));
       const matchCategory = categoryFilter === "Tous" || p.category === categoryFilter;
       return matchSearch && matchCategory && p.stock > 0;
     });
   }, [state.products, search, categoryFilter]);
 
   const cart = (state.cart || []).filter((c) => c && c.product);
-  const subtotal = cart.reduce((sum, c) => sum + (c.product?.price || 0) * (c.quantity || 1), 0);
+  const subtotal = cart.reduce((sum, c) => {
+    const itemPrice = c.unitPrice ?? (c.selectedUnit ? (c.selectedUnit.price ?? (c.product.price * c.selectedUnit.multiplier)) : (c.product?.price || 0));
+    return sum + itemPrice * (c.quantity || 1);
+  }, 0);
   const taxAmount = 0; // TVA Supprimée
   
   // Calcul dynamique de la remise (priorité au pourcentage déduit du coût total)
@@ -306,13 +317,22 @@ export default function POSPage() {
 
     const sale: Sale = {
       id: saleId,
-      items: cart.map((c) => ({
-        productId: c.product.id,
-        productName: c.product.name,
-        quantity: c.quantity,
-        unitPrice: c.product.price,
-        total: c.product.price * c.quantity,
-      })),
+      items: cart.map((c) => {
+        const mult = c.selectedUnit?.multiplier ?? 1;
+        const uPrice = c.unitPrice ?? (c.selectedUnit ? (c.selectedUnit.price ?? (c.product.price * mult)) : c.product.price);
+        const uName = c.selectedUnit?.name ?? (c.product.unit || 'Unité');
+        const qtyRef = Math.round((c.quantity * mult) * 1000) / 1000;
+        return {
+          productId: c.product.id,
+          productName: c.product.name,
+          quantity: c.quantity,
+          unitPrice: uPrice,
+          total: Math.round(uPrice * c.quantity),
+          unitName: uName,
+          unitMultiplier: mult,
+          quantityReference: qtyRef,
+        };
+      }),
       subtotal,
       tax: taxAmount,
       discount: discountAmount,
@@ -696,9 +716,34 @@ export default function POSPage() {
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <input
                 type="text"
-                placeholder="Rechercher un article..."
+                placeholder="Rechercher ou scanner code-barres..."
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && search.trim()) {
+                    const query = search.trim().toLowerCase();
+                    // 1. Priorité au code-barres de carton/unité secondaire
+                    if (isMultiUnits) {
+                      for (const prod of state.products) {
+                        const matchedUnit = (prod.units || []).find((u) => u.barcode && u.barcode.toLowerCase() === query);
+                        if (matchedUnit) {
+                          dispatch({ type: 'ADD_TO_CART', payload: { product: prod, selectedUnit: matchedUnit } });
+                          setSearch('');
+                          e.preventDefault();
+                          return;
+                        }
+                      }
+                    }
+                    // 2. Correspondance SKU ou code-barres direct du produit
+                    const matchedProd = state.products.find((p) => p.sku && p.sku.toLowerCase() === query);
+                    if (matchedProd) {
+                      dispatch({ type: 'ADD_TO_CART', payload: matchedProd });
+                      setSearch('');
+                      e.preventDefault();
+                      return;
+                    }
+                  }
+                }}
                 className="w-full rounded-xl border border-border/60 bg-secondary/30 py-2.5 pl-10 pr-4 text-base sm:text-sm placeholder:text-muted-foreground/60 focus:border-primary/40 focus:bg-background focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all"
                 autoFocus
               />
@@ -799,7 +844,51 @@ export default function POSPage() {
                 <ProductAvatar name={item.product.name} size="sm" />
                 <div className="flex-1 min-w-0">
                   <p className="text-xs font-semibold truncate text-foreground">{item.product.name}</p>
-                  <p className="text-[10px] text-muted-foreground">{formatPrice(item.product.price)} / unité</p>
+                  {isMultiUnits && item.product.units && item.product.units.length > 0 ? (
+                    <div className="mt-0.5">
+                      <select
+                        value={item.selectedUnit?.id || "ref"}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          const newUnit = val === "ref" ? undefined : item.product.units?.find((u) => u.id === val);
+                          dispatch({
+                            type: "UPDATE_CART_UNIT",
+                            payload: {
+                              productId: item.product.id,
+                              oldUnitId: item.selectedUnit?.id,
+                              selectedUnit: newUnit,
+                            },
+                          });
+                        }}
+                        className="text-[11px] bg-secondary/80 border border-border/60 rounded px-1.5 py-0.5 text-foreground font-medium focus:outline-none"
+                      >
+                        <option value="ref">Unité ({formatPrice(item.product.price)})</option>
+                        {item.product.units.map((u) => {
+                          const pPrice = u.price ?? (item.product.price * u.multiplier);
+                          return (
+                            <option key={u.id} value={u.id}>
+                              {u.name} ({formatPrice(pPrice)})
+                            </option>
+                          );
+                        })}
+                      </select>
+                    </div>
+                  ) : (
+                    <p className="text-[10px] text-muted-foreground">{formatPrice(item.product.price)} / unité</p>
+                  )}
+                  {/* Alerte stock avec coefficient */}
+                  {(() => {
+                    const mult = item.selectedUnit?.multiplier ?? 1;
+                    const refNeeded = item.quantity * mult;
+                    if (refNeeded > item.product.stock) {
+                      return (
+                        <p className="text-[9px] text-amber-500 font-semibold mt-0.5">
+                          ⚠️ Stock dispo: {item.product.stock} (requis: {refNeeded})
+                        </p>
+                      );
+                    }
+                    return null;
+                  })()}
                 </div>
 
                 {/* Contrôles de quantité : Moins, Saisie directe au clavier, Plus */}
@@ -845,10 +934,17 @@ export default function POSPage() {
                 </div>
 
                 <div className="text-right ml-1 shrink-0">
-                  <p className="text-xs font-bold text-primary">{formatPrice(item.product.price * item.quantity)}</p>
+                  <p className="text-xs font-bold text-primary">
+                    {formatPrice(
+                      (item.unitPrice ?? (item.selectedUnit ? (item.selectedUnit.price ?? (item.product.price * item.selectedUnit.multiplier)) : item.product.price)) * item.quantity
+                    )}
+                  </p>
                   <button
                     type="button"
-                    onClick={() => dispatch({ type: "REMOVE_FROM_CART", payload: item.product.id })}
+                    onClick={() => dispatch({
+                      type: "REMOVE_FROM_CART",
+                      payload: { productId: item.product.id, unitId: item.selectedUnit?.id }
+                    })}
                     className="mt-0.5 inline-flex p-1 hover:bg-destructive/10 rounded transition-colors"
                     title="Retirer cet article du panier"
                   >
@@ -1264,6 +1360,9 @@ export default function POSPage() {
                       <tr key={i} className="border-b border-dotted border-gray-200">
                         <td className="text-left py-1.5 font-medium text-black truncate max-w-[110px]" title={item.productName}>
                           {item.productName}
+                          {item.unitName && item.unitName !== "Unité" && (
+                            <span className="text-[9px] text-gray-500 block">({item.unitName})</span>
+                          )}
                         </td>
                         <td className="text-center py-1.5 text-black font-semibold">{item.quantity}</td>
                         <td className="text-right py-1.5 text-gray-700">{new Intl.NumberFormat("fr-FR").format(item.unitPrice)}</td>
@@ -1502,7 +1601,12 @@ export default function POSPage() {
                       {lastSale.items.map((item, i) => (
                         <tr key={i} className="hover:bg-gray-50/50 transition-colors">
                           <td className="py-3 px-3 text-center font-bold text-gray-400">{i + 1}</td>
-                          <td className="py-3 px-4 font-semibold text-gray-900">{item.productName}</td>
+                          <td className="py-3 px-4 font-semibold text-gray-900">
+                            {item.productName}
+                            {item.unitName && item.unitName !== "Unité" && (
+                              <span className="text-xs text-primary font-medium ml-1.5">({item.unitName})</span>
+                            )}
+                          </td>
                           <td className="py-3 px-3 text-center font-bold text-gray-900">{item.quantity}</td>
                           <td className="py-3 px-4 text-right text-gray-700 font-medium">
                             {new Intl.NumberFormat("fr-FR").format(item.unitPrice)} {state.settings.currency}

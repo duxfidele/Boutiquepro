@@ -133,10 +133,9 @@ export const MODULES_CATALOG: Record<ModuleKey, ModuleDefinition> = {
     key: 'multi_units',
     label: 'Unités Multiples',
     description: 'Gestion des conditionnements multiples (cartons, packs, pièces, vrac).',
-    category: 'future',
+    category: 'commercial',
     minTier: 'PRO',
     routes: [],
-    isPlaceholder: true,
     adminOnly: true,
   },
   price_history: {
@@ -167,8 +166,8 @@ export const MODULES_CATALOG: Record<ModuleKey, ModuleDefinition> = {
  */
 export const TIER_MODULES: Record<SubscriptionTier, ModuleKey[]> = {
   STARTER: ['core', 'expenses'],
-  PRO: ['core', 'expenses', 'debts', 'receipts_invoices', 'inventory', 'orders', 'analytics', 'team'],
-  BUSINESS: ['core', 'expenses', 'debts', 'receipts_invoices', 'inventory', 'orders', 'analytics', 'team', 'multi_store'],
+  PRO: ['core', 'expenses', 'debts', 'receipts_invoices', 'inventory', 'orders', 'analytics', 'team', 'multi_units'],
+  BUSINESS: ['core', 'expenses', 'debts', 'receipts_invoices', 'inventory', 'orders', 'analytics', 'team', 'multi_store', 'multi_units'],
 };
 
 /**
