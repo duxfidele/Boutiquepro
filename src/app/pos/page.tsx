@@ -404,7 +404,7 @@ export default function POSPage() {
     const quoteItems: QuoteItem[] = cart.map((c, idx) => {
       let unitPrice = c.product.price;
       let unitMultiplier = 1;
-      let unitName = "Unité";
+      let unitName = c.product.unit || "Unité";
 
       if (c.selectedUnit) {
         unitName = c.selectedUnit.name;
@@ -873,11 +873,14 @@ export default function POSPage() {
                 >
                   <ProductAvatar name={p.name} size="lg" className="mb-1 group-hover:scale-110 transition-transform" />
                   <p className="text-xs font-semibold truncate w-full">{p.name}</p>
-                  <p className="text-sm font-bold text-primary">{formatPrice(p.price)}</p>
+                  <p className="text-sm font-bold text-primary">
+                    {formatPrice(p.price)}
+                    <span className="text-[10px] font-normal text-muted-foreground ml-0.5">/{p.unit || "u"}</span>
+                  </p>
                   <div className="flex flex-col items-center justify-center gap-0.5">
                     <div className="flex items-center justify-center gap-1">
                       <p className={`text-[10px] font-medium ${p.stock <= 0 ? (state.settings?.allowNegativeStock ? "text-amber-500 font-bold" : "text-destructive font-bold") : "text-muted-foreground"}`}>
-                        Stock: {p.stock}
+                        Stock: {p.stock} {p.unit ? p.unit : ""}
                       </p>
                       {p.stock <= 0 && (
                         <span className={`text-[9px] px-1 py-0.2 rounded font-semibold ${state.settings?.allowNegativeStock ? "bg-amber-500/10 text-amber-600" : "bg-destructive/10 text-destructive"}`}>
@@ -897,10 +900,25 @@ export default function POSPage() {
                       exp.setHours(0, 0, 0, 0);
                       const diffDays = Math.ceil((exp.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
                       if (diffDays < 0) {
-                        return <span className="text-[8px] font-bold text-red-600 bg-red-500/10 px-1 rounded animate-pulse">🚨 Lot périmé</span>;
+                        return <span className="text-[8px] font-bold text-red-600 bg-red-500/10 px-1 rounded animate-pulse">🚨 Périmé ({Math.abs(diffDays)}j)</span>;
+                      }
+                      if (diffDays === 0) {
+                        return <span className="text-[8px] font-bold text-red-600 bg-red-500/10 px-1 rounded animate-pulse">🚨 Expire AUJ.</span>;
+                      }
+                      if (diffDays <= 3) {
+                        return <span className="text-[8px] font-bold text-red-600 bg-red-500/10 px-1 rounded">⚠️ Exp: {diffDays}j</span>;
+                      }
+                      if (diffDays <= 7) {
+                        return <span className="text-[8px] font-bold text-orange-600 bg-orange-500/10 px-1 rounded">⚠️ Exp: {diffDays}j</span>;
                       }
                       if (diffDays <= 30) {
-                        return <span className="text-[8px] font-semibold text-amber-600 bg-amber-500/10 px-1 rounded">Exp: {diffDays}j</span>;
+                        return <span className="text-[8px] font-semibold text-amber-600 bg-amber-500/10 px-1 rounded">⏰ Exp: {diffDays}j</span>;
+                      }
+                      if (diffDays <= 60) {
+                        return <span className="text-[8px] font-medium text-amber-600 bg-amber-500/10 px-1 rounded">📅 Exp: 2 mois</span>;
+                      }
+                      if (diffDays <= 90) {
+                        return <span className="text-[8px] font-medium text-blue-600 bg-blue-500/10 px-1 rounded">ℹ️ Exp: 3 mois</span>;
                       }
                       return null;
                     })()}
@@ -993,7 +1011,7 @@ export default function POSPage() {
                         }}
                         className="text-[11px] bg-secondary/80 border border-border/60 rounded px-1.5 py-0.5 text-foreground font-medium focus:outline-none"
                       >
-                        <option value="ref">Unité ({formatPrice(item.product.price)})</option>
+                        <option value="ref">{item.product.unit || "Unité de base"} ({formatPrice(item.product.price)})</option>
                         {item.product.units.map((u) => {
                           const pPrice = u.price ?? (item.product.price * u.multiplier);
                           return (
@@ -1005,7 +1023,7 @@ export default function POSPage() {
                       </select>
                     </div>
                   ) : (
-                    <p className="text-[10px] text-muted-foreground">{formatPrice(item.product.price)} / unité</p>
+                    <p className="text-[10px] text-muted-foreground">{formatPrice(item.product.price)} / {item.product.unit || "unité"}</p>
                   )}
                   {/* Alerte stock avec coefficient */}
                   {(() => {

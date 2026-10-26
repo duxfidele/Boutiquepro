@@ -25,10 +25,91 @@ import {
   Clock,
   Calendar,
   ShieldCheck,
-  Check
+  Check,
+  Sparkles
 } from "lucide-react";
 import { ProductBatch, PriceHistoryEntry } from "@/context/StoreContext";
 import { TrendingUp, TrendingDown, History, ArrowRight, DollarSign } from "lucide-react";
+
+const BASE_UNITS = [
+  { id: 'piece', label: 'Pièce / Unité', icon: '📦', presets: ['Carton (24)', 'Pack (6)', 'Carton (12)'] },
+  { id: 'litre', label: 'Litre (L)', icon: '🥛', presets: ['Bidon de 25 L', 'Bidon de 10 L', 'Bidon de 5 L', 'Bouteille 1.5 L'] },
+  { id: 'kg', label: 'Kilogramme (kg)', icon: '⚖️', presets: ['Sac de 50 kg', 'Sac de 25 kg', 'Sac de 10 kg', 'Sachet 500 g'] },
+  { id: 'metre', label: 'Mètre (m)', icon: '📏', presets: ['Rouleau de 100 m', 'Rouleau de 50 m', 'Rouleau de 25 m'] },
+  { id: 'sachet', label: 'Sachet / Paquet', icon: '🍬', presets: ['Carton de 50', 'Carton de 20', 'Paquet de 10'] },
+  { id: 'boite', label: 'Boîte / Conserve', icon: '🥫', presets: ['Carton (24)', 'Carton (12)', 'Pack (6)'] },
+];
+
+const renderExpiryBadge = (nearestBatch: ProductBatch) => {
+  const now = new Date();
+  now.setHours(0, 0, 0, 0);
+  const exp = new Date(nearestBatch.expiryDate);
+  exp.setHours(0, 0, 0, 0);
+  const diffDays = Math.ceil((exp.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+
+  if (diffDays < 0) {
+    return (
+      <span className="rounded-full bg-red-600/15 border border-red-500/40 px-2 py-0.5 text-[10px] font-bold text-red-600 flex items-center gap-1 animate-pulse" title={`Périmé depuis le ${new Date(nearestBatch.expiryDate).toLocaleDateString('fr-FR')}`}>
+        <AlertTriangle className="h-3 w-3" />
+        <span>Périmé (${Math.abs(diffDays)}j) • ${nearestBatch.batchNumber}</span>
+      </span>
+    );
+  }
+  if (diffDays === 0) {
+    return (
+      <span className="rounded-full bg-red-600/15 border border-red-500/40 px-2 py-0.5 text-[10px] font-bold text-red-600 flex items-center gap-1 animate-pulse" title="Expire aujourd'hui">
+        <AlertTriangle className="h-3 w-3" />
+        <span>Expire AUJOURD'HUI !</span>
+      </span>
+    );
+  }
+  if (diffDays <= 3) {
+    return (
+      <span className="rounded-full bg-red-500/10 border border-red-500/30 px-2 py-0.5 text-[10px] font-bold text-red-600 flex items-center gap-1" title="Derniers jours avant péremption">
+        <Clock className="h-3 w-3 text-red-500" />
+        <span>Expire dans ${diffDays}j (Urgent)</span>
+      </span>
+    );
+  }
+  if (diffDays <= 7) {
+    return (
+      <span className="rounded-full bg-orange-500/10 border border-orange-500/30 px-2 py-0.5 text-[10px] font-bold text-orange-600 flex items-center gap-1" title="Expire dans la semaine">
+        <Clock className="h-3 w-3 text-orange-500" />
+        <span>Expire dans ${diffDays}j (1 sem.)</span>
+      </span>
+    );
+  }
+  if (diffDays <= 30) {
+    return (
+      <span className="rounded-full bg-amber-500/10 border border-amber-500/30 px-2 py-0.5 text-[10px] font-bold text-amber-600 flex items-center gap-1" title="Expire sous 1 mois">
+        <Clock className="h-3 w-3 text-amber-500" />
+        <span>Expire sous 1 mois (${diffDays}j)</span>
+      </span>
+    );
+  }
+  if (diffDays <= 60) {
+    return (
+      <span className="rounded-full bg-yellow-500/15 border border-yellow-500/30 px-2 py-0.5 text-[10px] font-semibold text-yellow-700 dark:text-yellow-400 flex items-center gap-1" title="Expire sous 2 mois">
+        <Calendar className="h-3 w-3 text-yellow-600" />
+        <span>Expire sous 2 mois (${diffDays}j)</span>
+      </span>
+    );
+  }
+  if (diffDays <= 90) {
+    return (
+      <span className="rounded-full bg-blue-500/10 border border-blue-500/25 px-2 py-0.5 text-[10px] font-medium text-blue-600 dark:text-blue-400 flex items-center gap-1" title="Alerte précoce à 3 mois">
+        <Calendar className="h-3 w-3 text-blue-500" />
+        <span>Expire sous 3 mois (${diffDays}j)</span>
+      </span>
+    );
+  }
+  return (
+    <span className="rounded-full bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 text-[10px] font-medium text-emerald-600 flex items-center gap-1">
+      <Check className="h-2.5 w-2.5" />
+      <span>DLC: ${new Date(nearestBatch.expiryDate).toLocaleDateString('fr-FR')}</span>
+    </span>
+  );
+};
 
 export default function ProductsPage() {
   const { role, activeStore, tier, isModuleActive } = useAuth();
@@ -51,10 +132,10 @@ export default function ProductsPage() {
   // Product Modal
   const [showModal, setShowModal] = useState(false);
   const [editProduct, setEditProduct] = useState<Product | null>(null);
-  const emptyForm = { name: "", sku: "", category: "Vêtements", price: 0, cost: 0, stock: 0, minStock: 5, image: "📦" };
+  const emptyForm = { name: "", sku: "", category: "Alimentation", unit: "Pièce / Unité", price: 0, cost: 0, stock: 0, minStock: 5, image: "📦" };
   const [form, setForm] = useState(emptyForm);
   const [initialBatch, setInitialBatch] = useState<{ batchNumber: string; expiryDate: string }>({ batchNumber: '', expiryDate: '' });
-  const [expiryFilter, setExpiryFilter] = useState<"all" | "expired" | "soon">("all");
+  const [expiryFilter, setExpiryFilter] = useState<"all" | "expired" | "critical" | "30d" | "60d" | "90d">("all");
   const [selectedProductForBatches, setSelectedProductForBatches] = useState<Product | null>(null);
   const [newBatchForm, setNewBatchForm] = useState({ batchNumber: "", expiryDate: "", quantity: 1 });
   const [isAddingBatch, setIsAddingBatch] = useState(false);
@@ -90,8 +171,14 @@ export default function ProductsPage() {
           const diffDays = Math.ceil((exp.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
           if (expiryFilter === "expired") {
             matchExpiry = diffDays < 0;
-          } else if (expiryFilter === "soon") {
+          } else if (expiryFilter === "critical") {
+            matchExpiry = diffDays >= 0 && diffDays <= 7;
+          } else if (expiryFilter === "30d") {
             matchExpiry = diffDays >= 0 && diffDays <= 30;
+          } else if (expiryFilter === "60d") {
+            matchExpiry = diffDays >= 0 && diffDays <= 60;
+          } else if (expiryFilter === "90d") {
+            matchExpiry = diffDays >= 0 && diffDays <= 90;
           }
         }
       }
@@ -102,7 +189,7 @@ export default function ProductsPage() {
 
   const openCreate = () => {
     setEditProduct(null);
-    setForm({ ...emptyForm, category: state.categories[0]?.name || "Divers" });
+    setForm({ ...emptyForm, category: state.categories[0]?.name || "Divers", unit: "Pièce / Unité" });
     setFormUnits([]);
     setInitialBatch({ batchNumber: '', expiryDate: '' });
     setShowModal(true);
@@ -114,6 +201,7 @@ export default function ProductsPage() {
       name: p.name,
       sku: p.sku,
       category: p.category,
+      unit: p.unit || "Pièce / Unité",
       price: p.price,
       cost: role === "admin" ? p.cost : 0,
       stock: p.stock,
@@ -160,12 +248,13 @@ export default function ProductsPage() {
     const newProdId = "p" + Date.now();
     if (editProduct) {
       parsedUnits.forEach((u) => (u.productId = editProduct.id));
-      dispatch({ type: "UPDATE_PRODUCT", payload: { ...editProduct, ...form, cost: costToSave, sku: finalSku, units: parsedUnits } });
+      dispatch({ type: "UPDATE_PRODUCT", payload: { ...editProduct, ...form, unit: form.unit, cost: costToSave, sku: finalSku, units: parsedUnits } });
     } else {
       parsedUnits.forEach((u) => (u.productId = newProdId));
       const newProduct: Product = {
         id: newProdId,
         ...form,
+        unit: form.unit,
         cost: costToSave,
         sku: finalSku,
         createdAt: new Date().toISOString().split("T")[0],
@@ -348,12 +437,15 @@ export default function ProductsPage() {
           </select>
                     <select
             value={expiryFilter}
-            onChange={(e) => setExpiryFilter(e.target.value as "all" | "expired" | "soon")}
-            className="rounded-xl border border-border/60 bg-secondary/30 px-3 py-2 text-base sm:text-xs focus:outline-none focus:ring-2 focus:ring-primary/20"
+            onChange={(e) => setExpiryFilter(e.target.value as any)}
+            className="rounded-xl border border-border/60 bg-secondary/30 px-3 py-2 text-base sm:text-xs focus:outline-none focus:ring-2 focus:ring-primary/20 font-medium"
           >
             <option value="all">Toutes dates</option>
-            <option value="expired">🚨 Produits périmés</option>
-            <option value="soon">⚠️ Expire &lt; 30j</option>
+            <option value="expired">🚨 Déjà périmés</option>
+            <option value="critical">🔴 Critique (≤ 7 jours)</option>
+            <option value="30d">🟠 Court terme (≤ 1 mois / 30j)</option>
+            <option value="60d">🟡 Moyen terme (≤ 2 mois / 60j)</option>
+            <option value="90d">🔵 Alerte précoce (≤ 3 mois / 90j)</option>
           </select>
           <div className="flex rounded-xl border border-border/60 overflow-hidden">
             <button
@@ -419,13 +511,16 @@ export default function ProductsPage() {
                 <div className="mt-3 flex items-end justify-between">
                   <div>
                     <p className="text-lg font-bold text-primary">{formatPrice(p.price)}</p>
-                    {role === "admin" && <p className="text-[10px] text-muted-foreground">Coût: {formatPrice(p.cost)}</p>}
+                    <p className="text-[10px] text-muted-foreground">
+                      / {p.unit || "unité"}
+                      {role === "admin" && p.cost > 0 && ` • Coût: ${formatPrice(p.cost)}`}
+                    </p>
                   </div>
                   <div className="text-right">
                     <p className={`text-sm font-semibold ${p.stock <= p.minStock ? "text-destructive" : "text-foreground"}`}>
                       {p.stock}
                     </p>
-                    <p className="text-[10px] text-muted-foreground">en stock</p>
+                    <p className="text-[10px] text-muted-foreground">{p.unit ? `${p.unit}s en stock` : "en stock"}</p>
                   </div>
                 </div>
 
@@ -437,33 +532,7 @@ export default function ProductsPage() {
                       .sort((a, b) => new Date(a.expiryDate).getTime() - new Date(b.expiryDate).getTime());
 
                     if (prodBatches.length === 0) return null;
-
-                    const nearest = prodBatches[0];
-                    const now = new Date();
-                    now.setHours(0, 0, 0, 0);
-                    const exp = new Date(nearest.expiryDate);
-                    exp.setHours(0, 0, 0, 0);
-                    const diffDays = Math.ceil((exp.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
-
-                    if (diffDays < 0) {
-                      return (
-                        <span className="rounded-full bg-red-600/10 border border-red-500/30 px-2 py-0.5 text-[10px] font-bold text-red-600 flex items-center gap-1 animate-pulse">
-                          <AlertTriangle className="h-2.5 w-2.5" /> Périmé ({nearest.batchNumber})
-                        </span>
-                      );
-                    }
-                    if (diffDays <= 30) {
-                      return (
-                        <span className="rounded-full bg-amber-500/10 border border-amber-500/30 px-2 py-0.5 text-[10px] font-bold text-amber-600 flex items-center gap-1">
-                          <Clock className="h-2.5 w-2.5" /> Périme dans {diffDays}j
-                        </span>
-                      );
-                    }
-                    return (
-                      <span className="rounded-full bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 text-[10px] font-medium text-emerald-600 flex items-center gap-1">
-                        DLC: {new Date(nearest.expiryDate).toLocaleDateString("fr-FR")}
-                      </span>
-                    );
+                    return renderExpiryBadge(prodBatches[0]);
                   })()}
                   <button
                     onClick={() => {
@@ -550,32 +619,26 @@ export default function ProductsPage() {
                   <td className="px-4 py-3">
                     <span className="rounded-full bg-secondary px-2 py-0.5 text-xs">{p.category}</span>
                   </td>
-                  <td className="px-4 py-3 text-right text-sm font-medium">{formatPrice(p.price)}</td>
+                  <td className="px-4 py-3 text-right">
+                    <span className="text-sm font-medium">{formatPrice(p.price)}</span>
+                    <span className="text-[10px] text-muted-foreground ml-1">/{p.unit || "u"}</span>
+                  </td>
                   {role === "admin" && <td className="px-4 py-3 text-right text-xs text-muted-foreground">{formatPrice(p.cost)}</td>}
                   <td className="px-4 py-3 text-right">
-                    <span className={`text-sm font-semibold ${p.stock < 0 ? "text-red-600 font-bold" : p.stock <= p.minStock ? "text-destructive" : ""}`}>
-                      {p.stock}
-                    </span>
+                    <div className="flex items-baseline justify-end gap-1">
+                      <span className={`text-sm font-semibold ${p.stock < 0 ? "text-red-600 font-bold" : p.stock <= p.minStock ? "text-destructive" : ""}`}>
+                        {p.stock}
+                      </span>
+                      <span className="text-[10px] text-muted-foreground">{p.unit || "u"}</span>
+                    </div>
                     {(() => {
                       const prodBatches = (state.batches || [])
                         .filter((b) => b.productId === p.id && b.currentQuantity > 0)
                         .sort((a, b) => new Date(a.expiryDate).getTime() - new Date(b.expiryDate).getTime());
                       if (prodBatches.length === 0) return null;
-                      const nearest = prodBatches[0];
-                      const now = new Date();
-                      now.setHours(0, 0, 0, 0);
-                      const exp = new Date(nearest.expiryDate);
-                      exp.setHours(0, 0, 0, 0);
-                      const diffDays = Math.ceil((exp.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
                       return (
-                        <div className="mt-0.5 flex justify-end">
-                          {diffDays < 0 ? (
-                            <span className="text-[9px] text-red-600 font-bold">Périmé ({nearest.batchNumber})</span>
-                          ) : diffDays <= 30 ? (
-                            <span className="text-[9px] text-amber-600 font-bold">Expire dans {diffDays}j</span>
-                          ) : (
-                            <span className="text-[9px] text-muted-foreground">DLC: {new Date(nearest.expiryDate).toLocaleDateString("fr-FR")}</span>
-                          )}
+                        <div className="mt-1 flex justify-end">
+                          {renderExpiryBadge(prodBatches[0])}
                         </div>
                       );
                     })()}
@@ -690,141 +753,281 @@ export default function ProductsPage() {
                 </select>
               </div>
 
+              {/* Sélecteur visuel d'Unité de mesure de base */}
+              <div className="rounded-2xl border border-border/60 bg-secondary/20 p-3.5 space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-bold text-foreground flex items-center gap-1.5">
+                    <Package className="h-3.5 w-3.5 text-primary" />
+                    <span>Unité de mesure de base (Vente au détail) *</span>
+                  </label>
+                  <span className="text-[10px] text-muted-foreground">Sélectionnez d'abord l'unité :</span>
+                </div>
+                <div className="flex flex-wrap gap-1.5">
+                  {BASE_UNITS.map((u) => {
+                    const isSelected = form.unit === u.label;
+                    return (
+                      <button
+                        type="button"
+                        key={u.id}
+                        onClick={() => setForm({ ...form, unit: u.label })}
+                        className={`px-3 py-1.5 rounded-xl text-xs font-semibold border transition-all flex items-center gap-1.5 ${
+                          isSelected
+                            ? "bg-primary text-primary-foreground border-primary shadow-xs"
+                            : "bg-card hover:bg-secondary text-muted-foreground hover:text-foreground border-border/60"
+                        }`}
+                      >
+                        <span>{u.icon}</span>
+                        <span>{u.label}</span>
+                      </button>
+                    );
+                  })}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const custom = prompt("Entrez l'unité personnalisée (ex: Barre, Portion, Tasse, Botte) :", form.unit);
+                      if (custom && custom.trim()) {
+                        setForm({ ...form, unit: custom.trim() });
+                      }
+                    }}
+                    className={`px-2.5 py-1.5 rounded-xl text-xs font-medium border transition-all flex items-center gap-1 ${
+                      !BASE_UNITS.some((u) => u.label === form.unit) && form.unit
+                        ? "bg-primary text-primary-foreground border-primary font-bold"
+                        : "bg-card text-muted-foreground border-border/60 hover:bg-secondary"
+                    }`}
+                    title="Saisir une autre unité"
+                  >
+                    <span>✏️</span>
+                    <span>{!BASE_UNITS.some((u) => u.label === form.unit) && form.unit ? form.unit : "Autre..."}</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Prix de vente & Coût d'achat basés sur l'unité */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                  <label className="text-xs font-medium text-muted-foreground mb-1.5 block">Prix de vente (FCFA)</label>
+                  <label className="text-xs font-medium text-muted-foreground mb-1.5 block">
+                    Prix de vente par <span className="font-bold text-foreground">{form.unit || 'unité'}</span> (FCFA) *
+                  </label>
                   <input
-                    type="number" value={form.price || ""} onChange={(e) => setForm({ ...form, price: Number(e.target.value) })}
-                    className="w-full rounded-xl border border-border/60 bg-secondary/30 px-3 py-2.5 text-base sm:text-sm focus:border-primary/40 focus:outline-none focus:ring-2 focus:ring-primary/20"
+                    type="number"
+                    placeholder="Ex: 850"
+                    value={form.price || ""}
+                    onChange={(e) => setForm({ ...form, price: Number(e.target.value) })}
+                    className="w-full rounded-xl border border-border/60 bg-secondary/30 px-3 py-2.5 text-base sm:text-sm focus:border-primary/40 focus:outline-none focus:ring-2 focus:ring-primary/20 font-semibold"
                   />
                 </div>
                 {role === 'admin' && (
                   <div>
-                    <label className="text-xs font-medium text-muted-foreground mb-1.5 block">Coût d&apos;achat (FCFA)</label>
+                    <label className="text-xs font-medium text-muted-foreground mb-1.5 block">
+                      Coût d&apos;achat par <span className="font-bold text-foreground">{form.unit || 'unité'}</span> (FCFA)
+                    </label>
                     <input
-                      type="number" value={form.cost || ""} onChange={(e) => setForm({ ...form, cost: Number(e.target.value) })}
+                      type="number"
+                      placeholder="Ex: 700"
+                      value={form.cost || ""}
+                      onChange={(e) => setForm({ ...form, cost: Number(e.target.value) })}
                       className="w-full rounded-xl border border-border/60 bg-secondary/30 px-3 py-2.5 text-base sm:text-sm focus:border-primary/40 focus:outline-none focus:ring-2 focus:ring-primary/20"
                     />
                   </div>
                 )}
               </div>
 
+              {/* Stock initial & Stock minimum basés sur l'unité */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                  <label className="text-xs font-medium text-muted-foreground mb-1.5 block">Stock initial</label>
+                  <label className="text-xs font-medium text-muted-foreground mb-1.5 block">
+                    Stock initial (en <span className="font-bold text-foreground">{form.unit ? `${form.unit}s` : 'unités'}</span>)
+                  </label>
                   <input
-                    type="number" step="any" min="0" value={form.stock !== undefined ? form.stock : ""} onChange={(e) => setForm({ ...form, stock: e.target.value === "" ? 0 : parseFloat(e.target.value) })}
+                    type="number"
+                    step="any"
+                    min="0"
+                    placeholder="Ex: 100"
+                    value={form.stock !== undefined ? form.stock : ""}
+                    onChange={(e) => setForm({ ...form, stock: e.target.value === "" ? 0 : parseFloat(e.target.value) })}
                     className="w-full rounded-xl border border-border/60 bg-secondary/30 px-3 py-2.5 text-base sm:text-sm focus:border-primary/40 focus:outline-none focus:ring-2 focus:ring-primary/20"
                   />
                 </div>
                 <div>
-                  <label className="text-xs font-medium text-muted-foreground mb-1.5 block">Stock minimum</label>
+                  <label className="text-xs font-medium text-muted-foreground mb-1.5 block">
+                    Stock minimum d'alerte (en <span className="font-bold text-foreground">{form.unit ? `${form.unit}s` : 'unités'}</span>)
+                  </label>
                   <input
-                    type="number" step="any" min="0" value={form.minStock !== undefined ? form.minStock : ""} onChange={(e) => setForm({ ...form, minStock: e.target.value === "" ? 0 : parseFloat(e.target.value) })}
+                    type="number"
+                    step="any"
+                    min="0"
+                    placeholder="Ex: 10"
+                    value={form.minStock !== undefined ? form.minStock : ""}
+                    onChange={(e) => setForm({ ...form, minStock: e.target.value === "" ? 0 : parseFloat(e.target.value) })}
                     className="w-full rounded-xl border border-border/60 bg-secondary/30 px-3 py-2.5 text-base sm:text-sm focus:border-primary/40 focus:outline-none focus:ring-2 focus:ring-primary/20"
                   />
                 </div>
               </div>
 
-              {/* Section Unités & Conditionnements Multiples */}
+              {/* Section Conditionnements & Vente en Gros / Demi-gros */}
               {isMultiUnitsEnabled && (
                 <div className="border border-border/60 rounded-xl p-3.5 bg-secondary/15 space-y-3">
-                  <div className="flex items-center justify-between">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                     <div>
                       <h4 className="text-xs font-semibold text-foreground flex items-center gap-1.5">
                         <Layers className="h-3.5 w-3.5 text-primary" />
-                        Conditionnements & Unités Multiples
+                        Conditionnements & Vente en Gros / Demi-gros
                       </h4>
                       <p className="text-[11px] text-muted-foreground">
-                        Vendez au carton, pack ou demi-portion tout en décomptant le stock unitaire de base.
+                        Vendez par carton, bidon, sac ou pack tout en décomptant le stock en {form.unit ? `${form.unit}s` : 'unités'}.
                       </p>
                     </div>
                     <button
                       type="button"
                       onClick={() => setFormUnits([...formUnits, { name: "", multiplier: 1, price: "", barcode: "" }])}
-                      className="text-xs bg-primary/10 text-primary hover:bg-primary/20 px-2.5 py-1 rounded-lg font-medium transition-colors flex items-center gap-1"
+                      className="text-xs bg-primary/10 text-primary hover:bg-primary/20 px-2.5 py-1.5 rounded-lg font-semibold transition-colors flex items-center gap-1 shrink-0 self-start sm:self-auto"
                     >
-                      <Plus className="h-3 w-3" /> Ajouter
+                      <Plus className="h-3.5 w-3.5" /> Ajouter un format
                     </button>
                   </div>
 
+                  {/* Suggestions rapides selon l'unité de base */}
+                  {(() => {
+                    const activeBase = BASE_UNITS.find(b => b.label === form.unit);
+                    const presets = activeBase?.presets || ["Carton (24)", "Pack (6)", "Demi-portion (0.5)"];
+                    return (
+                      <div className="flex flex-wrap items-center gap-1.5 pt-1 border-t border-border/40">
+                        <span className="text-[10px] text-muted-foreground flex items-center gap-1">
+                          <Sparkles className="h-3 w-3 text-amber-500" />
+                          Suggestions rapides :
+                        </span>
+                        {presets.map((presetName) => (
+                          <button
+                            key={presetName}
+                            type="button"
+                            onClick={() => {
+                              const match = presetName.match(/\d+(\.\d+)?/);
+                              const mult = match ? parseFloat(match[0]) : 1;
+                              setFormUnits([...formUnits, { name: presetName, multiplier: mult, price: "", barcode: "" }]);
+                            }}
+                            className="text-[10px] px-2 py-0.5 rounded-md bg-card hover:bg-primary/10 hover:text-primary text-foreground border border-border/50 font-medium transition-all shadow-xs"
+                          >
+                            + {presetName}
+                          </button>
+                        ))}
+                      </div>
+                    );
+                  })()}
+
                   {formUnits.length === 0 ? (
                     <p className="text-[11px] text-muted-foreground italic py-1">
-                      Aucun conditionnement secondaire (vendu uniquement à l'unité de base).
+                      Aucun conditionnement secondaire configuré (produit vendu uniquement à l'unité de base : {form.unit || 'Pièce'}).
                     </p>
                   ) : (
-                    <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
-                      {formUnits.map((u, idx) => (
-                        <div key={idx} className="grid grid-cols-12 gap-1.5 items-center bg-card p-2 rounded-lg border border-border/50 text-xs">
-                          <div className="col-span-4">
-                            <label className="text-[10px] text-muted-foreground block mb-0.5">Nom</label>
-                            <input
-                              type="text"
-                              placeholder="Ex: Carton (24)"
-                              value={u.name}
-                              onChange={(e) => {
-                                const next = [...formUnits];
-                                next[idx].name = e.target.value;
-                                setFormUnits(next);
-                              }}
-                              className="w-full bg-secondary/30 border border-border/50 rounded px-2 py-1 text-xs"
-                            />
+                    <div className="space-y-2.5 max-h-56 overflow-y-auto pr-1">
+                      {formUnits.map((u, idx) => {
+                        const autoProrata = form.price && u.multiplier ? Number(form.price) * Number(u.multiplier) : 0;
+                        return (
+                          <div key={idx} className="p-2.5 rounded-xl bg-card border border-border/60 text-xs space-y-2">
+                            <div className="grid grid-cols-12 gap-2 items-center">
+                              <div className="col-span-12 sm:col-span-5">
+                                <label className="text-[10px] font-semibold text-muted-foreground block mb-1">
+                                  Nom du conditionnement (Format)
+                                </label>
+                                <input
+                                  type="text"
+                                  placeholder={
+                                    form.unit?.toLowerCase().includes("litre")
+                                      ? "Ex: Bidon de 25 L, Bouteille 1.5 L"
+                                      : form.unit?.toLowerCase().includes("kg")
+                                      ? "Ex: Sac de 50 kg, Sac de 25 kg"
+                                      : "Ex: Carton (24), Pack (6)"
+                                  }
+                                  value={u.name}
+                                  onChange={(e) => {
+                                    const next = [...formUnits];
+                                    next[idx].name = e.target.value;
+                                    setFormUnits(next);
+                                  }}
+                                  className="w-full bg-secondary/30 border border-border/60 rounded-lg px-2.5 py-1.5 text-xs font-medium"
+                                />
+                              </div>
+
+                              <div className="col-span-6 sm:col-span-3">
+                                <label className="text-[10px] font-semibold text-muted-foreground block mb-1" title="Nombre d'unités de base contenues dans ce conditionnement">
+                                  Contenance ({form.unit ? `${form.unit}s` : 'Unités'})
+                                </label>
+                                <input
+                                  type="number"
+                                  placeholder="25"
+                                  min="0.001"
+                                  step="any"
+                                  value={u.multiplier || ""}
+                                  onChange={(e) => {
+                                    const next = [...formUnits];
+                                    next[idx].multiplier = Number(e.target.value);
+                                    setFormUnits(next);
+                                  }}
+                                  className="w-full bg-secondary/30 border border-border/60 rounded-lg px-2 py-1.5 text-xs font-bold text-center text-primary"
+                                />
+                              </div>
+
+                              <div className="col-span-5 sm:col-span-3">
+                                <label className="text-[10px] font-semibold text-muted-foreground block mb-1">
+                                  Prix de vente (FCFA)
+                                </label>
+                                <input
+                                  type="number"
+                                  placeholder={autoProrata > 0 ? String(autoProrata) : "Prorata"}
+                                  value={u.price || ""}
+                                  onChange={(e) => {
+                                    const next = [...formUnits];
+                                    next[idx].price = e.target.value;
+                                    setFormUnits(next);
+                                  }}
+                                  className="w-full bg-secondary/30 border border-border/60 rounded-lg px-2 py-1.5 text-xs font-semibold"
+                                />
+                              </div>
+
+                              <div className="col-span-1 flex justify-center pt-3">
+                                <button
+                                  type="button"
+                                  onClick={() => setFormUnits(formUnits.filter((_, i) => i !== idx))}
+                                  className="text-destructive/70 hover:text-destructive p-1 rounded-lg hover:bg-destructive/10 transition-colors"
+                                  title="Supprimer ce conditionnement"
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </button>
+                              </div>
+                            </div>
+
+                            {/* Ligne informative : calcul et code-barres */}
+                            <div className="flex flex-wrap items-center justify-between gap-2 pt-1.5 border-t border-border/30 text-[10px] text-muted-foreground">
+                              <span className="font-mono">
+                                {u.multiplier > 0 && form.price > 0 ? (
+                                  <>
+                                    💡 1 {u.name || 'format'} = {u.multiplier} {form.unit || 'unité'}(s) • Prix théorique : <span className="font-semibold text-foreground">{formatPrice(autoProrata)}</span>
+                                    {u.price && Number(u.price) !== autoProrata && (
+                                      <span className="ml-1.5 text-primary font-bold">(Tarif spécial : {formatPrice(Number(u.price))})</span>
+                                    )}
+                                  </>
+                                ) : (
+                                  "Renseignez la contenance et le prix"
+                                )}
+                              </span>
+                              <div className="flex items-center gap-1">
+                                <span>Code-barres :</span>
+                                <input
+                                  type="text"
+                                  placeholder="Optionnel"
+                                  value={u.barcode || ""}
+                                  onChange={(e) => {
+                                    const next = [...formUnits];
+                                    next[idx].barcode = e.target.value;
+                                    setFormUnits(next);
+                                  }}
+                                  className="bg-secondary/40 border border-border/40 rounded px-1.5 py-0.5 text-[10px] w-24 font-mono"
+                                />
+                              </div>
+                            </div>
                           </div>
-                          <div className="col-span-2">
-                            <label className="text-[10px] text-muted-foreground block mb-0.5">Coeff.</label>
-                            <input
-                              type="number"
-                              placeholder="24"
-                              min="0.001"
-                              step="any"
-                              value={u.multiplier || ""}
-                              onChange={(e) => {
-                                const next = [...formUnits];
-                                next[idx].multiplier = Number(e.target.value);
-                                setFormUnits(next);
-                              }}
-                              className="w-full bg-secondary/30 border border-border/50 rounded px-1.5 py-1 text-xs text-center font-medium"
-                            />
-                          </div>
-                          <div className="col-span-3">
-                            <label className="text-[10px] text-muted-foreground block mb-0.5">Prix (Optionnel)</label>
-                            <input
-                              type="number"
-                              placeholder={form.price && u.multiplier ? String(form.price * u.multiplier) : "Prorata"}
-                              value={u.price || ""}
-                              onChange={(e) => {
-                                const next = [...formUnits];
-                                next[idx].price = e.target.value;
-                                setFormUnits(next);
-                              }}
-                              className="w-full bg-secondary/30 border border-border/50 rounded px-2 py-1 text-xs"
-                            />
-                          </div>
-                          <div className="col-span-2">
-                            <label className="text-[10px] text-muted-foreground block mb-0.5">Code-barres</label>
-                            <input
-                              type="text"
-                              placeholder="Optionnel"
-                              value={u.barcode || ""}
-                              onChange={(e) => {
-                                const next = [...formUnits];
-                                next[idx].barcode = e.target.value;
-                                setFormUnits(next);
-                              }}
-                              className="w-full bg-secondary/30 border border-border/50 rounded px-1.5 py-1 text-[11px]"
-                            />
-                          </div>
-                          <div className="col-span-1 flex justify-center pt-3">
-                            <button
-                              type="button"
-                              onClick={() => setFormUnits(formUnits.filter((_, i) => i !== idx))}
-                              className="text-destructive/70 hover:text-destructive p-1 rounded hover:bg-destructive/10"
-                            >
-                              <Trash2 className="h-3.5 w-3.5" />
-                            </button>
-                          </div>
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   )}
                 </div>
@@ -838,7 +1041,7 @@ export default function ProductsPage() {
                     Date de Péremption & N° de Lot (Optionnel)
                   </h4>
                   <p className="text-[11px] text-muted-foreground">
-                    Idéal pour épicerie, boissons, parapharmacie, cosmétique et articles périssables.
+                    Alertes automatiques progressives à 3 mois (90j), 2 mois (60j), 1 mois (30j), 1 semaine et derniers jours.
                   </p>
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -868,7 +1071,7 @@ export default function ProductsPage() {
                 </div>
               </div>
 
-              {/* Preview */}
+                            {/* Preview */}
               {form.name && (
                 <div className="rounded-xl bg-secondary/30 p-3 flex items-center gap-3">
                   <ProductAvatar name={form.name} size="md" />
