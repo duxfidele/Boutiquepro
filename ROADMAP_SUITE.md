@@ -18,7 +18,7 @@
 | **Étape 3.1** | ~~Vente au Montant / Vrac Fractionné (ex: 100 F, 250 F...) & Stock Décimal~~ | ✅ **FAIT & VALIDÉ** | Commit [`eb12a17`](file:///home/fideleatchade/.gemini/antigravity-ide/brain/e0d28ad8-ac41-492c-a977-6f3fe6e34690/Ma%20boutique/saas-boutique/.git) + testé en base |
 | **Étape 3.2** | ~~Réglage Optionnel « Gestion du stock épuisé / négatif »~~ | ✅ **FAIT & VALIDÉ** | Tests automatisés validés en base (Mode strict 0, Mode souple -2, régularisation +5) |
 | **Étape 4** | ~~Module « Traçabilité & Dates de Péremption par Lot »~~ | ✅ **FAIT & VALIDÉ** | FEFO automatique, alertes péremption, modal lots, tickets caisse |
-| **Étape 5** | Module « Historique des Fluctuations de Prix » (`price_history`) | ⏳ **À FAIRE** | Traçabilité des hausses/baisses |
+| **Étape 5** | ~~Module « Historique des Fluctuations de Prix » (`price_history`)~~ | ✅ **FAIT & VALIDÉ** | Traçabilité automatique des prix (vente, achat fournisseur, conditionnements), RLS étanche, modal interactif |
 | **Étape 6** | Module « Devis & Factures Proforma » (`quotes`) | ⏳ **À FAIRE** | Conversion devis en vente directe |
 | **Étape 7** | Qualification Finale & Fusion sécurisée vers `main` | ⏳ **À FAIRE** | Déploiement en production |
 
@@ -93,12 +93,25 @@
      * Script de validation `test_suite_batches_expiry.js` validé avec succès.
      * Compilation TypeScript (`tsc --noEmit`) sans erreur et `next build` (23/23 routes) réussi.
 
-### ⏳ Étape 5 : Module « Historique des Fluctuations de Prix » (`price_history`)
-* **Objectif :** Enregistrer chaque changement de prix d'achat fournisseur ou de prix de vente public :
-  * Qui a modifié le prix ?
-  * Quel était l'ancien prix et quel est le nouveau prix ?
-  * À quelle date exacte ?
-* **Bénéfice :** Permet au patron de voir l'impact de l'inflation et de justifier ses marges.
+### ✅ Étape 5 : Module « Historique des Fluctuations de Prix » (Terminé & Validé)
+* **Objectif :** Enregistrer et tracer automatiquement chaque changement de prix de vente public, de coût d'achat fournisseur et d'unités multiples, pour mesurer l'inflation et sanctuariser les marges.
+* **Ce qui a été réalisé et validé :**
+  1. **Base de données & Sécurité RLS (`migration_price_history.sql` & `rollback_price_history.sql`) :**
+     * Création de la table `product_price_history` (id, store_id, product_id, price_type, unit_name, old_price, new_price, change_reason, user_id, user_name, created_at).
+     * Triggers automatiques PostgreSQL `trg_log_product_price` sur `products` et `trg_log_product_cost` sur `product_costs` avec `SECURITY DEFINER SET search_path = public`.
+     * RLS étanche : politique de visibilité sanctuarisée interdisant strictement aux caissiers d'accéder aux coûts d'achat (`price_type != cost`).
+  2. **Gestion d'État Optimiste & Cache (`StoreContext.tsx`) :**
+     * Enregistrement en direct des fluctuations lors de la mise à jour des fiches articles et des conditionnements multiples.
+     * Enregistrement automatique des révisions de coût d'achat lors de la réception des commandes fournisseurs (`/orders`).
+     * Chargement résilient depuis Supabase avec réconciliation en cache local hors-ligne.
+  3. **Interface Catalogue & Audit (`/products`) :**
+     * Badges discrets et interactifs affichant le nombre de variations par article (en vue Grille et Tableau).
+     * Modal complet "Historique des Fluctuations de Prix" avec KPIs (Prix de vente actuel, Coût actuel & Marge brute pour l'admin, total révisions).
+     * Filtres dynamiques (Toutes, Prix de vente, Coûts d'achat fournisseur).
+     * Timeline chronologique avec comparaison Ancien ➜ Nouveau prix, variation en montant et pourcentage (+X% / -X%), auteur et motif.
+  4. **Tests & Validation :**
+     * Script de validation `test_suite_price_history.js` validé à 100%.
+     * Compilation TypeScript (`tsc --noEmit`) 0 erreur et `next build` (23/23 routes) validé.
 
 ### ⏳ Étape 6 : Module « Devis & Factures Proforma » (`quotes`)
 * **Objectif :** Émettre un devis professionnel imprimable ou envoyable par WhatsApp à un client.

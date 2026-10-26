@@ -67,6 +67,20 @@ export interface ProductBatch {
   updatedAt?: string;
 }
 
+export interface PriceHistoryEntry {
+  id: string;
+  storeId: string;
+  productId: string;
+  priceType: "selling" | "cost" | "unit_selling";
+  unitName?: string | null;
+  oldPrice: number;
+  newPrice: number;
+  changeReason?: string | null;
+  userId?: string | null;
+  userName?: string | null;
+  createdAt: string;
+}
+
 export interface Order {
   id: string;
   supplierName: string;
@@ -217,6 +231,7 @@ export interface StoreState {
   activeCashSession: CashSession | null;
   settings: StoreSettings;
   batches: ProductBatch[];
+  priceHistory: PriceHistoryEntry[];
 }
 
 // ─── Actions ─────────────────────────────────────────────────
@@ -255,6 +270,8 @@ type Action =
   | { type: "DELETE_ORDER"; payload: string }
   | { type: "ADD_BATCH"; payload: ProductBatch }
   | { type: "DELETE_BATCH"; payload: string }
+  | { type: "SET_PRICE_HISTORY"; payload: PriceHistoryEntry[] }
+  | { type: "ADD_PRICE_HISTORY_ENTRY"; payload: PriceHistoryEntry }
   | { type: "ADD_INVENTORY_SESSION"; payload: InventorySession }
   | { type: "OPEN_CASH_SESSION"; payload: CashSession }
   | { type: "CLOSE_CASH_SESSION"; payload: CashSession }
@@ -314,6 +331,7 @@ const initialState: StoreState = {
   cashSessions: [],
   activeCashSession: null,
   batches: [],
+  priceHistory: [],
   settings: { name: "MaBoutiquePro", logo: "/logo.png", currency: "FCFA", taxRate: 0, city: "Lomé", country: "Togo", email: "contact@maboutiquepro.app", phone: "+228 98 37 61 01", allowNegativeStock: false },
 };
 
@@ -560,8 +578,65 @@ function storeReducer(state: StoreState, action: Action): StoreState {
         products: Array.from(incomingMap.values()).sort((a, b) => a.name.localeCompare(b.name)),
       };
     }
-    case "UPDATE_PRODUCT":
-      return { ...state, products: state.products.map((p) => (p.id === action.payload.id ? action.payload : p)).sort((a, b) => a.name.localeCompare(b.name)) };
+    case "UPDATE_PRODUCT": {
+      const oldProd = state.products.find(p => p.id === action.payload.id);
+      const newEntries: PriceHistoryEntry[] = [];
+      const nowIso = new Date().toISOString();
+
+      if (oldProd) {
+        if (Number(action.payload.price) !== Number(oldProd.price)) {
+          newEntries.push({
+            id: "ph_" + Date.now().toString(36) + "_" + Math.random().toString(36).substring(2, 6),
+            storeId: (action.payload.storeId || oldProd.storeId) || "",
+            productId: action.payload.id,
+            priceType: "selling",
+            oldPrice: Number(oldProd.price),
+            newPrice: Number(action.payload.price),
+            changeReason: "Ajustement du prix de vente",
+            userName: "Admin",
+            createdAt: nowIso
+          });
+        }
+        if (action.payload.cost !== undefined && oldProd.cost !== undefined && Number(action.payload.cost) !== Number(oldProd.cost)) {
+          newEntries.push({
+            id: "ph_" + Date.now().toString(36) + "_" + Math.random().toString(36).substring(2, 6),
+            storeId: (action.payload.storeId || oldProd.storeId) || "",
+            productId: action.payload.id,
+            priceType: "cost",
+            oldPrice: Number(oldProd.cost),
+            newPrice: Number(action.payload.cost),
+            changeReason: "Ajustement du coût d'achat",
+            userName: "Admin",
+            createdAt: nowIso
+          });
+        }
+        if (Array.isArray(action.payload.units) && Array.isArray(oldProd.units)) {
+          for (const u of action.payload.units) {
+            const oldU = oldProd.units.find(ou => ou.name === u.name || ou.id === u.id);
+            if (oldU && Number(u.price || 0) > 0 && Number(oldU.price || 0) > 0 && Number(u.price) !== Number(oldU.price)) {
+              newEntries.push({
+                id: "ph_" + Date.now().toString(36) + "_" + Math.random().toString(36).substring(2, 6),
+                storeId: (action.payload.storeId || oldProd.storeId) || "",
+                productId: action.payload.id,
+                priceType: "unit_selling",
+                unitName: u.name,
+                oldPrice: Number(oldU.price),
+                newPrice: Number(u.price),
+                changeReason: "Ajustement prix unité [" + u.name + "]",
+                userName: "Admin",
+                createdAt: nowIso
+              });
+            }
+          }
+        }
+      }
+
+      return {
+        ...state,
+        products: state.products.map((p) => (p.id === action.payload.id ? action.payload : p)).sort((a, b) => a.name.localeCompare(b.name)),
+        priceHistory: newEntries.length > 0 ? [...newEntries, ...(state.priceHistory || [])] : (state.priceHistory || [])
+      };
+    }
     case "DELETE_PRODUCT":
       return { ...state, products: state.products.filter((p) => p.id !== action.payload) };
     case "ADD_TO_CART": {
@@ -763,6 +838,10 @@ function storeReducer(state: StoreState, action: Action): StoreState {
       return { ...state, batches: [action.payload, ...state.batches] };
     case "DELETE_BATCH":
       return { ...state, batches: state.batches.filter((b) => b.id !== action.payload) };
+    case "SET_PRICE_HISTORY":
+      return { ...state, priceHistory: action.payload };
+    case "ADD_PRICE_HISTORY_ENTRY":
+      return { ...state, priceHistory: [action.payload, ...(state.priceHistory || [])] };
     case "DELETE_ORDER":
       return { ...state, orders: state.orders.filter((o) => o.id !== action.payload) };
     case "UPDATE_ORDER_STATUS": {
@@ -809,7 +888,35 @@ function storeReducer(state: StoreState, action: Action): StoreState {
           });
         }
       });
-      return { ...state, orders: updatedOrders, products: updatedProducts, batches: [...createdBatches, ...state.batches] };
+      const orderPriceHistoryEntries: PriceHistoryEntry[] = [];
+      order.items.forEach((it) => {
+        const prod = state.products.find(p => p.id === it.productId);
+        if (prod) {
+          const mult = Number(it.unitMultiplier) || 1;
+          const newRefCost = mult > 0 ? (Number(it.costPrice) / mult) : Number(it.costPrice);
+          if (newRefCost > 0 && Number(newRefCost.toFixed(4)) !== Number(prod.cost)) {
+            orderPriceHistoryEntries.push({
+              id: "ph_" + Date.now().toString(36) + "_" + Math.random().toString(36).substring(2, 6),
+              storeId: prod.storeId || "",
+              productId: it.productId,
+              priceType: "cost",
+              oldPrice: Number(prod.cost) || 0,
+              newPrice: Number(newRefCost.toFixed(4)),
+              changeReason: "Réception commande #" + order.id.slice(-6),
+              userName: "Admin",
+              createdAt: new Date().toISOString()
+            });
+          }
+        }
+      });
+
+      return {
+        ...state,
+        orders: updatedOrders,
+        products: updatedProducts,
+        batches: [...createdBatches, ...state.batches],
+        priceHistory: orderPriceHistoryEntries.length > 0 ? [...orderPriceHistoryEntries, ...(state.priceHistory || [])] : (state.priceHistory || [])
+      };
     }
     case "ADD_CUSTOMER":
       return { ...state, customers: [...state.customers, action.payload] };
@@ -913,7 +1020,9 @@ function storeReducer(state: StoreState, action: Action): StoreState {
         inventorySessions: action.payload.inventorySessions || [],
         expenses: action.payload.expenses || [],
         cashSessions: action.payload.cashSessions || [],
-        activeCashSession: action.payload.activeCashSession || null
+        activeCashSession: action.payload.activeCashSession || null,
+        batches: action.payload.batches || [],
+        priceHistory: action.payload.priceHistory || []
       };
     }
     default:
@@ -1750,7 +1859,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           productCostsRes,
           saleItemCostsRes,
           productUnitsRes,
-          productBatchesRes
+          productBatchesRes,
+          productPriceHistoryRes
         ] = await Promise.all([
           supabase.from('settings').select('*').eq('store_id', activeStore.id).maybeSingle(),
           supabase.from('categories').select('*').eq('store_id', activeStore.id),
@@ -1771,7 +1881,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             : Promise.resolve({ data: [] as any[] }),
           // Charger product_units pour tous les membres (nécessaire au scan caisse et gestion produits)
           supabase.from('product_units').select('*').eq('store_id', activeStore.id),
-          supabase.from('product_batches').select('*').eq('store_id', activeStore.id).order('expiry_date', { ascending: true })
+          supabase.from('product_batches').select('*').eq('store_id', activeStore.id).order('expiry_date', { ascending: true }),
+          supabase.from('product_price_history').select('*').eq('store_id', activeStore.id).order('created_at', { ascending: false })
         ]);
 
         const productUnitsData = productUnitsRes?.data;
@@ -1830,6 +1941,23 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             }))
           : [];
 
+        const priceHistoryData = (productPriceHistoryRes as any)?.data;
+        const loadedPriceHistory: PriceHistoryEntry[] = Array.isArray(priceHistoryData)
+          ? priceHistoryData.map((h: any) => ({
+              id: h.id,
+              storeId: h.store_id,
+              productId: h.product_id,
+              priceType: h.price_type,
+              unitName: h.unit_name || null,
+              oldPrice: Number(h.old_price) || 0,
+              newPrice: Number(h.new_price) || 0,
+              changeReason: h.change_reason || null,
+              userId: h.user_id || null,
+              userName: h.user_name || null,
+              createdAt: h.created_at
+            }))
+          : [];
+
         let cachedSettings: any = null;
         if (typeof window !== "undefined" && activeStore?.id) {
           try {
@@ -1865,6 +1993,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           categories: demoCategories,
           products: [],
           batches: loadedBatches,
+          priceHistory: loadedPriceHistory,
           settings: { ...defaultSettings, ...(cachedSettings || {}) }
         };
 
@@ -2588,6 +2717,28 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             await supabase.from('product_batches').delete().eq('id', batchId).eq('store_id', activeStore.id);
           } catch (eB) {
             console.warn("Erreur Supabase DELETE_BATCH:", eB);
+          }
+        }
+      }
+      else if (action.type === "ADD_PRICE_HISTORY_ENTRY") {
+        const h = action.payload;
+        if (activeStore?.id) {
+          try {
+            await supabase.from('product_price_history').insert([{
+              id: h.id,
+              store_id: activeStore.id,
+              product_id: h.productId,
+              price_type: h.priceType,
+              unit_name: h.unitName || null,
+              old_price: h.oldPrice,
+              new_price: h.newPrice,
+              change_reason: h.changeReason || null,
+              user_id: user?.id || null,
+              user_name: user?.user_metadata?.full_name || user?.email || "Admin",
+              created_at: h.createdAt || new Date().toISOString()
+            }]);
+          } catch (errH) {
+            console.warn("Supabase add price history notice:", errH);
           }
         }
       }

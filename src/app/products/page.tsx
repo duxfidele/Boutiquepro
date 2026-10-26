@@ -27,7 +27,8 @@ import {
   ShieldCheck,
   Check
 } from "lucide-react";
-import { ProductBatch } from "@/context/StoreContext";
+import { ProductBatch, PriceHistoryEntry } from "@/context/StoreContext";
+import { TrendingUp, TrendingDown, History, ArrowRight, DollarSign } from "lucide-react";
 
 export default function ProductsPage() {
   const { role, activeStore } = useAuth();
@@ -55,6 +56,8 @@ export default function ProductsPage() {
   const [selectedProductForBatches, setSelectedProductForBatches] = useState<Product | null>(null);
   const [newBatchForm, setNewBatchForm] = useState({ batchNumber: "", expiryDate: "", quantity: 1 });
   const [isAddingBatch, setIsAddingBatch] = useState(false);
+  const [selectedProductForPriceHistory, setSelectedProductForPriceHistory] = useState<Product | null>(null);
+  const [priceHistoryTab, setPriceHistoryTab] = useState<"all" | "selling" | "cost">("all");
 
 
   // Category Modal
@@ -436,6 +439,17 @@ export default function ProductsPage() {
                   >
                     📦 {(state.batches || []).filter(b => b.productId === p.id).length} lot(s)
                   </button>
+                  <button
+                    onClick={() => {
+                      setSelectedProductForPriceHistory(p);
+                      setPriceHistoryTab("all");
+                    }}
+                    className="rounded-full bg-primary/10 hover:bg-primary/20 text-primary px-2 py-0.5 text-[10px] font-medium transition-colors flex items-center gap-1"
+                    title="Historique des variations de prix"
+                  >
+                    <TrendingUp className="h-3 w-3" />
+                    <span>{(state.priceHistory || []).filter(h => h.productId === p.id).length} var.</span>
+                  </button>
                 </div>
 
                 {/* Margin badge */}
@@ -539,6 +553,16 @@ export default function ProductsPage() {
                           title="Traçabilité & Lots"
                         >
                           <Package className="h-3.5 w-3.5 text-primary" />
+                        </button>
+                        <button
+                          onClick={() => {
+                            setSelectedProductForPriceHistory(p);
+                            setPriceHistoryTab("all");
+                          }}
+                          className="p-1.5 rounded-lg hover:bg-secondary transition-colors text-muted-foreground hover:text-blue-500"
+                          title="Historique des variations de prix"
+                        >
+                          <TrendingUp className="h-3.5 w-3.5 text-blue-500" />
                         </button>
                         <button onClick={() => openEdit(p)} className="p-1.5 rounded-lg hover:bg-secondary transition-colors">
                           <Edit3 className="h-3.5 w-3.5 text-muted-foreground" />
@@ -1028,6 +1052,208 @@ export default function ProductsPage() {
           </div>
         </div>
       )}
+    
+      {/* Modal Historique des Fluctuations de Prix */}
+      {selectedProductForPriceHistory && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm animate-fade-in p-4" onClick={() => setSelectedProductForPriceHistory(null)}>
+          <div className="w-full max-w-2xl bg-card rounded-2xl shadow-2xl flex flex-col max-h-[90vh] animate-scale-in overflow-hidden border border-border/50" onClick={(e) => e.stopPropagation()}>
+            {/* Header */}
+            <div className="flex items-center justify-between p-5 border-b border-border/50 bg-secondary/10">
+              <div className="flex items-center gap-3">
+                <ProductAvatar name={selectedProductForPriceHistory.name} size="md" />
+                <div>
+                  <h2 className="text-base font-bold flex items-center gap-2">
+                    Historique des Fluctuations de Prix
+                    <span className="text-xs px-2 py-0.5 rounded-full bg-primary/10 text-primary font-mono">{selectedProductForPriceHistory.sku}</span>
+                  </h2>
+                  <p className="text-xs text-muted-foreground mt-0.5 truncate max-w-md">{selectedProductForPriceHistory.name}</p>
+                </div>
+              </div>
+              <button onClick={() => setSelectedProductForPriceHistory(null)} className="p-2 hover:bg-secondary rounded-lg transition-colors">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            {/* Content */}
+            <div className="p-5 overflow-y-auto flex-1 space-y-5 no-scrollbar">
+              {/* Summary KPIs */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div className="rounded-xl border border-border/60 bg-secondary/20 p-3.5">
+                  <p className="text-[11px] font-medium text-muted-foreground">Prix de Vente Actuel</p>
+                  <p className="text-lg font-bold text-foreground mt-1">{formatPrice(selectedProductForPriceHistory.price)}</p>
+                  <p className="text-[10px] text-muted-foreground mt-0.5">Tarif public en caisse</p>
+                </div>
+
+                {role === "admin" && (
+                  <div className="rounded-xl border border-border/60 bg-secondary/20 p-3.5">
+                    <p className="text-[11px] font-medium text-muted-foreground">Coût d'Achat Actuel</p>
+                    <p className="text-lg font-bold text-foreground mt-1">{formatPrice(selectedProductForPriceHistory.cost)}</p>
+                    <p className="text-[10px] text-accent font-medium mt-0.5">
+                      Marge : {selectedProductForPriceHistory.price > 0 ? Math.round(((selectedProductForPriceHistory.price - selectedProductForPriceHistory.cost) / selectedProductForPriceHistory.price) * 100) : 0}%
+                    </p>
+                  </div>
+                )}
+
+                <div className="rounded-xl border border-border/60 bg-secondary/20 p-3.5">
+                  <p className="text-[11px] font-medium text-muted-foreground">Révisions Journalisées</p>
+                  <p className="text-lg font-bold text-primary mt-1">
+                    {(state.priceHistory || []).filter(h => h.productId === selectedProductForPriceHistory.id).length}
+                  </p>
+                  <p className="text-[10px] text-muted-foreground mt-0.5">Évolution au fil du temps</p>
+                </div>
+              </div>
+
+              {/* Tabs */}
+              <div className="flex border-b border-border/50 gap-2">
+                <button
+                  type="button"
+                  onClick={() => setPriceHistoryTab("all")}
+                  className={`pb-2 px-3 text-xs font-semibold transition-colors border-b-2 ${
+                    priceHistoryTab === "all" ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  Toutes les variations
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPriceHistoryTab("selling")}
+                  className={`pb-2 px-3 text-xs font-semibold transition-colors border-b-2 ${
+                    priceHistoryTab === "selling" ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  Prix de vente
+                </button>
+                {role === "admin" && (
+                  <button
+                    type="button"
+                    onClick={() => setPriceHistoryTab("cost")}
+                    className={`pb-2 px-3 text-xs font-semibold transition-colors border-b-2 ${
+                      priceHistoryTab === "cost" ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
+                    Coût d'achat fournisseur
+                  </button>
+                )}
+              </div>
+
+              {/* Timeline List */}
+              <div className="space-y-3">
+                {(() => {
+                  const items = (state.priceHistory || [])
+                    .filter(h => h.productId === selectedProductForPriceHistory.id)
+                    .filter(h => {
+                      if (priceHistoryTab === "selling") return h.priceType === "selling" || h.priceType === "unit_selling";
+                      if (priceHistoryTab === "cost") return h.priceType === "cost";
+                      return true;
+                    })
+                    .filter(h => role === "admin" || h.priceType !== "cost")
+                    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+
+                  if (items.length === 0) {
+                    return (
+                      <div className="text-center py-10 rounded-xl border border-dashed border-border/60 p-6">
+                        <History className="h-8 w-8 text-muted-foreground/40 mx-auto mb-2" />
+                        <p className="text-sm font-semibold text-foreground">Aucune variation enregistrée</p>
+                        <p className="text-xs text-muted-foreground mt-1 max-w-sm mx-auto">
+                          Les modifications futures apportées au prix de vente ou au coût d'achat (via le catalogue ou les réceptions de commandes) apparaîtront automatiquement ici.
+                        </p>
+                      </div>
+                    );
+                  }
+
+                  return items.map((item) => {
+                    const diff = item.newPrice - item.oldPrice;
+                    const pct = item.oldPrice > 0 ? ((diff / item.oldPrice) * 100).toFixed(1) : "0";
+                    const isSelling = item.priceType === "selling" || item.priceType === "unit_selling";
+                    const isIncrease = diff > 0;
+
+                    // Badges colors
+                    let badgeClass = "bg-blue-500/10 text-blue-600 border-blue-500/20";
+                    let typeLabel = "Prix de vente";
+                    if (item.priceType === "cost") {
+                      badgeClass = "bg-purple-500/10 text-purple-600 border-purple-500/20";
+                      typeLabel = "Coût d'achat";
+                    } else if (item.priceType === "unit_selling") {
+                      badgeClass = "bg-amber-500/10 text-amber-600 border-amber-500/20";
+                      typeLabel = "Unité : " + (item.unitName || "Secondaire");
+                    }
+
+                    // Diff badge color
+                    let diffBadgeClass = "bg-muted text-muted-foreground";
+                    if (isSelling) {
+                      diffBadgeClass = isIncrease ? "bg-emerald-500/10 text-emerald-600" : "bg-rose-500/10 text-rose-600";
+                    } else {
+                      // Pour un coût d'achat, une hausse est un surcoût (amber/rose) et une baisse est une économie (emerald)
+                      diffBadgeClass = isIncrease ? "bg-amber-500/10 text-amber-600" : "bg-emerald-500/10 text-emerald-600";
+                    }
+
+                    return (
+                      <div key={item.id} className="p-3.5 rounded-xl border border-border/60 bg-card hover:bg-secondary/10 transition-colors space-y-2">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border ${badgeClass}`}>
+                              {typeLabel}
+                            </span>
+                            <span className="text-[11px] text-muted-foreground">
+                              {new Date(item.createdAt).toLocaleDateString("fr-FR", {
+                                day: "2-digit",
+                                month: "short",
+                                year: "numeric",
+                                hour: "2-digit",
+                                minute: "2-digit"
+                              })}
+                            </span>
+                          </div>
+                          <span className="text-[11px] text-muted-foreground flex items-center gap-1">
+                            Par <span className="font-medium text-foreground">{item.userName || "Admin"}</span>
+                          </span>
+                        </div>
+
+                        <div className="flex items-center justify-between pt-1">
+                          <div className="flex items-center gap-2">
+                            <span className="text-sm font-semibold text-muted-foreground line-through">
+                              {formatPrice(item.oldPrice)}
+                            </span>
+                            <ArrowRight className="h-3.5 w-3.5 text-muted-foreground" />
+                            <span className="text-sm font-bold text-foreground">
+                              {formatPrice(item.newPrice)}
+                            </span>
+                          </div>
+
+                          <div className="flex items-center gap-1.5">
+                            <span className={`text-xs font-semibold px-2 py-0.5 rounded-lg flex items-center gap-1 ${diffBadgeClass}`}>
+                              {isIncrease ? <TrendingUp className="h-3 w-3" /> : <TrendingDown className="h-3 w-3" />}
+                              {isIncrease ? "+" : ""}{formatPrice(diff)} ({isIncrease ? "+" : ""}{pct}%)
+                            </span>
+                          </div>
+                        </div>
+
+                        {item.changeReason && (
+                          <p className="text-[11px] text-muted-foreground/80 italic pt-0.5 border-t border-border/30">
+                            Motif : {item.changeReason}
+                          </p>
+                        )}
+                      </div>
+                    );
+                  });
+                })()}
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="p-4 border-t border-border/50 bg-secondary/10 flex justify-end">
+              <button
+                type="button"
+                onClick={() => setSelectedProductForPriceHistory(null)}
+                className="px-4 py-2 text-xs font-semibold rounded-xl bg-secondary hover:bg-secondary/80 text-foreground"
+              >
+                Fermer
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }
