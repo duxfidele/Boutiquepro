@@ -13,6 +13,7 @@ export interface ProductUnit {
   name: string;
   multiplier: number;
   price?: number | null;
+  cost?: number | null;
   barcode?: string | null;
   isReference: boolean;
   createdAt?: string;
@@ -1990,6 +1991,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
               name: u.name,
               multiplier: Number(u.multiplier) || 1,
               price: u.price !== null && u.price !== undefined ? Number(u.price) : null,
+              cost: u.cost !== null && u.cost !== undefined ? Number(u.cost) : null,
               barcode: u.barcode || null,
               isReference: Boolean(u.is_reference),
               createdAt: u.created_at,
@@ -2503,10 +2505,15 @@ export function StoreProvider({ children }: { children: ReactNode }) {
               name: u.name.trim(),
               multiplier: Number(u.multiplier) || 1,
               price: (u.price !== null && u.price !== undefined && u.price !== '' && Number(u.price) > 0) ? Number(u.price) : null,
+              cost: (u.cost !== null && u.cost !== undefined && u.cost !== '' && Number(u.cost) > 0) ? Number(u.cost) : null,
               barcode: u.barcode ? u.barcode.trim() : null,
               is_reference: false,
             }));
-            await supabase.from('product_units').insert(unitsToInsert);
+            const { error: insErr } = await supabase.from('product_units').insert(unitsToInsert);
+            if (insErr && insErr.message && insErr.message.includes('column') && insErr.message.includes('cost')) {
+              const fallback = unitsToInsert.map(({ cost, ...rest }) => rest);
+              await supabase.from('product_units').insert(fallback);
+            }
           }
         }
       } 
@@ -2548,10 +2555,15 @@ export function StoreProvider({ children }: { children: ReactNode }) {
               name: u.name.trim(),
               multiplier: Number(u.multiplier) || 1,
               price: (u.price !== null && u.price !== undefined && u.price !== '' && Number(u.price) > 0) ? Number(u.price) : null,
+              cost: (u.cost !== null && u.cost !== undefined && u.cost !== '' && Number(u.cost) > 0) ? Number(u.cost) : null,
               barcode: u.barcode ? u.barcode.trim() : null,
               is_reference: false,
             }));
-            await supabase.from('product_units').insert(unitsToInsert);
+            const { error: insErr } = await supabase.from('product_units').insert(unitsToInsert);
+            if (insErr && insErr.message && insErr.message.includes('column') && insErr.message.includes('cost')) {
+              const fallback = unitsToInsert.map(({ cost, ...rest }) => rest);
+              await supabase.from('product_units').insert(fallback);
+            }
           }
         }
       }

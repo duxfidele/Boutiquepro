@@ -11,6 +11,7 @@ import ProductExcelImportModal from "@/components/products/ProductExcelImportMod
 import {
   Package,
   Plus,
+  Calculator,
   Search,
   Filter,
   Grid3X3,
@@ -120,7 +121,12 @@ export default function ProductsPage() {
     return isModuleActive ? isModuleActive('multi_units') : true;
   }, [activeStore, isModuleActive, role]);
 
-  const [formUnits, setFormUnits] = useState<{ id?: string; name: string; multiplier: number; price: string | number; barcode: string }[]>([]);
+  const [formUnits, setFormUnits] = useState<{ id?: string; name: string; multiplier: number; price: string | number; cost?: string | number; barcode: string }[]>([]);
+  const [showCostCalculator, setShowCostCalculator] = useState(false);
+  const [calcCartonPrice, setCalcCartonPrice] = useState("");
+  const [calcCartonUnits, setCalcCartonUnits] = useState("");
+  const [selectedUnitForBatchId, setSelectedUnitForBatchId] = useState<string>("ref");
+  const [batchSyncProductStock, setBatchSyncProductStock] = useState(true);
   const [search, setSearch] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("Tous");
   const [stockFilter, setStockFilter] = useState<"all" | "low" | "ok">("all");
@@ -191,6 +197,9 @@ export default function ProductsPage() {
     setEditProduct(null);
     setForm({ ...emptyForm, category: state.categories[0]?.name || "Divers", unit: "Pièce / Unité" });
     setFormUnits([]);
+    setShowCostCalculator(false);
+    setCalcCartonPrice("");
+    setCalcCartonUnits("");
     setInitialBatch({ batchNumber: '', expiryDate: '' });
     setShowModal(true);
   };
@@ -214,9 +223,13 @@ export default function ProductsPage() {
         name: u.name,
         multiplier: u.multiplier,
         price: u.price !== null && u.price !== undefined ? u.price : "",
+        cost: u.cost !== null && u.cost !== undefined ? u.cost : "",
         barcode: u.barcode || "",
       }))
     );
+    setShowCostCalculator(false);
+    setCalcCartonPrice("");
+    setCalcCartonUnits("");
     const existingBatch = (state.batches || []).find((b) => b.productId === p.id && b.currentQuantity > 0);
     if (existingBatch) {
       setInitialBatch({ batchNumber: existingBatch.batchNumber, expiryDate: existingBatch.expiryDate });
@@ -241,6 +254,7 @@ export default function ProductsPage() {
         name: u.name.trim(),
         multiplier: Number(u.multiplier),
         price: (u.price !== "" && u.price !== null && u.price !== undefined && Number(u.price) > 0) ? Number(u.price) : null,
+        cost: (u.cost !== "" && u.cost !== null && u.cost !== undefined && Number(u.cost) > 0) ? Number(u.cost) : null,
         barcode: u.barcode.trim() || null,
         isReference: false,
       }));
@@ -818,16 +832,107 @@ export default function ProductsPage() {
                 </div>
                 {role === 'admin' && (
                   <div>
-                    <label className="text-xs font-medium text-muted-foreground mb-1.5 block">
-                      Coût d&apos;achat par <span className="font-bold text-foreground">{form.unit || 'unité'}</span> (FCFA)
-                    </label>
+                    <div className="flex items-center justify-between mb-1.5">
+                      <label className="text-xs font-medium text-muted-foreground block">
+                        Coût d&apos;achat par <span className="font-bold text-foreground">{form.unit || 'unité'}</span> (FCFA)
+                      </label>
+                      <button
+                        type="button"
+                        onClick={() => setShowCostCalculator(!showCostCalculator)}
+                        className="text-[11px] text-primary hover:underline font-semibold flex items-center gap-1 transition-colors"
+                      >
+                        <Calculator className="h-3 w-3" />
+                        {showCostCalculator ? "Fermer calculateur" : "Acheté en carton / gros ?"}
+                      </button>
+                    </div>
                     <input
                       type="number"
                       placeholder="Ex: 700"
                       value={form.cost || ""}
                       onChange={(e) => setForm({ ...form, cost: Number(e.target.value) })}
-                      className="w-full rounded-xl border border-border/60 bg-secondary/30 px-3 py-2.5 text-base sm:text-sm focus:border-primary/40 focus:outline-none focus:ring-2 focus:ring-primary/20"
+                      className="w-full rounded-xl border border-border/60 bg-secondary/30 px-3 py-2.5 text-base sm:text-sm focus:border-primary/40 focus:outline-none focus:ring-2 focus:ring-primary/20 font-medium"
                     />
+
+                    {/* Suggestions directes depuis les conditionnements existants */}
+                    {formUnits.some(u => u.cost && Number(u.cost) > 0 && Number(u.multiplier) > 0) && (
+                      <div className="mt-1.5 flex flex-wrap gap-1.5 items-center">
+                        <span className="text-[10px] text-muted-foreground">Déduire depuis :</span>
+                        {formUnits.filter(u => u.cost && Number(u.cost) > 0 && Number(u.multiplier) > 0).map((u, i) => {
+                          const unitCost = Math.round((Number(u.cost) / Number(u.multiplier)) * 100) / 100;
+                          return (
+                            <button
+                              key={i}
+                              type="button"
+                              onClick={() => setForm({ ...form, cost: unitCost })}
+                              className="text-[10px] px-2 py-0.5 rounded bg-primary/10 hover:bg-primary/20 text-primary font-semibold flex items-center gap-1 border border-primary/20"
+                              title="Définir ce coût unitaire"
+                            >
+                              ⚡ {u.name} ({formatPrice(unitCost)}/{form.unit || 'u'})
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
+
+                    {/* Calculateur rapide pour achat en carton / gros */}
+                    {showCostCalculator && (
+                      <div className="mt-2 p-3 rounded-xl bg-primary/5 border border-primary/20 space-y-2.5 animate-fade-in shadow-xs">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-bold text-primary flex items-center gap-1.5">
+                            <Package className="h-3.5 w-3.5" />
+                            Calculer le coût unitaire depuis un carton ou gros
+                          </span>
+                          <button type="button" onClick={() => setShowCostCalculator(false)} className="text-muted-foreground hover:text-foreground p-0.5">
+                            <X className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
+                        <p className="text-[10px] text-muted-foreground leading-relaxed">
+                          Indiquez le montant total payé au fournisseur pour le carton/bidon et la quantité d&apos;unités contenues :
+                        </p>
+                        <div className="grid grid-cols-12 gap-2 items-end">
+                          <div className="col-span-5">
+                            <label className="text-[9px] font-semibold text-muted-foreground block mb-1">
+                              Prix d&apos;achat du carton (FCFA)
+                            </label>
+                            <input
+                              type="number"
+                              placeholder="Ex: 12000"
+                              value={calcCartonPrice}
+                              onChange={(e) => setCalcCartonPrice(e.target.value)}
+                              className="w-full bg-card border border-border/60 rounded-lg px-2.5 py-1.5 text-xs font-semibold"
+                            />
+                          </div>
+                          <div className="col-span-4">
+                            <label className="text-[9px] font-semibold text-muted-foreground block mb-1">
+                              Unités (ex: 24)
+                            </label>
+                            <input
+                              type="number"
+                              placeholder="24"
+                              min="0.1"
+                              step="any"
+                              value={calcCartonUnits}
+                              onChange={(e) => setCalcCartonUnits(e.target.value)}
+                              className="w-full bg-card border border-border/60 rounded-lg px-2.5 py-1.5 text-xs text-center font-bold text-primary"
+                            />
+                          </div>
+                          <div className="col-span-3">
+                            <button
+                              type="button"
+                              disabled={!calcCartonPrice || !calcCartonUnits || Number(calcCartonUnits) <= 0}
+                              onClick={() => {
+                                const uCost = Math.round((Number(calcCartonPrice) / Number(calcCartonUnits)) * 100) / 100;
+                                setForm({ ...form, cost: uCost });
+                                setShowCostCalculator(false);
+                              }}
+                              className="w-full py-1.5 px-2 rounded-lg bg-primary text-primary-foreground font-bold text-[11px] disabled:opacity-50 hover:opacity-90 shadow-sm transition-all"
+                            >
+                              Appliquer ({calcCartonPrice && calcCartonUnits && Number(calcCartonUnits) > 0 ? Math.round(Number(calcCartonPrice) / Number(calcCartonUnits)) : 0} F)
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
@@ -879,7 +984,7 @@ export default function ProductsPage() {
                     </div>
                     <button
                       type="button"
-                      onClick={() => setFormUnits([...formUnits, { name: "", multiplier: 1, price: "", barcode: "" }])}
+                      onClick={() => setFormUnits([...formUnits, { name: "", multiplier: 1, price: "", cost: "", barcode: "" }])}
                       className="text-xs bg-primary/10 text-primary hover:bg-primary/20 px-2.5 py-1.5 rounded-lg font-semibold transition-colors flex items-center gap-1 shrink-0 self-start sm:self-auto"
                     >
                       <Plus className="h-3.5 w-3.5" /> Ajouter un format
@@ -903,7 +1008,8 @@ export default function ProductsPage() {
                             onClick={() => {
                               const match = presetName.match(/\d+(\.\d+)?/);
                               const mult = match ? parseFloat(match[0]) : 1;
-                              setFormUnits([...formUnits, { name: presetName, multiplier: mult, price: "", barcode: "" }]);
+                              const autoCost = form.cost && mult ? Math.round(Number(form.cost) * mult) : "";
+                              setFormUnits([...formUnits, { name: presetName, multiplier: mult, price: "", cost: autoCost, barcode: "" }]);
                             }}
                             className="text-[10px] px-2 py-0.5 rounded-md bg-card hover:bg-primary/10 hover:text-primary text-foreground border border-border/50 font-medium transition-all shadow-xs"
                           >
@@ -921,13 +1027,32 @@ export default function ProductsPage() {
                   ) : (
                     <div className="space-y-2.5 max-h-56 overflow-y-auto pr-1">
                       {formUnits.map((u, idx) => {
-                        const autoProrata = form.price && u.multiplier ? Number(form.price) * Number(u.multiplier) : 0;
+                        const mult = Number(u.multiplier) || 1;
+                        const autoSaleProrata = form.price && mult ? Number(form.price) * mult : 0;
+                        const autoCostProrata = form.cost && mult ? Number(form.cost) * mult : 0;
+                        
+                        const effectiveCartonPrice = (u.price !== "" && u.price !== undefined && u.price !== null && Number(u.price) > 0)
+                          ? Number(u.price)
+                          : autoSaleProrata;
+
+                        const effectiveCartonCost = (u.cost !== "" && u.cost !== undefined && u.cost !== null && Number(u.cost) > 0)
+                          ? Number(u.cost)
+                          : autoCostProrata;
+
+                        const equivUnitCost = (u.cost && Number(u.cost) > 0 && mult > 0)
+                          ? Math.round((Number(u.cost) / mult) * 100) / 100
+                          : (Number(form.cost) || 0);
+
+                        const cartonMarginVal = effectiveCartonPrice > 0 ? (effectiveCartonPrice - effectiveCartonCost) : 0;
+                        const cartonMarginPercent = effectiveCartonPrice > 0 ? Math.round((cartonMarginVal / effectiveCartonPrice) * 100) : 0;
+
                         return (
-                          <div key={idx} className="p-2.5 rounded-xl bg-card border border-border/60 text-xs space-y-2">
+                          <div key={idx} className="p-3 rounded-xl bg-card border border-border/60 text-xs space-y-2.5 shadow-xs">
                             <div className="grid grid-cols-12 gap-2 items-center">
-                              <div className="col-span-12 sm:col-span-5">
+                              {/* Nom */}
+                              <div className="col-span-12 sm:col-span-4">
                                 <label className="text-[10px] font-semibold text-muted-foreground block mb-1">
-                                  Nom du conditionnement (Format)
+                                  Format (Carton, Bidon, Boîte)
                                 </label>
                                 <input
                                   type="text"
@@ -935,8 +1060,8 @@ export default function ProductsPage() {
                                     form.unit?.toLowerCase().includes("litre")
                                       ? "Ex: Bidon de 25 L, Bouteille 1.5 L"
                                       : form.unit?.toLowerCase().includes("kg")
-                                      ? "Ex: Sac de 50 kg, Sac de 25 kg"
-                                      : "Ex: Carton (24), Pack (6)"
+                                      ? "Ex: Sac de 50 kg, Carton de 10 kg"
+                                      : "Ex: Carton de 24, Pack de 6"
                                   }
                                   value={u.name}
                                   onChange={(e) => {
@@ -948,13 +1073,14 @@ export default function ProductsPage() {
                                 />
                               </div>
 
-                              <div className="col-span-6 sm:col-span-3">
-                                <label className="text-[10px] font-semibold text-muted-foreground block mb-1" title="Nombre d'unités de base contenues dans ce conditionnement">
+                              {/* Contenance */}
+                              <div className="col-span-4 sm:col-span-2">
+                                <label className="text-[10px] font-semibold text-muted-foreground block mb-1" title="Unités contenues">
                                   Contenance ({form.unit ? `${form.unit}s` : 'Unités'})
                                 </label>
                                 <input
                                   type="number"
-                                  placeholder="25"
+                                  placeholder="24"
                                   min="0.001"
                                   step="any"
                                   value={u.multiplier || ""}
@@ -967,13 +1093,32 @@ export default function ProductsPage() {
                                 />
                               </div>
 
-                              <div className="col-span-5 sm:col-span-3">
-                                <label className="text-[10px] font-semibold text-muted-foreground block mb-1">
-                                  Prix de vente (FCFA)
+                              {/* Prix d'achat du carton */}
+                              <div className="col-span-4 sm:col-span-3">
+                                <label className="text-[10px] font-semibold text-muted-foreground block mb-1" title="Prix d'achat payé au fournisseur pour ce format">
+                                  Prix d&apos;achat ({form.unit?.toLowerCase().includes('carton') ? 'carton' : 'format'})
                                 </label>
                                 <input
                                   type="number"
-                                  placeholder={autoProrata > 0 ? String(autoProrata) : "Prorata"}
+                                  placeholder={autoCostProrata > 0 ? String(autoCostProrata) : "Prorata achat"}
+                                  value={u.cost || ""}
+                                  onChange={(e) => {
+                                    const next = [...formUnits];
+                                    next[idx].cost = e.target.value;
+                                    setFormUnits(next);
+                                  }}
+                                  className="w-full bg-secondary/30 border border-border/60 rounded-lg px-2 py-1.5 text-xs font-semibold text-amber-600 dark:text-amber-400"
+                                />
+                              </div>
+
+                              {/* Prix de vente du carton */}
+                              <div className="col-span-3 sm:col-span-2">
+                                <label className="text-[10px] font-semibold text-muted-foreground block mb-1">
+                                  Prix de vente
+                                </label>
+                                <input
+                                  type="number"
+                                  placeholder={autoSaleProrata > 0 ? String(autoSaleProrata) : "Prorata vente"}
                                   value={u.price || ""}
                                   onChange={(e) => {
                                     const next = [...formUnits];
@@ -984,11 +1129,12 @@ export default function ProductsPage() {
                                 />
                               </div>
 
+                              {/* Bouton supprimer */}
                               <div className="col-span-1 flex justify-center pt-3">
                                 <button
                                   type="button"
                                   onClick={() => setFormUnits(formUnits.filter((_, i) => i !== idx))}
-                                  className="text-destructive/70 hover:text-destructive p-1 rounded-lg hover:bg-destructive/10 transition-colors"
+                                  className="text-destructive/70 hover:text-destructive p-1.5 rounded-lg hover:bg-destructive/10 transition-colors"
                                   title="Supprimer ce conditionnement"
                                 >
                                   <Trash2 className="h-4 w-4" />
@@ -996,33 +1142,51 @@ export default function ProductsPage() {
                               </div>
                             </div>
 
-                            {/* Ligne informative : calcul et code-barres */}
-                            <div className="flex flex-wrap items-center justify-between gap-2 pt-1.5 border-t border-border/30 text-[10px] text-muted-foreground">
-                              <span className="font-mono">
-                                {u.multiplier > 0 && form.price > 0 ? (
-                                  <>
-                                    💡 1 {u.name || 'format'} = {u.multiplier} {form.unit || 'unité'}(s) • Prix théorique : <span className="font-semibold text-foreground">{formatPrice(autoProrata)}</span>
-                                    {u.price && Number(u.price) !== autoProrata && (
-                                      <span className="ml-1.5 text-primary font-bold">(Tarif spécial : {formatPrice(Number(u.price))})</span>
-                                    )}
-                                  </>
-                                ) : (
-                                  "Renseignez la contenance et le prix"
+                            {/* Ligne d'analyse financière du format : Coût unitaire, Rentabilité & Marge */}
+                            <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-border/30 text-[10px]">
+                              <div className="flex flex-wrap items-center gap-2">
+                                <span className="text-muted-foreground">
+                                  💡 1 {u.name || 'format'} = {mult} {form.unit || 'unité'}(s)
+                                </span>
+                                {u.cost && Number(u.cost) > 0 && mult > 0 && (
+                                  <span className="font-semibold text-foreground flex items-center gap-1">
+                                    • Coût de revient : <span className="text-amber-600 dark:text-amber-400 font-bold">{formatPrice(equivUnitCost)}</span>/{form.unit || 'u'}
+                                    <button
+                                      type="button"
+                                      onClick={() => setForm({ ...form, cost: equivUnitCost })}
+                                      className="text-primary hover:underline font-bold text-[10px] ml-1 bg-primary/10 px-1.5 py-0.5 rounded"
+                                      title="Copier ce coût vers l'article principal"
+                                    >
+                                      ⚡ Appliquer au coût de base
+                                    </button>
+                                  </span>
                                 )}
-                              </span>
-                              <div className="flex items-center gap-1">
-                                <span>Code-barres :</span>
-                                <input
-                                  type="text"
-                                  placeholder="Optionnel"
-                                  value={u.barcode || ""}
-                                  onChange={(e) => {
-                                    const next = [...formUnits];
-                                    next[idx].barcode = e.target.value;
-                                    setFormUnits(next);
-                                  }}
-                                  className="bg-secondary/40 border border-border/40 rounded px-1.5 py-0.5 text-[10px] w-24 font-mono"
-                                />
+                              </div>
+
+                              <div className="flex items-center gap-2">
+                                {effectiveCartonPrice > 0 && effectiveCartonCost > 0 && (
+                                  <span className={`px-2 py-0.5 rounded-full font-bold text-[10px] flex items-center gap-1 ${
+                                    cartonMarginVal >= 0
+                                      ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20'
+                                      : 'bg-destructive/10 text-destructive border border-destructive/20'
+                                  }`}>
+                                    Marge format : {cartonMarginVal >= 0 ? '+' : ''}{formatPrice(cartonMarginVal)} ({cartonMarginPercent}%)
+                                  </span>
+                                )}
+                                <div className="flex items-center gap-1 text-muted-foreground">
+                                  <span>Code-barres :</span>
+                                  <input
+                                    type="text"
+                                    placeholder="Optionnel"
+                                    value={u.barcode || ""}
+                                    onChange={(e) => {
+                                      const next = [...formUnits];
+                                      next[idx].barcode = e.target.value;
+                                      setFormUnits(next);
+                                    }}
+                                    className="bg-secondary/40 border border-border/40 rounded px-1.5 py-0.5 text-[10px] w-24 font-mono text-foreground"
+                                  />
+                                </div>
                               </div>
                             </div>
                           </div>
@@ -1193,65 +1357,129 @@ export default function ProductsPage() {
                   <h3 className="text-xs font-bold uppercase tracking-wider text-primary flex items-center gap-1.5">
                     <Plus className="h-3.5 w-3.5" /> Enregistrer un nouveau lot en rayon
                   </h3>
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                    <div>
-                      <label className="text-xs text-muted-foreground block mb-1 font-medium">N° de Lot *</label>
-                      <input
-                        type="text"
-                        placeholder="Ex: LOT-2026-A"
-                        value={newBatchForm.batchNumber}
-                        onChange={(e) => setNewBatchForm({ ...newBatchForm, batchNumber: e.target.value })}
-                        className="w-full rounded-xl border border-border/60 bg-card px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-primary/20 font-mono"
-                      />
-                    </div>
-                    <div>
-                      <label className="text-xs text-muted-foreground block mb-1 font-medium">Date de Péremption *</label>
-                      <input
-                        type="date"
-                        value={newBatchForm.expiryDate}
-                        onChange={(e) => setNewBatchForm({ ...newBatchForm, expiryDate: e.target.value })}
-                        className="w-full rounded-xl border border-border/60 bg-card px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-primary/20"
-                      />
-                    </div>
-                    <div>
-                      <label className="text-xs text-muted-foreground block mb-1 font-medium">Quantité d&apos;unités *</label>
-                      <input
-                        type="number"
-                        min="1"
-                        value={newBatchForm.quantity}
-                        onChange={(e) => setNewBatchForm({ ...newBatchForm, quantity: Math.max(1, Number(e.target.value)) })}
-                        className="w-full rounded-xl border border-border/60 bg-card px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-primary/20"
-                      />
-                    </div>
-                  </div>
-                  <div className="flex justify-end">
-                    <button
-                      type="button"
-                      disabled={isAddingBatch || !newBatchForm.batchNumber.trim() || !newBatchForm.expiryDate}
-                      onClick={async () => {
-                        setIsAddingBatch(true);
-                        try {
-                          const newB: ProductBatch = {
-                            id: "batch_" + Date.now().toString(36) + "_" + Math.random().toString(36).substring(2, 6),
-                            storeId: activeStore?.id || "",
-                            productId: selectedProductForBatches.id,
-                            batchNumber: newBatchForm.batchNumber.trim(),
-                            expiryDate: newBatchForm.expiryDate,
-                            initialQuantity: newBatchForm.quantity,
-                            currentQuantity: newBatchForm.quantity,
-                            createdAt: new Date().toISOString()
-                          };
-                          dispatch({ type: "ADD_BATCH", payload: newB });
-                          setNewBatchForm({ batchNumber: "", expiryDate: "", quantity: 1 });
-                        } finally {
-                          setIsAddingBatch(false);
-                        }
-                      }}
-                      className="px-4 py-2 bg-primary text-white text-xs font-bold rounded-xl hover:opacity-90 disabled:opacity-50 flex items-center gap-1.5 shadow-sm"
-                    >
-                      <Check className="h-3.5 w-3.5" /> Enregistrer ce lot
-                    </button>
-                  </div>
+                  {(() => {
+                    const batchUnit = selectedUnitForBatchId === "ref"
+                      ? undefined
+                      : selectedProductForBatches.units?.find((u) => u.id === selectedUnitForBatchId);
+                    const batchMult = batchUnit ? batchUnit.multiplier : 1;
+                    const totalBaseUnits = Math.round(newBatchForm.quantity * batchMult * 1000) / 1000;
+
+                    return (
+                      <>
+                        <div className="grid grid-cols-1 sm:grid-cols-12 gap-3 items-end">
+                          <div className="sm:col-span-4">
+                            <label className="text-xs text-muted-foreground block mb-1 font-medium">N° de Lot (Traçabilité) *</label>
+                            <input
+                              type="text"
+                              placeholder="Ex: LOT-2026-A"
+                              value={newBatchForm.batchNumber}
+                              onChange={(e) => setNewBatchForm({ ...newBatchForm, batchNumber: e.target.value })}
+                              className="w-full rounded-xl border border-border/60 bg-card px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-primary/20 font-mono"
+                            />
+                          </div>
+
+                          <div className="sm:col-span-3">
+                            <label className="text-xs text-muted-foreground block mb-1 font-medium">Date de Péremption *</label>
+                            <input
+                              type="date"
+                              value={newBatchForm.expiryDate}
+                              onChange={(e) => setNewBatchForm({ ...newBatchForm, expiryDate: e.target.value })}
+                              className="w-full rounded-xl border border-border/60 bg-card px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-primary/20"
+                            />
+                          </div>
+
+                          {selectedProductForBatches.units && selectedProductForBatches.units.length > 0 && (
+                            <div className="sm:col-span-3">
+                              <label className="text-xs text-muted-foreground block mb-1 font-medium">Conditionnement reçu</label>
+                              <select
+                                value={selectedUnitForBatchId}
+                                onChange={(e) => setSelectedUnitForBatchId(e.target.value)}
+                                className="w-full rounded-xl border border-border/60 bg-card px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-primary/20 font-medium"
+                              >
+                                <option value="ref">Unité de base ({selectedProductForBatches.unit || "Pièce"}) (x1)</option>
+                                {selectedProductForBatches.units.map((u) => (
+                                  <option key={u.id} value={u.id}>
+                                    {u.name} (x{u.multiplier} {selectedProductForBatches.unit || 'unités'})
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
+                          )}
+
+                          <div className={selectedProductForBatches.units && selectedProductForBatches.units.length > 0 ? "sm:col-span-2" : "sm:col-span-5"}>
+                            <label className="text-xs text-muted-foreground block mb-1 font-medium">
+                              Qté {batchUnit ? `(${batchUnit.name})` : `(${selectedProductForBatches.unit || 'Unités'})`} *
+                            </label>
+                            <input
+                              type="number"
+                              min="0.01"
+                              step="any"
+                              value={newBatchForm.quantity}
+                              onChange={(e) => setNewBatchForm({ ...newBatchForm, quantity: Math.max(0.01, Number(e.target.value)) })}
+                              className="w-full rounded-xl border border-border/60 bg-card px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-primary/20 font-bold text-primary"
+                            />
+                          </div>
+                        </div>
+
+                        {batchMult > 1 && (
+                          <div className="text-[11px] bg-primary/10 border border-primary/20 text-primary px-3 py-1.5 rounded-lg flex items-center justify-between">
+                            <span>
+                              📦 Réception en gros : <b>{newBatchForm.quantity} {batchUnit?.name}</b> = <b>{totalBaseUnits} {selectedProductForBatches.unit || 'unités'}</b> en stock.
+                            </span>
+                          </div>
+                        )}
+
+                        <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
+                          <label className="flex items-center gap-2 cursor-pointer text-xs text-muted-foreground">
+                            <input
+                              type="checkbox"
+                              checked={batchSyncProductStock}
+                              onChange={(e) => setBatchSyncProductStock(e.target.checked)}
+                              className="rounded border-border text-primary focus:ring-primary/20"
+                            />
+                            <span>Ajouter automatiquement cette quantité au stock global de l&apos;article (+{totalBaseUnits})</span>
+                          </label>
+
+                          <button
+                            type="button"
+                            disabled={isAddingBatch || !newBatchForm.batchNumber.trim() || !newBatchForm.expiryDate}
+                            onClick={async () => {
+                              setIsAddingBatch(true);
+                              try {
+                                const newB: ProductBatch = {
+                                  id: "batch_" + Date.now().toString(36) + "_" + Math.random().toString(36).substring(2, 6),
+                                  storeId: activeStore?.id || "",
+                                  productId: selectedProductForBatches.id,
+                                  batchNumber: newBatchForm.batchNumber.trim(),
+                                  expiryDate: newBatchForm.expiryDate,
+                                  initialQuantity: totalBaseUnits,
+                                  currentQuantity: totalBaseUnits,
+                                  createdAt: new Date().toISOString()
+                                };
+                                dispatch({ type: "ADD_BATCH", payload: newB });
+                                if (batchSyncProductStock) {
+                                  dispatch({
+                                    type: "UPDATE_PRODUCT",
+                                    payload: {
+                                      ...selectedProductForBatches,
+                                      stock: Number(selectedProductForBatches.stock) + totalBaseUnits,
+                                    }
+                                  });
+                                }
+                                setNewBatchForm({ batchNumber: "", expiryDate: "", quantity: 1 });
+                                setSelectedUnitForBatchId("ref");
+                              } finally {
+                                setIsAddingBatch(false);
+                              }
+                            }}
+                            className="px-4 py-2 bg-primary text-white text-xs font-bold rounded-xl hover:opacity-90 disabled:opacity-50 flex items-center gap-1.5 shadow-sm ml-auto"
+                          >
+                            <Check className="h-3.5 w-3.5" /> Enregistrer ce lot ({totalBaseUnits} {selectedProductForBatches.unit || 'u'})
+                          </button>
+                        </div>
+                      </>
+                    );
+                  })()}
                 </div>
               )}
 

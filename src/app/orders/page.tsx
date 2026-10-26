@@ -70,7 +70,7 @@ export default function OrdersPage() {
           product,
           quantity: 1,
           costPrice: product.cost,
-          unitName: 'Unité',
+          unitName: product.unit || 'Unité',
           unitMultiplier: 1,
           selectedUnitId: 'ref',
           batchNumber: '',
@@ -446,8 +446,9 @@ export default function OrdersPage() {
                               const val = e.target.value;
                               const u = val === "ref" ? undefined : item.product.units?.find((un) => un.id === val);
                               const mult = u ? u.multiplier : 1;
-                              const currentCost = item.product.cost || 0;
-                              const suggestedCost = Math.round(currentCost * mult);
+                              const suggestedCost = (u && u.cost && Number(u.cost) > 0)
+                                ? Number(u.cost)
+                                : (item.product.cost > 0 ? Math.round(item.product.cost * mult) : 0);
                               setForm({
                                 ...form,
                                 items: form.items.map((it) =>
@@ -455,7 +456,7 @@ export default function OrdersPage() {
                                     ? {
                                         ...it,
                                         selectedUnitId: u?.id || "ref",
-                                        unitName: u?.name || "Unité",
+                                        unitName: u?.name || item.product.unit || "Unité",
                                         unitMultiplier: mult,
                                         costPrice: suggestedCost > 0 ? suggestedCost : it.costPrice,
                                       }
@@ -486,12 +487,19 @@ export default function OrdersPage() {
                           />
                         </div>
                         <div>
-                          <label className="text-xs text-muted-foreground block mb-1.5 font-medium">Coût unitaire</label>
+                          <label className="text-xs text-muted-foreground block mb-1.5 font-medium">
+                            Prix d&apos;achat {item.unitName && item.unitName !== 'Unité' ? `du ${item.unitName}` : 'unitaire'} (FCFA)
+                          </label>
                           <input
                             type="number" min="0" value={item.costPrice}
                             onChange={e => handleUpdateItem(item.product.id, "costPrice", Number(e.target.value))}
-                            className="w-full rounded-xl border border-border/60 px-3 py-2 text-base sm:text-sm focus:outline-none bg-secondary/30 focus:ring-2 focus:ring-primary/20"
+                            className="w-full rounded-xl border border-border/60 px-3 py-2 text-base sm:text-sm focus:outline-none bg-secondary/30 focus:ring-2 focus:ring-primary/20 font-semibold"
                           />
+                          {item.unitMultiplier && item.unitMultiplier > 1 && item.costPrice > 0 && (
+                            <p className="text-[10px] text-muted-foreground mt-1">
+                              💡 Coût unitaire équivalent : <span className="font-semibold text-foreground">{formatPrice(Math.round((item.costPrice / item.unitMultiplier) * 100) / 100)}</span> / {item.product.unit || 'u'}
+                            </p>
+                          )}
                         </div>
                       </div>
                                             {/* Traçabilité : N° de Lot & Date de Péremption */}
