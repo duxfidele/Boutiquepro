@@ -341,6 +341,11 @@ export default function POSPage() {
         const uName = c.selectedUnit?.name ?? (c.product.unit || 'Unité');
         const qtyRef = Math.round((c.quantity * mult) * 1000) / 1000;
         const lineTotal = c.customTotal !== undefined ? c.customTotal : Math.round(uPrice * c.quantity);
+        const prodBatches = (state.batches || [])
+          .filter((b) => b.productId === c.product.id && b.currentQuantity > 0)
+          .sort((a, b) => new Date(a.expiryDate).getTime() - new Date(b.expiryDate).getTime());
+        const primaryBatch = prodBatches[0];
+
         return {
           productId: c.product.id,
           productName: c.product.name,
@@ -350,6 +355,9 @@ export default function POSPage() {
           unitName: uName,
           unitMultiplier: mult,
           quantityReference: qtyRef,
+          batchId: primaryBatch?.id,
+          batchNumber: primaryBatch?.batchNumber,
+          expiryDate: primaryBatch?.expiryDate,
         };
       }),
       subtotal,
@@ -803,15 +811,36 @@ export default function POSPage() {
                   <ProductAvatar name={p.name} size="lg" className="mb-1 group-hover:scale-110 transition-transform" />
                   <p className="text-xs font-semibold truncate w-full">{p.name}</p>
                   <p className="text-sm font-bold text-primary">{formatPrice(p.price)}</p>
-                  <div className="flex items-center justify-center gap-1">
-                    <p className={`text-[10px] font-medium ${p.stock <= 0 ? (state.settings?.allowNegativeStock ? "text-amber-500 font-bold" : "text-destructive font-bold") : "text-muted-foreground"}`}>
-                      Stock: {p.stock}
-                    </p>
-                    {p.stock <= 0 && (
-                      <span className={`text-[9px] px-1 py-0.2 rounded font-semibold ${state.settings?.allowNegativeStock ? "bg-amber-500/10 text-amber-600" : "bg-destructive/10 text-destructive"}`}>
-                        {p.stock === 0 ? "Épuisé" : "Différé"}
-                      </span>
-                    )}
+                  <div className="flex flex-col items-center justify-center gap-0.5">
+                    <div className="flex items-center justify-center gap-1">
+                      <p className={`text-[10px] font-medium ${p.stock <= 0 ? (state.settings?.allowNegativeStock ? "text-amber-500 font-bold" : "text-destructive font-bold") : "text-muted-foreground"}`}>
+                        Stock: {p.stock}
+                      </p>
+                      {p.stock <= 0 && (
+                        <span className={`text-[9px] px-1 py-0.2 rounded font-semibold ${state.settings?.allowNegativeStock ? "bg-amber-500/10 text-amber-600" : "bg-destructive/10 text-destructive"}`}>
+                          {p.stock === 0 ? "Épuisé" : "Différé"}
+                        </span>
+                      )}
+                    </div>
+                    {(() => {
+                      const prodBatches = (state.batches || [])
+                        .filter((b) => b.productId === p.id && b.currentQuantity > 0)
+                        .sort((a, b) => new Date(a.expiryDate).getTime() - new Date(b.expiryDate).getTime());
+                      if (prodBatches.length === 0) return null;
+                      const nearest = prodBatches[0];
+                      const now = new Date();
+                      now.setHours(0, 0, 0, 0);
+                      const exp = new Date(nearest.expiryDate);
+                      exp.setHours(0, 0, 0, 0);
+                      const diffDays = Math.ceil((exp.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+                      if (diffDays < 0) {
+                        return <span className="text-[8px] font-bold text-red-600 bg-red-500/10 px-1 rounded animate-pulse">🚨 Lot périmé</span>;
+                      }
+                      if (diffDays <= 30) {
+                        return <span className="text-[8px] font-semibold text-amber-600 bg-amber-500/10 px-1 rounded">Exp: {diffDays}j</span>;
+                      }
+                      return null;
+                    })()}
                   </div>
                   {inCart && (
                     <span className="absolute -top-1.5 -right-1.5 flex h-6 w-6 items-center justify-center rounded-full bg-primary text-[10px] font-bold text-white shadow-sm">
@@ -1511,6 +1540,11 @@ export default function POSPage() {
                           {item.unitName && item.unitName !== "Unité" && (
                             <span className="text-[9px] text-gray-500 block">({item.unitName})</span>
                           )}
+                          {item.batchNumber && (
+                            <span className="text-[8px] text-gray-500 block font-mono">
+                              Lot: {item.batchNumber} {item.expiryDate ? `• Exp: ${new Date(item.expiryDate).toLocaleDateString("fr-FR")}` : ""}
+                            </span>
+                          )}
                         </td>
                         <td className="text-center py-1.5 text-black font-semibold">{item.quantity}</td>
                         <td className="text-right py-1.5 text-gray-700">{new Intl.NumberFormat("fr-FR").format(item.unitPrice)}</td>
@@ -1753,6 +1787,11 @@ export default function POSPage() {
                             {item.productName}
                             {item.unitName && item.unitName !== "Unité" && (
                               <span className="text-xs text-primary font-medium ml-1.5">({item.unitName})</span>
+                            )}
+                            {item.batchNumber && (
+                              <span className="text-[10px] text-gray-500 block font-mono">
+                                Lot: {item.batchNumber} {item.expiryDate ? `• DLC: ${new Date(item.expiryDate).toLocaleDateString("fr-FR")}` : ""}
+                              </span>
                             )}
                           </td>
                           <td className="py-3 px-3 text-center font-bold text-gray-900">{item.quantity}</td>

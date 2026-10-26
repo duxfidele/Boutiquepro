@@ -31,6 +31,8 @@ export interface Product {
   createdAt: string;
   unit?: string;
   units?: ProductUnit[];
+  storeId?: string;
+  userId?: string;
 }
 
 export interface CartItem {
@@ -52,6 +54,19 @@ export interface Expense {
   createdAt?: string;
 }
 
+export interface ProductBatch {
+  id: string;
+  storeId: string;
+  productId: string;
+  batchNumber: string;
+  expiryDate: string; // YYYY-MM-DD
+  initialQuantity: number;
+  currentQuantity: number;
+  orderId?: string;
+  createdAt: string;
+  updatedAt?: string;
+}
+
 export interface Order {
   id: string;
   supplierName: string;
@@ -64,6 +79,8 @@ export interface Order {
     unitName?: string;
     unitMultiplier?: number;
     quantityReference?: number;
+    batchNumber?: string;
+    expiryDate?: string;
   }[];
   totalCost: number;
   status: "pending" | "received";
@@ -93,6 +110,9 @@ export interface SaleItem {
   unitName?: string;
   unitMultiplier?: number;
   quantityReference?: number;
+  batchId?: string;
+  batchNumber?: string;
+  expiryDate?: string;
 }
 
 export interface Sale {
@@ -196,6 +216,7 @@ export interface StoreState {
   cashSessions: CashSession[];
   activeCashSession: CashSession | null;
   settings: StoreSettings;
+  batches: ProductBatch[];
 }
 
 // ─── Actions ─────────────────────────────────────────────────
@@ -232,6 +253,8 @@ type Action =
   | { type: "DELETE_EXPENSE"; payload: string }
   | { type: "UPDATE_ORDER_STATUS"; payload: { orderId: string; status: "received" } }
   | { type: "DELETE_ORDER"; payload: string }
+  | { type: "ADD_BATCH"; payload: ProductBatch }
+  | { type: "DELETE_BATCH"; payload: string }
   | { type: "ADD_INVENTORY_SESSION"; payload: InventorySession }
   | { type: "OPEN_CASH_SESSION"; payload: CashSession }
   | { type: "CLOSE_CASH_SESSION"; payload: CashSession }
@@ -290,6 +313,7 @@ const initialState: StoreState = {
   inventorySessions: [],
   cashSessions: [],
   activeCashSession: null,
+  batches: [],
   settings: { name: "MaBoutiquePro", logo: "/logo.png", currency: "FCFA", taxRate: 0, city: "Lomé", country: "Togo", email: "contact@maboutiquepro.app", phone: "+228 98 37 61 01", allowNegativeStock: false },
 };
 
@@ -634,6 +658,30 @@ function storeReducer(state: StoreState, action: Action): StoreState {
           : p;
       });
 
+      // Décompte FEFO des lots en temps réel
+      let updatedBatches = [...state.batches];
+      action.payload.items.forEach((soldItem) => {
+        const mult = Number(soldItem.unitMultiplier) || 1;
+        let remDeduct = (soldItem.quantityReference !== undefined && soldItem.quantityReference !== null && Number(soldItem.quantityReference) > 0)
+          ? Number(soldItem.quantityReference)
+          : (Number(soldItem.quantity) * mult);
+
+        const prodBatches = updatedBatches
+          .map((b, idx) => ({ ...b, idx }))
+          .filter((b) => b.productId === soldItem.productId && b.currentQuantity > 0)
+          .sort((a, b) => new Date(a.expiryDate).getTime() - new Date(b.expiryDate).getTime());
+
+        for (const pb of prodBatches) {
+          if (remDeduct <= 0) break;
+          const ded = Math.min(pb.currentQuantity, remDeduct);
+          updatedBatches[pb.idx] = {
+            ...updatedBatches[pb.idx],
+            currentQuantity: Math.round((pb.currentQuantity - ded) * 1000) / 1000
+          };
+          remDeduct -= ded;
+        }
+      });
+
       let updatedActiveSession = state.activeCashSession;
       let updatedCashSessions = state.cashSessions;
 
@@ -711,6 +759,10 @@ function storeReducer(state: StoreState, action: Action): StoreState {
       return { ...state, expenses: state.expenses.filter((e) => e.id !== action.payload) };
     case "ADD_ORDER":
       return { ...state, orders: [action.payload, ...state.orders] };
+    case "ADD_BATCH":
+      return { ...state, batches: [action.payload, ...state.batches] };
+    case "DELETE_BATCH":
+      return { ...state, batches: state.batches.filter((b) => b.id !== action.payload) };
     case "DELETE_ORDER":
       return { ...state, orders: state.orders.filter((o) => o.id !== action.payload) };
     case "UPDATE_ORDER_STATUS": {
@@ -736,7 +788,28 @@ function storeReducer(state: StoreState, action: Action): StoreState {
         };
       });
 
-      return { ...state, orders: updatedOrders, products: updatedProducts };
+      // Création automatique des lots dans le state
+      const createdBatches: ProductBatch[] = [];
+      order.items.forEach((it) => {
+        if (it.batchNumber && it.expiryDate) {
+          const mult = Number(it.unitMultiplier) || 1;
+          const refQty = (it.quantityReference !== undefined && it.quantityReference !== null && Number(it.quantityReference) > 0)
+            ? Number(it.quantityReference)
+            : (Number(it.quantity) * mult);
+          createdBatches.push({
+            id: "batch_" + Date.now() + "_" + Math.random().toString(36).substring(2, 6),
+            storeId: (state.products.find(p => p.id === it.productId)?.storeId) || "",
+            productId: it.productId,
+            batchNumber: it.batchNumber,
+            expiryDate: it.expiryDate,
+            initialQuantity: refQty,
+            currentQuantity: refQty,
+            orderId: order.id,
+            createdAt: new Date().toISOString()
+          });
+        }
+      });
+      return { ...state, orders: updatedOrders, products: updatedProducts, batches: [...createdBatches, ...state.batches] };
     }
     case "ADD_CUSTOMER":
       return { ...state, customers: [...state.customers, action.payload] };
@@ -1676,7 +1749,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           { data: cashSessionsData },
           productCostsRes,
           saleItemCostsRes,
-          productUnitsRes
+          productUnitsRes,
+          productBatchesRes
         ] = await Promise.all([
           supabase.from('settings').select('*').eq('store_id', activeStore.id).maybeSingle(),
           supabase.from('categories').select('*').eq('store_id', activeStore.id),
@@ -1696,7 +1770,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             ? supabase.from('sale_item_costs').select('sale_item_id, sale_id, unit_cost, is_estimated').eq('store_id', activeStore.id)
             : Promise.resolve({ data: [] as any[] }),
           // Charger product_units pour tous les membres (nécessaire au scan caisse et gestion produits)
-          supabase.from('product_units').select('*').eq('store_id', activeStore.id)
+          supabase.from('product_units').select('*').eq('store_id', activeStore.id),
+          supabase.from('product_batches').select('*').eq('store_id', activeStore.id).order('expiry_date', { ascending: true })
         ]);
 
         const productUnitsData = productUnitsRes?.data;
@@ -1739,6 +1814,22 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           });
         }
 
+        const batchesData = (productBatchesRes as any)?.data;
+        const loadedBatches: ProductBatch[] = Array.isArray(batchesData)
+          ? batchesData.map((b: any) => ({
+              id: b.id,
+              storeId: b.store_id,
+              productId: b.product_id,
+              batchNumber: b.batch_number,
+              expiryDate: b.expiry_date,
+              initialQuantity: Number(b.initial_quantity) || 0,
+              currentQuantity: Number(b.current_quantity) || 0,
+              orderId: b.order_id || undefined,
+              createdAt: b.created_at,
+              updatedAt: b.updated_at
+            }))
+          : [];
+
         let cachedSettings: any = null;
         if (typeof window !== "undefined" && activeStore?.id) {
           try {
@@ -1773,6 +1864,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           cart: [],
           categories: demoCategories,
           products: [],
+          batches: loadedBatches,
           settings: { ...defaultSettings, ...(cachedSettings || {}) }
         };
 
@@ -1919,6 +2011,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
                     : (Number(i.quantity) * (Number(i.unit_multiplier) || 1)),
                   cost: isAdminUser ? unitCost : undefined,
                   isEstimated: isAdminUser && frozen ? frozen.is_estimated : undefined,
+                  batchId: i.batch_id || undefined,
+                  batchNumber: i.batch_number || undefined,
+                  expiryDate: i.expiry_date || undefined,
                 };
               }) : []
             };
@@ -2407,7 +2502,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             unit_multiplier: Number(i.unitMultiplier) || 1,
             quantity_reference: (i.quantityReference !== undefined && i.quantityReference !== null && Number(i.quantityReference) > 0)
               ? Number(i.quantityReference)
-              : (Number(i.quantity) * (Number(i.unitMultiplier) || 1))
+              : (Number(i.quantity) * (Number(i.unitMultiplier) || 1)),
+            batch_number: i.batchNumber || null,
+            expiry_date: i.expiryDate || null
           }));
           await supabase.from('order_items').insert(items);
         }
@@ -2434,6 +2531,23 @@ export function StoreProvider({ children }: { children: ReactNode }) {
                    const newRefCost = mult > 0 ? (Number(item.costPrice) / mult) : Number(item.costPrice);
 
                    await supabase.from('products').update({ stock: prod.stock + refQty }).eq('id', prod.id);
+                   if (item.batchNumber && item.expiryDate && activeStore?.id) {
+                     try {
+                       const batchId = 'batch_' + Date.now().toString(36) + '_' + Math.random().toString(36).substring(2, 6);
+                       await supabase.from('product_batches').insert([{
+                         id: batchId,
+                         store_id: activeStore.id,
+                         product_id: item.productId,
+                         batch_number: item.batchNumber,
+                         expiry_date: item.expiryDate,
+                         initial_quantity: refQty,
+                         current_quantity: refQty,
+                         order_id: order.id
+                       }]);
+                     } catch (errB) {
+                       console.warn("Erreur insertion lot dans product_batches:", errB);
+                     }
+                   }
                    if (isAdminUser && newRefCost > 0 && activeStore?.id) {
                      await supabase.from('product_costs').upsert({
                        product_id: prod.id,
@@ -2445,6 +2559,36 @@ export function StoreProvider({ children }: { children: ReactNode }) {
                 }
               }
            }
+        }
+      }
+      else if (action.type === "ADD_BATCH") {
+        const b = action.payload;
+        if (activeStore?.id) {
+          try {
+            await supabase.from('product_batches').insert([{
+              id: b.id,
+              store_id: activeStore.id,
+              product_id: b.productId,
+              batch_number: b.batchNumber,
+              expiry_date: b.expiryDate,
+              initial_quantity: b.initialQuantity,
+              current_quantity: b.currentQuantity,
+              order_id: b.orderId || null,
+              created_at: b.createdAt
+            }]);
+          } catch (eB) {
+            console.warn("Erreur Supabase ADD_BATCH:", eB);
+          }
+        }
+      }
+      else if (action.type === "DELETE_BATCH") {
+        const batchId = action.payload;
+        if (activeStore?.id) {
+          try {
+            await supabase.from('product_batches').delete().eq('id', batchId).eq('store_id', activeStore.id);
+          } catch (eB) {
+            console.warn("Erreur Supabase DELETE_BATCH:", eB);
+          }
         }
       }
       else if (action.type === "ADD_EXPENSE") {

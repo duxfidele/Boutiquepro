@@ -17,7 +17,7 @@
 | **Phase 3** | ~~Unités Multiples & Conditionnements (Cartons, Packs, Vrac)~~ | ✅ **FAIT & VALIDÉ** | Rapport [`RAPPORT_PHASE3.md`](file:///home/fideleatchade/.gemini/antigravity-ide/brain/e0d28ad8-ac41-492c-a977-6f3fe6e34690/Ma%20boutique/saas-boutique/RAPPORT_PHASE3.md) |
 | **Étape 3.1** | ~~Vente au Montant / Vrac Fractionné (ex: 100 F, 250 F...) & Stock Décimal~~ | ✅ **FAIT & VALIDÉ** | Commit [`eb12a17`](file:///home/fideleatchade/.gemini/antigravity-ide/brain/e0d28ad8-ac41-492c-a977-6f3fe6e34690/Ma%20boutique/saas-boutique/.git) + testé en base |
 | **Étape 3.2** | ~~Réglage Optionnel « Gestion du stock épuisé / négatif »~~ | ✅ **FAIT & VALIDÉ** | Tests automatisés validés en base (Mode strict 0, Mode souple -2, régularisation +5) |
-| **Étape 4** | Module « Traçabilité & Dates de Péremption par Lot » | ⏳ **À FAIRE** | Prévu pour l'alimentation/dépôts |
+| **Étape 4** | ~~Module « Traçabilité & Dates de Péremption par Lot »~~ | ✅ **FAIT & VALIDÉ** | FEFO automatique, alertes péremption, modal lots, tickets caisse |
 | **Étape 5** | Module « Historique des Fluctuations de Prix » (`price_history`) | ⏳ **À FAIRE** | Traçabilité des hausses/baisses |
 | **Étape 6** | Module « Devis & Factures Proforma » (`quotes`) | ⏳ **À FAIRE** | Conversion devis en vente directe |
 | **Étape 7** | Qualification Finale & Fusion sécurisée vers `main` | ⏳ **À FAIRE** | Déploiement en production |
@@ -68,14 +68,30 @@
 
 ## 🚀 DÉTAIL DES PROCHAINES ÉTAPES
 
-### ⏳ Étape 4 : Module « Traçabilité & Dates de Péremption par Lot » (Priorité Fr Fidèle)
-* **Objectif :** Permettre le suivi des produits périssables (alimentation, supérette, cosmétique, pharmacie).
-* **Fonctionnalités :**
-  1. **À la commande / réception fournisseur (`/orders`) :** Saisie du numéro de lot (ex: `LOT-2026-A`) et de la date limite de consommation (DLC / DLUO).
-  2. **Au Tableau de bord & Catalogue (`/products`) :**
-     * Badge orange : *"Périme dans moins de 30 jours"*
-     * Badge rouge : *"Article périmé — Retirer de la vente"*
-  3. **À la caisse (`/pos`) :** Priorisation automatique du lot qui périme le plus tôt (principe FEFO).
+### ✅ Étape 4 : Module « Traçabilité & Dates de Péremption par Lot » (Terminé & Validé)
+* **Objectif :** Permettre le suivi complet des produits périssables (alimentation, supérette, cosmétique, pharmacie) selon la méthode FEFO (First Expired, First Out).
+* **Ce qui a été réalisé et validé :**
+  1. **Base de données & RPC (`migration_batches_expiry.sql` & `rollback_batches_expiry.sql`) :**
+     * Création de la table `product_batches` (numéro de lot, DLC/DLUO, quantité initiale & actuelle, statut `active`/`depleted`/`expired`).
+     * Traçabilité du lot sur `order_items` et `sale_items`.
+     * Mise à jour de la RPC atomique `create_sale` avec décrémentation automatique FEFO sur les lots actifs.
+     * Politiques RLS strictes avec isolation par `store_id` et `search_path = public`.
+  2. **Commandes & Réceptions Fournisseur (`/orders`) :**
+     * Saisie intuitive du numéro de lot et de la DLC lors de la commande.
+     * Génération automatique des lots lors du passage au statut *Reçu*.
+  3. **Catalogue & Fiche Produit (`/products`) :**
+     * Badges dynamiques de péremption (Rouge = périmé, Orange = périme dans <= 30 jours, Vert = OK).
+     * Nouveau filtre de recherche : "Tous", "Périmés", "Périme dans moins de 30 jours".
+     * Modal dédié "Lots & Traçabilité" par produit avec vue d'ensemble et ajout manuel de lots.
+  4. **Caisse & Facturation (`/pos`) :**
+     * Priorisation automatique FEFO des lots lors de la vente.
+     * Avertissement visuel immédiat si un produit périmé est sélectionné.
+     * Impression du numéro de lot et de la DLC sur le ticket de caisse et la facture proforma/A4.
+  5. **Tableau de Bord Principal (`/`) :**
+     * Widget d'alertes de péremption pour retirer immédiatement les articles périmés et anticiper les fins de validité.
+  6. **Automates & Tests :**
+     * Script de validation `test_suite_batches_expiry.js` validé avec succès.
+     * Compilation TypeScript (`tsc --noEmit`) sans erreur et `next build` (23/23 routes) réussi.
 
 ### ⏳ Étape 5 : Module « Historique des Fluctuations de Prix » (`price_history`)
 * **Objectif :** Enregistrer chaque changement de prix d'achat fournisseur ou de prix de vente public :

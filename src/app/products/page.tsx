@@ -22,7 +22,12 @@ import {
   Save,
   Tag,
   Layers,
+  Clock,
+  Calendar,
+  ShieldCheck,
+  Check
 } from "lucide-react";
+import { ProductBatch } from "@/context/StoreContext";
 
 export default function ProductsPage() {
   const { role, activeStore } = useAuth();
@@ -46,19 +51,49 @@ export default function ProductsPage() {
   const [editProduct, setEditProduct] = useState<Product | null>(null);
   const emptyForm = { name: "", sku: "", category: "Vêtements", price: 0, cost: 0, stock: 0, minStock: 5, image: "📦" };
   const [form, setForm] = useState(emptyForm);
+  const [expiryFilter, setExpiryFilter] = useState<"all" | "expired" | "soon">("all");
+  const [selectedProductForBatches, setSelectedProductForBatches] = useState<Product | null>(null);
+  const [newBatchForm, setNewBatchForm] = useState({ batchNumber: "", expiryDate: "", quantity: 1 });
+  const [isAddingBatch, setIsAddingBatch] = useState(false);
+
 
   // Category Modal
   const [showCategoryModal, setShowCategoryModal] = useState(false);
   const [categoryForm, setCategoryForm] = useState({ name: "", icon: "📦", color: "#6343EA" });
 
   const filtered = useMemo(() => {
+    const now = new Date();
+    now.setHours(0, 0, 0, 0);
+
     return state.products.filter((p) => {
       const matchSearch = p.name.toLowerCase().includes(search.toLowerCase()) || p.sku.toLowerCase().includes(search.toLowerCase());
       const matchCategory = categoryFilter === "Tous" || p.category === categoryFilter;
       const matchStock = stockFilter === "all" || (stockFilter === "low" ? p.stock <= p.minStock : p.stock > p.minStock);
-      return matchSearch && matchCategory && matchStock;
+
+      let matchExpiry = true;
+      if (expiryFilter !== "all") {
+        const prodBatches = (state.batches || [])
+          .filter((b) => b.productId === p.id && b.currentQuantity > 0)
+          .sort((a, b) => new Date(a.expiryDate).getTime() - new Date(b.expiryDate).getTime());
+
+        if (prodBatches.length === 0) {
+          matchExpiry = false;
+        } else {
+          const nearest = prodBatches[0];
+          const exp = new Date(nearest.expiryDate);
+          exp.setHours(0, 0, 0, 0);
+          const diffDays = Math.ceil((exp.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+          if (expiryFilter === "expired") {
+            matchExpiry = diffDays < 0;
+          } else if (expiryFilter === "soon") {
+            matchExpiry = diffDays >= 0 && diffDays <= 30;
+          }
+        }
+      }
+
+      return matchSearch && matchCategory && matchStock && matchExpiry;
     });
-  }, [state.products, search, categoryFilter, stockFilter]);
+  }, [state.products, state.batches, search, categoryFilter, stockFilter, expiryFilter]);
 
   const openCreate = () => {
     setEditProduct(null);
@@ -280,6 +315,15 @@ export default function ProductsPage() {
             <option value="low">Stock faible</option>
             <option value="ok">Stock OK</option>
           </select>
+                    <select
+            value={expiryFilter}
+            onChange={(e) => setExpiryFilter(e.target.value as "all" | "expired" | "soon")}
+            className="rounded-xl border border-border/60 bg-secondary/30 px-3 py-2 text-base sm:text-xs focus:outline-none focus:ring-2 focus:ring-primary/20"
+          >
+            <option value="all">Toutes dates</option>
+            <option value="expired">🚨 Produits périmés</option>
+            <option value="soon">⚠️ Expire &lt; 30j</option>
+          </select>
           <div className="flex rounded-xl border border-border/60 overflow-hidden">
             <button
               onClick={() => setViewMode("grid")}
@@ -347,6 +391,53 @@ export default function ProductsPage() {
                   </div>
                 </div>
 
+                                {/* Badges de Péremption & Lots */}
+                <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
+                  {(() => {
+                    const prodBatches = (state.batches || [])
+                      .filter((b) => b.productId === p.id && b.currentQuantity > 0)
+                      .sort((a, b) => new Date(a.expiryDate).getTime() - new Date(b.expiryDate).getTime());
+
+                    if (prodBatches.length === 0) return null;
+
+                    const nearest = prodBatches[0];
+                    const now = new Date();
+                    now.setHours(0, 0, 0, 0);
+                    const exp = new Date(nearest.expiryDate);
+                    exp.setHours(0, 0, 0, 0);
+                    const diffDays = Math.ceil((exp.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+
+                    if (diffDays < 0) {
+                      return (
+                        <span className="rounded-full bg-red-600/10 border border-red-500/30 px-2 py-0.5 text-[10px] font-bold text-red-600 flex items-center gap-1 animate-pulse">
+                          <AlertTriangle className="h-2.5 w-2.5" /> Périmé ({nearest.batchNumber})
+                        </span>
+                      );
+                    }
+                    if (diffDays <= 30) {
+                      return (
+                        <span className="rounded-full bg-amber-500/10 border border-amber-500/30 px-2 py-0.5 text-[10px] font-bold text-amber-600 flex items-center gap-1">
+                          <Clock className="h-2.5 w-2.5" /> Périme dans {diffDays}j
+                        </span>
+                      );
+                    }
+                    return (
+                      <span className="rounded-full bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 text-[10px] font-medium text-emerald-600 flex items-center gap-1">
+                        DLC: {new Date(nearest.expiryDate).toLocaleDateString("fr-FR")}
+                      </span>
+                    );
+                  })()}
+                  <button
+                    onClick={() => {
+                      setSelectedProductForBatches(p);
+                      setNewBatchForm({ batchNumber: "", expiryDate: "", quantity: 1 });
+                    }}
+                    className="rounded-full bg-secondary hover:bg-secondary/80 px-2 py-0.5 text-[10px] font-medium text-muted-foreground transition-colors flex items-center gap-1"
+                  >
+                    📦 {(state.batches || []).filter(b => b.productId === p.id).length} lot(s)
+                  </button>
+                </div>
+
                 {/* Margin badge */}
                 <div className="mt-3 flex items-center gap-2">
                   <span className="rounded-full bg-accent/10 px-2 py-0.5 text-[10px] font-medium text-accent">
@@ -409,6 +500,29 @@ export default function ProductsPage() {
                     <span className={`text-sm font-semibold ${p.stock < 0 ? "text-red-600 font-bold" : p.stock <= p.minStock ? "text-destructive" : ""}`}>
                       {p.stock}
                     </span>
+                    {(() => {
+                      const prodBatches = (state.batches || [])
+                        .filter((b) => b.productId === p.id && b.currentQuantity > 0)
+                        .sort((a, b) => new Date(a.expiryDate).getTime() - new Date(b.expiryDate).getTime());
+                      if (prodBatches.length === 0) return null;
+                      const nearest = prodBatches[0];
+                      const now = new Date();
+                      now.setHours(0, 0, 0, 0);
+                      const exp = new Date(nearest.expiryDate);
+                      exp.setHours(0, 0, 0, 0);
+                      const diffDays = Math.ceil((exp.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+                      return (
+                        <div className="mt-0.5 flex justify-end">
+                          {diffDays < 0 ? (
+                            <span className="text-[9px] text-red-600 font-bold">Périmé ({nearest.batchNumber})</span>
+                          ) : diffDays <= 30 ? (
+                            <span className="text-[9px] text-amber-600 font-bold">Expire dans {diffDays}j</span>
+                          ) : (
+                            <span className="text-[9px] text-muted-foreground">DLC: {new Date(nearest.expiryDate).toLocaleDateString("fr-FR")}</span>
+                          )}
+                        </div>
+                      );
+                    })()}
                   </td>
                   <td className="px-4 py-3 text-right">
                     {role === "admin" && <span className="text-xs text-accent font-medium">{p.price > 0 ? Math.round(((p.price - p.cost) / p.price) * 100) : 0}%</span>}
@@ -416,6 +530,16 @@ export default function ProductsPage() {
                   {role === "admin" && (
                     <td className="px-4 py-3 text-right">
                       <div className="flex items-center justify-end gap-1">
+                        <button
+                          onClick={() => {
+                            setSelectedProductForBatches(p);
+                            setNewBatchForm({ batchNumber: "", expiryDate: "", quantity: 1 });
+                          }}
+                          className="p-1.5 rounded-lg hover:bg-secondary transition-colors"
+                          title="Traçabilité & Lots"
+                        >
+                          <Package className="h-3.5 w-3.5 text-primary" />
+                        </button>
                         <button onClick={() => openEdit(p)} className="p-1.5 rounded-lg hover:bg-secondary transition-colors">
                           <Edit3 className="h-3.5 w-3.5 text-muted-foreground" />
                         </button>
@@ -730,6 +854,175 @@ export default function ProductsPage() {
               >
                 <Save className="h-4 w-4" />
                 Créer
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* Modal Traçabilité & Gestion des Lots */}
+      {selectedProductForBatches && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm animate-fade-in p-4" onClick={() => setSelectedProductForBatches(null)}>
+          <div className="w-full max-w-2xl bg-card rounded-2xl shadow-2xl flex flex-col max-h-[90vh] animate-scale-in overflow-hidden border border-border/50" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between p-5 border-b border-border/50 bg-secondary/10">
+              <div className="flex items-center gap-3">
+                <ProductAvatar name={selectedProductForBatches.name} size="md" />
+                <div>
+                  <h2 className="text-base font-bold flex items-center gap-2">
+                    <span>Lots &amp; Traçabilité</span>
+                    <span className="text-xs px-2 py-0.5 rounded-full bg-primary/10 text-primary font-mono">{selectedProductForBatches.sku}</span>
+                  </h2>
+                  <p className="text-xs text-muted-foreground mt-0.5 truncate max-w-md">{selectedProductForBatches.name}</p>
+                </div>
+              </div>
+              <button onClick={() => setSelectedProductForBatches(null)} className="p-2 hover:bg-secondary rounded-lg transition-colors">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="p-5 overflow-y-auto flex-1 space-y-5 no-scrollbar">
+              {/* Formulaire d'ajout rapide d'un lot */}
+              {role === "admin" && (
+                <div className="p-4 rounded-xl border border-primary/20 bg-primary/5 space-y-3">
+                  <h3 className="text-xs font-bold uppercase tracking-wider text-primary flex items-center gap-1.5">
+                    <Plus className="h-3.5 w-3.5" /> Enregistrer un nouveau lot en rayon
+                  </h3>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div>
+                      <label className="text-xs text-muted-foreground block mb-1 font-medium">N° de Lot *</label>
+                      <input
+                        type="text"
+                        placeholder="Ex: LOT-2026-A"
+                        value={newBatchForm.batchNumber}
+                        onChange={(e) => setNewBatchForm({ ...newBatchForm, batchNumber: e.target.value })}
+                        className="w-full rounded-xl border border-border/60 bg-card px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-primary/20 font-mono"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-xs text-muted-foreground block mb-1 font-medium">Date de Péremption *</label>
+                      <input
+                        type="date"
+                        value={newBatchForm.expiryDate}
+                        onChange={(e) => setNewBatchForm({ ...newBatchForm, expiryDate: e.target.value })}
+                        className="w-full rounded-xl border border-border/60 bg-card px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-primary/20"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-xs text-muted-foreground block mb-1 font-medium">Quantité d&apos;unités *</label>
+                      <input
+                        type="number"
+                        min="1"
+                        value={newBatchForm.quantity}
+                        onChange={(e) => setNewBatchForm({ ...newBatchForm, quantity: Math.max(1, Number(e.target.value)) })}
+                        className="w-full rounded-xl border border-border/60 bg-card px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-primary/20"
+                      />
+                    </div>
+                  </div>
+                  <div className="flex justify-end">
+                    <button
+                      type="button"
+                      disabled={isAddingBatch || !newBatchForm.batchNumber.trim() || !newBatchForm.expiryDate}
+                      onClick={async () => {
+                        setIsAddingBatch(true);
+                        try {
+                          const newB: ProductBatch = {
+                            id: "batch_" + Date.now().toString(36) + "_" + Math.random().toString(36).substring(2, 6),
+                            storeId: activeStore?.id || "",
+                            productId: selectedProductForBatches.id,
+                            batchNumber: newBatchForm.batchNumber.trim(),
+                            expiryDate: newBatchForm.expiryDate,
+                            initialQuantity: newBatchForm.quantity,
+                            currentQuantity: newBatchForm.quantity,
+                            createdAt: new Date().toISOString()
+                          };
+                          dispatch({ type: "ADD_BATCH", payload: newB });
+                          setNewBatchForm({ batchNumber: "", expiryDate: "", quantity: 1 });
+                        } finally {
+                          setIsAddingBatch(false);
+                        }
+                      }}
+                      className="px-4 py-2 bg-primary text-white text-xs font-bold rounded-xl hover:opacity-90 disabled:opacity-50 flex items-center gap-1.5 shadow-sm"
+                    >
+                      <Check className="h-3.5 w-3.5" /> Enregistrer ce lot
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Liste des lots existants pour ce produit */}
+              <div className="space-y-2">
+                <h3 className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Lots enregistrés pour cet article</h3>
+                {(() => {
+                  const batches = (state.batches || []).filter(b => b.productId === selectedProductForBatches.id);
+                  if (batches.length === 0) {
+                    return (
+                      <div className="py-8 text-center text-muted-foreground text-xs bg-secondary/20 rounded-xl border border-border/40">
+                        Aucun lot enregistré pour le moment. Vous pouvez enregistrer un lot ci-dessus ou lors de la réception d&apos;une commande fournisseur.
+                      </div>
+                    );
+                  }
+                  const now = new Date();
+                  now.setHours(0, 0, 0, 0);
+
+                  return batches.map((b) => {
+                    const exp = new Date(b.expiryDate);
+                    exp.setHours(0, 0, 0, 0);
+                    const diffDays = Math.ceil((exp.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+                    const isExpired = diffDays < 0;
+                    const isSoon = diffDays >= 0 && diffDays <= 30;
+
+                    return (
+                      <div key={b.id} className="p-3.5 rounded-xl border border-border/50 bg-secondary/10 flex items-center justify-between gap-3">
+                        <div className="flex flex-col gap-1 min-w-0">
+                          <div className="flex items-center gap-2">
+                            <span className="font-mono font-bold text-sm text-foreground">{b.batchNumber}</span>
+                            {isExpired ? (
+                              <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-red-600/10 text-red-600 border border-red-500/30">
+                                🚨 Périmé
+                              </span>
+                            ) : isSoon ? (
+                              <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/10 text-amber-600 border border-amber-500/30">
+                                ⚠️ Expire dans {diffDays}j
+                              </span>
+                            ) : (
+                              <span className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-emerald-500/10 text-emerald-600 border border-emerald-500/20">
+                                ✓ Valide
+                              </span>
+                            )}
+                          </div>
+                          <div className="text-xs text-muted-foreground flex items-center gap-3">
+                            <span>DLC: <strong>{new Date(b.expiryDate).toLocaleDateString("fr-FR")}</strong></span>
+                            <span>Initial: {b.initialQuantity}</span>
+                            <span>Restant: <strong className="text-foreground">{b.currentQuantity}</strong></span>
+                          </div>
+                        </div>
+
+                        {role === "admin" && (
+                          <button
+                            onClick={() => {
+                              if (confirm("Supprimer ce lot de traçabilité ?")) {
+                                dispatch({ type: "DELETE_BATCH", payload: b.id });
+                              }
+                            }}
+                            className="p-1.5 hover:bg-destructive/10 text-muted-foreground hover:text-destructive rounded-lg transition-colors"
+                            title="Supprimer ce lot"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </button>
+                        )}
+                      </div>
+                    );
+                  });
+                })()}
+              </div>
+            </div>
+
+            <div className="p-4 border-t border-border/50 bg-secondary/10 flex justify-end">
+              <button
+                type="button"
+                onClick={() => setSelectedProductForBatches(null)}
+                className="px-4 py-2 text-xs font-semibold rounded-xl bg-secondary hover:bg-secondary/80 text-foreground"
+              >
+                Fermer
               </button>
             </div>
           </div>

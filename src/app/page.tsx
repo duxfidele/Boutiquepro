@@ -96,6 +96,31 @@ export default function Dashboard() {
     retryFailedSale,
   } = useStore();
 
+  const expiryAlerts = useMemo(() => {
+    const now = new Date();
+    now.setHours(0, 0, 0, 0);
+
+    const expired: { product: any; batch: any; days: number }[] = [];
+    const soon: { product: any; batch: any; days: number }[] = [];
+
+    (state.batches || []).forEach((b) => {
+      if (b.currentQuantity <= 0) return;
+      const p = state.products.find((prod) => prod.id === b.productId);
+      if (!p) return;
+      const exp = new Date(b.expiryDate);
+      exp.setHours(0, 0, 0, 0);
+      const diffDays = Math.ceil((exp.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+
+      if (diffDays < 0) {
+        expired.push({ product: p, batch: b, days: diffDays });
+      } else if (diffDays <= 30) {
+        soon.push({ product: p, batch: b, days: diffDays });
+      }
+    });
+
+    return { expired, soon };
+  }, [state.batches, state.products]);
+
   const [period, setPeriod] = useState<PeriodType>("today");
   const [selectedDate, setSelectedDate] = useState<string>(() => {
     const y = new Date();
@@ -956,6 +981,40 @@ export default function Dashboard() {
               })}
             </div>
           </div>
+
+
+          {/* Expiry Alerts */}
+          {(expiryAlerts.expired.length > 0 || expiryAlerts.soon.length > 0) && (
+            <div className={`rounded-2xl border p-6 ${expiryAlerts.expired.length > 0 ? "border-red-500/20 bg-red-500/5" : "border-amber-500/20 bg-amber-500/5"}`}>
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-2">
+                  <AlertTriangle className={`h-4 w-4 ${expiryAlerts.expired.length > 0 ? "text-red-600" : "text-amber-600"}`} />
+                  <h2 className={`text-base font-semibold ${expiryAlerts.expired.length > 0 ? "text-red-600" : "text-amber-600"}`}>
+                    {expiryAlerts.expired.length > 0 ? "Articles périmés à retirer" : "Péremptions imminentes (<30j)"}
+                  </h2>
+                </div>
+                <Link href="/products" className="text-xs text-primary font-medium hover:underline">
+                  Voir catalogue &rarr;
+                </Link>
+              </div>
+
+              <div className="space-y-2">
+                {expiryAlerts.expired.slice(0, 3).map(({ product, batch }) => (
+                  <div key={batch.id} className="flex items-center justify-between text-xs bg-red-600/10 border border-red-500/20 p-2.5 rounded-xl">
+                    <span className="font-semibold text-red-700 truncate max-w-[170px]">{product.name}</span>
+                    <span className="text-[10px] font-mono text-red-600 font-bold">Lot: {batch.batchNumber} (Périmé)</span>
+                  </div>
+                ))}
+
+                {expiryAlerts.soon.slice(0, 3).map(({ product, batch, days }) => (
+                  <div key={batch.id} className="flex items-center justify-between text-xs bg-amber-500/10 border border-amber-500/20 p-2.5 rounded-xl">
+                    <span className="font-semibold text-amber-800 truncate max-w-[170px]">{product.name}</span>
+                    <span className="text-[10px] text-amber-700 font-semibold">Expire dans {days}j (Lot: {batch.batchNumber})</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* Low Stock Alerts */}
           {lowStockProducts.length > 0 && (

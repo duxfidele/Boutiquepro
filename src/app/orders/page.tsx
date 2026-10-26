@@ -40,6 +40,8 @@ export default function OrdersPage() {
       unitName?: string;
       unitMultiplier?: number;
       selectedUnitId?: string;
+      batchNumber?: string;
+      expiryDate?: string;
     }[]
   });
   const [searchProduct, setSearchProduct] = useState("");
@@ -71,12 +73,14 @@ export default function OrdersPage() {
           unitName: 'Unité',
           unitMultiplier: 1,
           selectedUnitId: 'ref',
+          batchNumber: '',
+          expiryDate: '',
         }
       ]
     });
   };
 
-  const handleUpdateItem = (productId: string, field: "quantity" | "costPrice", value: number) => {
+  const handleUpdateItem = (productId: string, field: "quantity" | "costPrice" | "batchNumber" | "expiryDate", value: any) => {
     setForm({
       ...form,
       items: form.items.map(i => i.product.id === productId ? { ...i, [field]: value } : i)
@@ -107,6 +111,8 @@ export default function OrdersPage() {
           unitName: i.unitName || 'Unité',
           unitMultiplier: mult,
           quantityReference: refQ,
+          batchNumber: i.batchNumber?.trim() || undefined,
+          expiryDate: i.expiryDate || undefined,
         };
       }),
       totalCost,
@@ -323,11 +329,23 @@ export default function OrdersPage() {
                   <span className="font-medium">{new Date(order.expectedAt).toLocaleDateString("fr-FR")}</span>
                 </div>
               )}
-              <div className="flex justify-between items-center text-sm border-t border-border/40 pt-4">
-                <span className="text-muted-foreground flex items-center gap-1.5"><Package className="h-4 w-4" /> Articles</span>
-                <span className="font-bold">
-                  {order.items.map(i => `${i.quantity} ${i.unitName && i.unitName !== 'Unité' ? i.unitName : 'unité(s)'}`).join(', ')}
-                </span>
+              <div className="border-t border-border/40 pt-4 space-y-2">
+                <span className="text-xs text-muted-foreground flex items-center gap-1.5 font-medium"><Package className="h-4 w-4" /> Articles &amp; Lots</span>
+                <div className="space-y-1.5 max-h-32 overflow-y-auto pr-1">
+                  {order.items.map((it, idx) => (
+                    <div key={idx} className="flex items-center justify-between text-xs bg-secondary/30 p-2 rounded-lg">
+                      <div className="flex flex-col min-w-0 pr-2">
+                        <span className="font-medium truncate">{it.productName}</span>
+                        {it.batchNumber && (
+                          <span className="text-[10px] text-muted-foreground font-mono">
+                            Lot: <strong className="text-primary">{it.batchNumber}</strong> {it.expiryDate ? `• Exp: ${new Date(it.expiryDate).toLocaleDateString("fr-FR")}` : ""}
+                          </span>
+                        )}
+                      </div>
+                      <span className="font-bold shrink-0">{it.quantity} {it.unitName && it.unitName !== 'Unité' ? it.unitName : 'u.'}</span>
+                    </div>
+                  ))}
+                </div>
               </div>
               <div className="flex justify-between items-center text-lg font-bold border-t border-border/40 pt-4 text-primary">
                 <span>Total</span>
@@ -476,6 +494,29 @@ export default function OrdersPage() {
                           />
                         </div>
                       </div>
+                                            {/* Traçabilité : N° de Lot & Date de Péremption */}
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 border-t border-border/30">
+                        <div>
+                          <label className="text-xs text-muted-foreground block mb-1 font-medium">N° de Lot (Traçabilité)</label>
+                          <input
+                            type="text"
+                            placeholder="Ex: LOT-2026-A"
+                            value={item.batchNumber || ""}
+                            onChange={e => handleUpdateItem(item.product.id, "batchNumber", e.target.value)}
+                            className="w-full rounded-xl border border-border/60 px-3 py-2 text-xs focus:outline-none bg-secondary/30 focus:ring-2 focus:ring-primary/20 font-mono"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-xs text-muted-foreground block mb-1 font-medium">Date de Péremption (DLC / DLUO)</label>
+                          <input
+                            type="date"
+                            value={item.expiryDate || ""}
+                            onChange={e => handleUpdateItem(item.product.id, "expiryDate", e.target.value)}
+                            className="w-full rounded-xl border border-border/60 px-3 py-2 text-xs focus:outline-none bg-secondary/30 focus:ring-2 focus:ring-primary/20"
+                          />
+                        </div>
+                      </div>
+
                       <div className="flex justify-between items-center mt-1 pt-3 border-t border-border/40">
                         <span className="text-xs text-muted-foreground font-medium">Total ligne</span>
                         <span className="font-bold text-primary text-base whitespace-nowrap">{formatPrice(item.quantity * item.costPrice)}</span>
