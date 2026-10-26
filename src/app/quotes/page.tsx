@@ -4,6 +4,8 @@ import React, { useState, useMemo, useRef } from "react";
 import { useStore, Quote, QuoteItem, Sale, Product } from "@/context/StoreContext";
 import { useAuth } from "@/context/AuthContext";
 import { getWhatsAppUrl, formatWhatsAppNumber } from "@/lib/whatsapp";
+import jsPDF from "jspdf";
+import autoTable from "jspdf-autotable";
 import {
   FileText,
   Plus,
@@ -329,6 +331,163 @@ export default function QuotesPage() {
     window.open(url, "_blank");
   };
 
+  const [downloadingQuoteId, setDownloadingQuoteId] = useState<string | null>(null);
+
+  // Téléchargement direct en PDF A4 professionnel
+  const handleDownloadPDF = (q: Quote) => {
+    try {
+      setDownloadingQuoteId(q.id);
+      const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
+
+      // Entête Magasin
+      doc.setFontSize(16);
+      doc.setFont("helvetica", "bold");
+      doc.setTextColor(30, 30, 30);
+      doc.text(state.settings.name || "MaBoutiquePro", 14, 20);
+
+      doc.setFontSize(9);
+      doc.setFont("helvetica", "normal");
+      doc.setTextColor(100, 100, 100);
+      const location = [state.settings.city || "Lomé", state.settings.country || "Togo"].filter(Boolean).join(" • ");
+      doc.text(location, 14, 25);
+      if (state.settings.phone) doc.text(`Tél : ${state.settings.phone}`, 14, 29);
+      if (state.settings.email) doc.text(`Email : ${state.settings.email}`, 14, 33);
+
+      // Titre Document Facture Proforma & Numéro
+      doc.setFontSize(14);
+      doc.setFont("helvetica", "bold");
+      doc.setTextColor(99, 67, 234); // Teinte violette officielle
+      doc.text("FACTURE PROFORMA", 196, 20, { align: "right" });
+
+      doc.setFontSize(10);
+      doc.setFont("helvetica", "bold");
+      doc.setTextColor(40, 40, 40);
+      doc.text(`N° ${q.quoteNumber}`, 196, 26, { align: "right" });
+
+      doc.setFontSize(9);
+      doc.setFont("helvetica", "normal");
+      doc.setTextColor(100, 100, 100);
+      doc.text(`Date : ${new Date(q.createdAt).toLocaleDateString("fr-FR")}`, 196, 31, { align: "right" });
+      if (q.validityDate) {
+        doc.text(`Validité : ${new Date(q.validityDate).toLocaleDateString("fr-FR")}`, 196, 35, { align: "right" });
+      }
+
+      // Encadré Destinataire / Client
+      doc.setDrawColor(220, 220, 230);
+      doc.setFillColor(248, 248, 252);
+      doc.roundedRect(14, 39, 182, 22, 3, 3, "FD");
+
+      doc.setFontSize(8);
+      doc.setTextColor(120, 120, 120);
+      doc.setFont("helvetica", "bold");
+      doc.text("DESTINATAIRE / CLIENT :", 18, 45);
+
+      doc.setFontSize(11);
+      doc.setTextColor(20, 20, 20);
+      doc.text(q.customerName, 18, 51);
+
+      doc.setFontSize(9);
+      doc.setFont("helvetica", "normal");
+      doc.setTextColor(80, 80, 80);
+      const clientDetails = [
+        q.customerPhone ? `Tél : ${q.customerPhone}` : "",
+        q.customerAddress ? `Adresse : ${q.customerAddress}` : "",
+      ].filter(Boolean).join("  •  ");
+      if (clientDetails) {
+        doc.text(clientDetails, 18, 56);
+      }
+
+      // Tableau des articles
+      const tableData = q.items.map((it) => [
+        it.productName,
+        it.unitName || "Unité",
+        it.quantity.toString(),
+        formatPrice(it.unitPrice).replace(/[  ]/g, " "),
+        formatPrice(it.total).replace(/[  ]/g, " "),
+      ]);
+
+      autoTable(doc, {
+        startY: 66,
+        head: [["Désignation", "Conditionnement", "Quantité", "Prix Unitaire", "Total Net"]],
+        body: tableData,
+        theme: "striped",
+        headStyles: {
+          fillColor: [99, 67, 234],
+          textColor: [255, 255, 255],
+          fontStyle: "bold",
+          fontSize: 9,
+        },
+        styles: {
+          fontSize: 9,
+          cellPadding: 3.5,
+        },
+        columnStyles: {
+          0: { cellWidth: 70 },
+          1: { cellWidth: 35 },
+          2: { cellWidth: 20, halign: "center" },
+          3: { cellWidth: 30, halign: "right" },
+          4: { cellWidth: 27, halign: "right", fontStyle: "bold" },
+        },
+        margin: { left: 14, right: 14 },
+      });
+
+      const finalY = (doc as any).lastAutoTable?.finalY || 120;
+
+      // Bloc des totaux chiffrés
+      const totalsY = finalY + 8;
+      doc.setFontSize(9);
+      doc.setFont("helvetica", "normal");
+      doc.setTextColor(80, 80, 80);
+      doc.text("Sous-total HT :", 135, totalsY);
+      doc.text(formatPrice(q.subtotal).replace(/[  ]/g, " "), 196, totalsY, { align: "right" });
+
+      let offset = 0;
+      if (q.discount > 0) {
+        offset += 5;
+        doc.setTextColor(220, 38, 38);
+        doc.text("Remise accordée :", 135, totalsY + offset);
+        doc.text(`-${formatPrice(q.discount).replace(/[  ]/g, " ")}`, 196, totalsY + offset, { align: "right" });
+      }
+
+      offset += 6;
+      doc.setDrawColor(200, 200, 200);
+      doc.line(135, totalsY + offset - 2, 196, totalsY + offset - 2);
+
+      doc.setFontSize(11);
+      doc.setFont("helvetica", "bold");
+      doc.setTextColor(20, 20, 20);
+      doc.text("NET À PAYER :", 135, totalsY + offset + 3);
+      doc.text(formatPrice(q.total).replace(/[  ]/g, " "), 196, totalsY + offset + 3, { align: "right" });
+
+      // Notes & Modalités
+      const notesY = Math.max(totalsY + offset + 14, finalY + 22);
+      doc.setFontSize(8);
+      doc.setFont("helvetica", "italic");
+      doc.setTextColor(110, 110, 110);
+      doc.text(`Conditions : ${q.notes || "Offre valable sous réserve de disponibilité des stocks. Paiement à réception."}`, 14, notesY);
+
+      // Signatures
+      const sigY = notesY + 14;
+      doc.setFontSize(8);
+      doc.setFont("helvetica", "bold");
+      doc.setTextColor(70, 70, 70);
+      doc.text("Mention bon pour accord (Client) :", 14, sigY);
+      doc.text("Cachet & Signature (Fournisseur) :", 196, sigY, { align: "right" });
+
+      doc.setFont("helvetica", "normal");
+      doc.setTextColor(140, 140, 140);
+      doc.text("Date et signature :", 14, sigY + 10);
+      doc.text(state.settings.managerName || "La Direction", 196, sigY + 10, { align: "right" });
+
+      doc.save(`Devis_${q.quoteNumber}.pdf`);
+    } catch (err) {
+      console.error("Erreur génération PDF Devis:", err);
+      alert("Une erreur est survenue lors de la génération du PDF.");
+    } finally {
+      setDownloadingQuoteId(null);
+    }
+  };
+
   // Impression
   const handlePrint = () => {
     setTimeout(() => {
@@ -516,6 +675,15 @@ export default function QuotesPage() {
                     title="Aperçu & Impression A4"
                   >
                     <Printer className="h-4 w-4" />
+                  </button>
+
+                  <button
+                    onClick={() => handleDownloadPDF(q)}
+                    disabled={downloadingQuoteId === q.id}
+                    className="p-1.5 rounded-lg hover:bg-purple-500/10 text-muted-foreground hover:text-purple-600 transition-colors"
+                    title="Télécharger en PDF A4"
+                  >
+                    <Download className={`h-4 w-4 ${downloadingQuoteId === q.id ? "animate-bounce text-purple-600" : ""}`} />
                   </button>
 
                   <button
@@ -878,6 +1046,15 @@ export default function QuotesPage() {
             <div className="flex items-center justify-between p-4 border-b border-border/50 bg-secondary/20">
               <span className="text-xs font-bold text-muted-foreground">Aperçu Facture Proforma / Devis A4</span>
               <div className="flex items-center gap-2">
+                <button
+                  onClick={() => handleDownloadPDF(viewingQuote)}
+                  disabled={downloadingQuoteId === viewingQuote.id}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-purple-600 text-white text-xs font-bold hover:bg-purple-500 shadow-xs transition-all"
+                  title="Télécharger directement la facture proforma en fichier PDF A4"
+                >
+                  <Download className={`h-3.5 w-3.5 ${downloadingQuoteId === viewingQuote.id ? "animate-bounce" : ""}`} />
+                  <span>{downloadingQuoteId === viewingQuote.id ? "Génération..." : "Télécharger PDF"}</span>
+                </button>
                 <button
                   onClick={handlePrint}
                   className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-primary text-primary-foreground text-xs font-bold hover:opacity-90"
