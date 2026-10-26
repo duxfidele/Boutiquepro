@@ -10,6 +10,7 @@ import Sidebar from "@/components/layout/Sidebar";
 import Header from "@/components/layout/Header";
 import MobileBottomNav from "@/components/layout/MobileBottomNav";
 import SubscriptionModal from "@/components/subscription/SubscriptionModal";
+import OnboardingWizard from "@/components/onboarding/OnboardingWizard";
 import { Loader2, Lock, LogOut, Sparkles } from "lucide-react";
 import { usePathname, useRouter } from "next/navigation";
 import { ModuleKey } from "@/types/modules";
@@ -19,7 +20,21 @@ export default function AppWrapper({ children }: { children: React.ReactNode }) 
   const [isSignUpMode, setIsSignUpMode] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
-  const { user, role, loading, subscription, signOut, getModuleStatus } = useAuth();
+  const { user, role, loading, subscription, signOut, getModuleStatus, activeStore } = useAuth();
+  const [showOnboarding, setShowOnboarding] = useState(false);
+
+  React.useEffect(() => {
+    if (user && role === "admin" && activeStore && activeStore.id) {
+      const hasSector = Boolean(activeStore.business_sector);
+      const isCompleted = typeof window !== "undefined" && (
+        sessionStorage.getItem("onboarding_completed") === "true" ||
+        localStorage.getItem(`onboarding_completed_${activeStore.id}`) === "true"
+      );
+      if (!hasSector && !isCompleted) {
+        setShowOnboarding(true);
+      }
+    }
+  }, [user, role, activeStore]);
   const pathname = usePathname();
   const router = useRouter();
 
@@ -183,6 +198,14 @@ export default function AppWrapper({ children }: { children: React.ReactNode }) 
                 onClose={() => setShowUpgradeModal(false)}
                 isLocked={false}
               />
+
+              {/* Assistant de configuration post-inscription (Onboarding Wizard) */}
+              {showOnboarding && (
+                <OnboardingWizard
+                  onComplete={() => setShowOnboarding(false)}
+                  canSkip={true}
+                />
+              )}
 
               {/* Barre de navigation mobile - Intégrée au shell, 100% figée et immobile */}
               <MobileBottomNav />

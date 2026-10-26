@@ -24,11 +24,14 @@ export type ModuleKey =
 export type ModuleStatus = 'available' | 'locked' | 'disabled';
 
 export type StoreSector =
-  | 'general_store'  // Alimentation générale / Supérette
-  | 'fashion'        // Vêtements & Accessoires de mode
-  | 'electronics'    // Électroménager & Téléphonie
-  | 'hardware'       // Quincaillerie & Matériaux
-  | 'other';         // Autre activité
+  | 'general_store'     // Alimentation générale / Épicerie / Supérette
+  | 'fashion'           // Vêtements & Accessoires de mode
+  | 'hardware'          // Quincaillerie & Matériaux
+  | 'electronics'       // Téléphonie & Électronique
+  | 'beverage'          // Dépôt de boissons, Bar & Brasserie
+  | 'cosmetics_pharma'  // Cosmétique, Soins & Parapharmacie
+  | 'services_other'    // Prestation de services & Négoce B2B
+  | 'other';            // Autre commerce
 
 export interface ModuleDefinition {
   key: ModuleKey;
@@ -195,19 +198,176 @@ export const DEFAULT_ENABLED_MODULES: ModuleKey[] = [
 /**
  * Profils métiers disponibles
  */
-export const STORE_SECTORS: { key: StoreSector; label: string; icon: string }[] = [
-  { key: 'general_store', label: 'Alimentation générale / Supérette', icon: '🛒' },
-  { key: 'fashion', label: 'Vêtements & Prêt-à-porter', icon: '👗' },
-  { key: 'electronics', label: 'Électroménager & Téléphonie', icon: '📱' },
-  { key: 'hardware', label: 'Quincaillerie & Matériaux', icon: '🔨' },
-  { key: 'other', label: 'Autre commerce / Général', icon: '🏬' },
+export interface SectorPreset {
+  key: StoreSector;
+  label: string;
+  tagline: string;
+  icon: string;
+  recommendedModules: ModuleKey[];
+  features: {
+    multiUnits: boolean;
+    batchesExpiry: boolean;
+    fractionalSales: boolean;
+    quotes: boolean;
+    debts: boolean;
+    team: boolean;
+    receiptsInvoices: boolean;
+  };
+  sampleUnits: string[];
+}
+
+export const STORE_SECTORS: { key: StoreSector; label: string; icon: string; tagline: string }[] = [
+  { key: "general_store", label: "Alimentation / Supérette", icon: "🛒", tagline: "Épicerie, vivres, boissons et produits de grande consommation" },
+  { key: "fashion", label: "Mode, Vêtements & Chaussures", icon: "👗", tagline: "Prêt-à-porter, accessoires, maroquinerie et tissus" },
+  { key: "hardware", label: "Quincaillerie & Matériaux", icon: "🔨", tagline: "Bricolage, outillage, ciment, électricité et plomberie" },
+  { key: "beverage", label: "Dépôt de Boissons & Bar", icon: "🍻", tagline: "Casiers, packs d'eau, jus, brasserie et vente au détail" },
+  { key: "electronics", label: "Téléphonie & Électronique", icon: "📱", tagline: "Smartphones, informatique, pièces et accessoires" },
+  { key: "cosmetics_pharma", label: "Cosmétique & Soins", icon: "💊", tagline: "Beauté, parfumerie, parapharmacie et soins corporels" },
+  { key: "services_other", label: "Prestations & Négoce B2B", icon: "🏢", tagline: "Devis formels, fournitures de bureau et facturation professionnelle" },
+  { key: "other", label: "Autre commerce général", icon: "🏬", tagline: "Commerce général avec outils complets et polyvalents" },
 ];
+
+export const SECTOR_PRESETS: Record<StoreSector, SectorPreset> = {
+  general_store: {
+    key: "general_store",
+    label: "Alimentation & Épicerie",
+    tagline: "Vente rapide, cartons/packs et gestion des dates de péremption",
+    icon: "🛒",
+    recommendedModules: ["core", "expenses", "debts", "inventory", "orders", "analytics", "multi_units", "quotes"],
+    features: {
+      multiUnits: true,
+      batchesExpiry: true,
+      fractionalSales: true,
+      quotes: false,
+      debts: true,
+      team: false,
+      receiptsInvoices: true,
+    },
+    sampleUnits: ["Carton (24)", "Pack (6)", "Paquet (12)", "Sac (50kg)", "Unité"],
+  },
+  fashion: {
+    key: "fashion",
+    label: "Boutique de Mode & Prêt-à-porter",
+    tagline: "Vente unitaire épurée sans dates de péremption ni encombrement",
+    icon: "👗",
+    recommendedModules: ["core", "expenses", "debts", "analytics", "receipts_invoices", "inventory"],
+    features: {
+      multiUnits: false,
+      batchesExpiry: false,
+      fractionalSales: false,
+      quotes: false,
+      debts: true,
+      team: false,
+      receiptsInvoices: true,
+    },
+    sampleUnits: ["Pièce", "Paire", "Ensemble", "Lot"],
+  },
+  hardware: {
+    key: "hardware",
+    label: "Quincaillerie & Matériaux",
+    tagline: "Chiffrage de devis, ventes au mètre/kilo et carnet de crédits chantiers",
+    icon: "🔨",
+    recommendedModules: ["core", "expenses", "debts", "quotes", "orders", "inventory", "analytics", "multi_units", "receipts_invoices"],
+    features: {
+      multiUnits: true,
+      batchesExpiry: false,
+      fractionalSales: true,
+      quotes: true,
+      debts: true,
+      team: false,
+      receiptsInvoices: true,
+    },
+    sampleUnits: ["Sac (50kg)", "Barre (6m)", "Paquet (100)", "Rouleau", "Unité"],
+  },
+  beverage: {
+    key: "beverage",
+    label: "Dépôt de Boissons & Bar",
+    tagline: "Multi-unités casiers/bouteilles, réceptions et traçabilité",
+    icon: "🍻",
+    recommendedModules: ["core", "expenses", "debts", "orders", "inventory", "multi_units", "quotes", "analytics"],
+    features: {
+      multiUnits: true,
+      batchesExpiry: true,
+      fractionalSales: false,
+      quotes: true,
+      debts: true,
+      team: false,
+      receiptsInvoices: true,
+    },
+    sampleUnits: ["Casier (24)", "Pack (6)", "Bouteille", "Fût (50L)"],
+  },
+  electronics: {
+    key: "electronics",
+    label: "Téléphonie & Électronique",
+    tagline: "Factures avec garantie, devis proforma et suivi des marges",
+    icon: "📱",
+    recommendedModules: ["core", "expenses", "debts", "quotes", "receipts_invoices", "analytics", "inventory"],
+    features: {
+      multiUnits: false,
+      batchesExpiry: false,
+      fractionalSales: false,
+      quotes: true,
+      debts: true,
+      team: false,
+      receiptsInvoices: true,
+    },
+    sampleUnits: ["Unité", "Kit", "Carton"],
+  },
+  cosmetics_pharma: {
+    key: "cosmetics_pharma",
+    label: "Cosmétique, Beauté & Soins",
+    tagline: "Contrôle des DLC, lots fournisseurs et vente soignée",
+    icon: "💊",
+    recommendedModules: ["core", "expenses", "debts", "inventory", "orders", "analytics", "multi_units"],
+    features: {
+      multiUnits: true,
+      batchesExpiry: true,
+      fractionalSales: false,
+      quotes: false,
+      debts: true,
+      team: false,
+      receiptsInvoices: true,
+    },
+    sampleUnits: ["Boîte (12)", "Flacon", "Tube", "Unité"],
+  },
+  services_other: {
+    key: "services_other",
+    label: "Prestations & Négoce B2B",
+    tagline: "Devis professionnels, facturation A4 et suivi des paiements",
+    icon: "🏢",
+    recommendedModules: ["core", "expenses", "quotes", "receipts_invoices", "debts", "analytics"],
+    features: {
+      multiUnits: false,
+      batchesExpiry: false,
+      fractionalSales: false,
+      quotes: true,
+      debts: true,
+      team: false,
+      receiptsInvoices: true,
+    },
+    sampleUnits: ["Forfait", "Heure", "Jour", "Prestation"],
+  },
+  other: {
+    key: "other",
+    label: "Commerce Général",
+    tagline: "Configuration complète et équilibrée pour tout type d'activité",
+    icon: "🏬",
+    recommendedModules: ["core", "expenses", "debts", "inventory", "orders", "analytics", "quotes", "multi_units", "receipts_invoices"],
+    features: {
+      multiUnits: true,
+      batchesExpiry: false,
+      fractionalSales: true,
+      quotes: true,
+      debts: true,
+      team: false,
+      receiptsInvoices: true,
+    },
+    sampleUnits: ["Carton", "Pack", "Unité"],
+  },
+};
 
 /**
  * Calcule l'état d'un module à 3 états pour une boutique donnée :
- * 1. 'available' : inclus dans la formule ET activé par le gérant
- * 2. 'locked' : NON inclus dans la formule (visible avec cadenas PRO/BUSINESS)
- * 3. 'disabled' : inclus dans la formule mais désactivé par le gérant (masqué de l'UI)
  */
 export function resolveModuleStatus(
   moduleKey: ModuleKey,

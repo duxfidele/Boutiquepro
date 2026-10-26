@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
 import { useStore } from "@/context/StoreContext";
 import SubscriptionModal from "@/components/subscription/SubscriptionModal";
+import OnboardingWizard from "@/components/onboarding/OnboardingWizard";
 import {
   MODULES_CATALOG,
   ModuleKey,
@@ -35,6 +36,7 @@ export default function StoreModulesPage() {
   const { unpaidDebts } = useStore();
 
   const [subModalOpen, setSubModalOpen] = useState(false);
+  const [showWizard, setShowWizard] = useState(false);
   const [saving, setSaving] = useState(false);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -134,15 +136,27 @@ export default function StoreModulesPage() {
           </div>
         </div>
 
-        <button
-          type="button"
-          onClick={handleSave}
-          disabled={saving}
-          className="inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-primary text-primary-foreground font-bold text-sm shadow-md hover:opacity-90 active:scale-95 transition-all disabled:opacity-50"
-        >
-          <Save className="w-4 h-4" />
-          <span>{saving ? "Enregistrement..." : "Enregistrer"}</span>
-        </button>
+        <div className="flex items-center gap-2.5">
+          <button
+            type="button"
+            onClick={() => setShowWizard(true)}
+            className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border border-primary/30 bg-primary/10 text-primary hover:bg-primary/20 font-bold text-xs shadow-xs transition-all"
+            title="Relancer l'assistant pour personnaliser automatiquement votre boutique"
+          >
+            <Sparkles className="w-4 h-4 text-primary" />
+            <span className="hidden sm:inline">Assistant Métier</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={handleSave}
+            disabled={saving}
+            className="inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-primary text-primary-foreground font-bold text-sm shadow-md hover:opacity-90 active:scale-95 transition-all disabled:opacity-50"
+          >
+            <Save className="w-4 h-4" />
+            <span>{saving ? "Enregistrement..." : "Enregistrer"}</span>
+          </button>
+        </div>
       </div>
 
       {/* Notifications */}
@@ -366,6 +380,13 @@ export default function StoreModulesPage() {
         onClose={() => setSubModalOpen(false)}
         defaultPlan="PRO"
       />
+      {/* Assistant Métier réactivable à tout moment */}
+      {showWizard && (
+        <OnboardingWizard
+          onComplete={() => setShowWizard(false)}
+          canSkip={true}
+        />
+      )}
     </div>
   );
 }
