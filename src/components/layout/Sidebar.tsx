@@ -16,6 +16,7 @@ import {
   ClipboardList,
   Receipt,
   Package,
+  FileText,
   ShoppingCart,
   BarChart3,
   Settings,
@@ -41,6 +42,7 @@ const navItems: {
 }[] = [
   { href: "/", label: "Tableau de bord", icon: LayoutDashboard, adminOnly: false, moduleKey: "core" },
   { href: "/pos", label: "Point de Vente", icon: ShoppingCart, adminOnly: false, moduleKey: "core" },
+  { href: "/quotes", label: "Devis & Proforma", icon: FileText, adminOnly: false, moduleKey: "quotes" },
   { href: "/debts", label: "Carnet de Dettes", icon: BookOpen, adminOnly: false, proFeature: true, moduleKey: "debts" },
   { href: "/products", label: "Produits & Stock", icon: Package, adminOnly: false, moduleKey: "core" },
   { href: "/inventory", label: "Inventaire", icon: ClipboardList, adminOnly: true, proFeature: true, moduleKey: "inventory" },

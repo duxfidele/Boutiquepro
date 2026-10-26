@@ -19,7 +19,7 @@
 | **Étape 3.2** | ~~Réglage Optionnel « Gestion du stock épuisé / négatif »~~ | ✅ **FAIT & VALIDÉ** | Tests automatisés validés en base (Mode strict 0, Mode souple -2, régularisation +5) |
 | **Étape 4** | ~~Module « Traçabilité & Dates de Péremption par Lot »~~ | ✅ **FAIT & VALIDÉ** | FEFO automatique, alertes péremption, modal lots, tickets caisse |
 | **Étape 5** | ~~Module « Historique des Fluctuations de Prix » (`price_history`)~~ | ✅ **FAIT & VALIDÉ** | Traçabilité automatique des prix (vente, achat fournisseur, conditionnements), RLS étanche, modal interactif |
-| **Étape 6** | Module « Devis & Factures Proforma » (`quotes`) | ⏳ **À FAIRE** | Conversion devis en vente directe |
+| **Étape 6** | ~~Module « Devis & Factures Proforma » (`quotes`)~~ | ✅ **FAIT & VALIDÉ** | Création de devis, proforma A4 imprimable, partage WhatsApp, conversion magique en vente directe |
 | **Étape 7** | Qualification Finale & Fusion sécurisée vers `main` | ⏳ **À FAIRE** | Déploiement en production |
 
 ---
@@ -113,9 +113,27 @@
      * Script de validation `test_suite_price_history.js` validé à 100%.
      * Compilation TypeScript (`tsc --noEmit`) 0 erreur et `next build` (23/23 routes) validé.
 
-### ⏳ Étape 6 : Module « Devis & Factures Proforma » (`quotes`)
-* **Objectif :** Émettre un devis professionnel imprimable ou envoyable par WhatsApp à un client.
-* **Bouton magique :** Un simple bouton *"Convertir en Vente"* transforme le devis validé en vente réelle à la caisse sans ressaisie.
+### ✅ Étape 6 : Module « Devis & Factures Proforma » (Terminé & Validé)
+* **Objectif :** Émettre des devis et factures proforma professionnels chiffrés, imprimables au format A4, partageables par WhatsApp et convertibles en vente directe en 1 clic.
+* **Ce qui a été réalisé et validé :**
+  1. **Base de données & RPC (`migration_quotes.sql` & `rollback_quotes.sql`) :**
+     * Création des tables `quotes` et `quote_items` (chiffrage, remises, client, échéance, notes, statut).
+     * Fonction RPC transactionnelle `convert_quote_to_sale` : crée la vente réelle, décrémente les stocks avec sélection automatique des lots FEFO, fige le coût d'achat (`sale_item_costs`) et scelle le devis comme converti.
+     * Politiques RLS étanches par magasin avec contrôle d'abonnement.
+  2. **Page Dédiée Devis & Proforma (`/quotes`) :**
+     * 4 indicateurs de performance (Total devis, Montant en attente, CA converti, Taux de conversion).
+     * Filtres dynamiques (Tous, Brouillons, Envoyés, Acceptés, Convertis).
+     * Modal de création / modification intuitive avec sélection d'articles, d'unités multiples (cartons/détail) et calculs automatiques.
+     * Bouton Magique *"Convertir en Vente Directe"* avec sélection du mode d'encaissement (Espèces, Mobile Money, Carte, Crédit).
+     * Modèle A4 Proforma officiel prêt pour impression (`window.print()`) avec logo, cachet, conditions de vente et signature.
+     * Bouton de partage WhatsApp en un clic avec texte récapitulatif détaillé.
+  3. **Point de Vente Tactile (`/pos`) :**
+     * Bouton direct *"Créer Devis"* depuis le panier actif permettant de basculer une commande client en devis sans perdre les articles.
+  4. **Navigation & Module (`Sidebar.tsx` & `modules.ts`) :**
+     * Route `/quotes` activée et intégrée dans la barre latérale.
+  5. **Validation :**
+     * Script de test `test_suite_quotes.js` validé à 100%.
+     * Compilation TypeScript (`tsc --noEmit`) sans erreur et `next build` (24/24 routes) validé.
 
 ### ⏳ Étape 7 : Grand Bilan, Qualification & Fusion vers `main`
 * Audit complet de non-régression.

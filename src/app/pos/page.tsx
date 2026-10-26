@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useMemo, useRef } from "react";
-import { useStore, Sale, CashSession, getSalesForSession, getSessionStats, SessionStats, DebtPayment } from "@/context/StoreContext";
+import { useStore, Sale, CashSession, getSalesForSession, getSessionStats, SessionStats, DebtPayment, Quote, QuoteItem } from "@/context/StoreContext";
 import { ProductAvatar } from "@/components/ui/ProductAvatar";
 import {
   ShoppingCart,
@@ -68,7 +68,7 @@ export default function POSPage() {
     clearOfflineSalesQueue,
     isRealtimeActive
   } = useStore();
-  const { user, role, subscription, canOfferCredit, canPrintReceipts, signOut, isModuleActive, getModuleStatus } = useAuth();
+  const { user, role, subscription, canOfferCredit, canPrintReceipts, signOut, isModuleActive, getModuleStatus, activeStore } = useAuth();
   const isMultiUnits = isModuleActive('multi_units');
   const [subModalOpen, setSubModalOpen] = useState(false);
   // Profil du caissier chargé depuis la base de données
@@ -392,6 +392,69 @@ export default function POSPage() {
     setDownPayment("");
     setDueDate("");
     setShowSuccess(true);
+  };
+
+  const handleCreateQuoteFromCart = () => {
+    if (cart.length === 0) return;
+    const now = new Date();
+    const quoteId = "quote_" + Date.now().toString(36);
+    const quoteNumber = `DEV-${now.getFullYear()}-${String((state.quotes || []).length + 1).padStart(3, "0")}`;
+    const validityDate = new Date(now.getTime() + 15 * 24 * 3600 * 1000).toISOString().split("T")[0];
+
+    const quoteItems: QuoteItem[] = cart.map((c, idx) => {
+      let unitPrice = c.product.price;
+      let unitMultiplier = 1;
+      let unitName = "Unité";
+
+      if (c.selectedUnit) {
+        unitName = c.selectedUnit.name;
+        unitMultiplier = c.selectedUnit.multiplier;
+        if (c.selectedUnit.price && c.selectedUnit.price > 0) unitPrice = c.selectedUnit.price;
+        else unitPrice = c.product.price * c.selectedUnit.multiplier;
+      }
+      if (c.unitPrice !== undefined && c.unitPrice > 0) {
+        unitPrice = c.unitPrice;
+      }
+
+      const total = c.customTotal !== undefined ? c.customTotal : (unitPrice * c.quantity);
+
+      return {
+        id: `${quoteId}_item_${idx + 1}`,
+        quoteId,
+        productId: c.product.id,
+        productName: c.product.name,
+        quantity: c.quantity,
+        unitPrice,
+        total,
+        unitName,
+        unitMultiplier,
+      };
+    });
+
+    const quoteSubtotal = quoteItems.reduce((sum, it) => sum + it.total, 0);
+
+    const quote: Quote = {
+      id: quoteId,
+      storeId: activeStore?.id || "",
+      userId: null,
+      quoteNumber,
+      customerName: customerName.trim() || "Client Devis",
+      customerPhone: customerPhone.trim() || null,
+      subtotal: quoteSubtotal,
+      tax: 0,
+      discount: discountAmount,
+      total: Math.max(0, quoteSubtotal - discountAmount),
+      status: "draft",
+      validityDate,
+      notes: "Devis généré depuis la caisse.",
+      createdAt: now.toISOString(),
+      updatedAt: now.toISOString(),
+      items: quoteItems,
+    };
+
+    dispatch({ type: "ADD_QUOTE", payload: quote });
+    dispatch({ type: "CLEAR_CART" });
+    alert(`Devis ${quoteNumber} créé avec succès ! Retrouvez-le dans l'onglet Devis & Proforma.`);
   };
 
   const handlePrint = () => {
@@ -874,13 +937,24 @@ export default function POSPage() {
             )}
           </div>
           {cart.length > 0 && (
-            <button
-              type="button"
-              onClick={() => dispatch({ type: "CLEAR_CART" })}
-              className="text-xs text-destructive hover:underline font-medium"
-            >
-              Vider le panier
-            </button>
+            <div className="flex items-center gap-2.5">
+              <button
+                type="button"
+                onClick={handleCreateQuoteFromCart}
+                className="text-xs text-primary hover:underline font-semibold flex items-center gap-1"
+                title="Générer un devis ou facture proforma à partir de ce panier"
+              >
+                <FileText className="h-3.5 w-3.5" />
+                Créer Devis
+              </button>
+              <button
+                type="button"
+                onClick={() => dispatch({ type: "CLEAR_CART" })}
+                className="text-xs text-destructive hover:underline font-medium"
+              >
+                Vider
+              </button>
+            </div>
           )}
         </div>
 

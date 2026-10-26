@@ -81,6 +81,39 @@ export interface PriceHistoryEntry {
   createdAt: string;
 }
 
+export interface QuoteItem {
+  id: string;
+  quoteId: string;
+  productId: string;
+  productName: string;
+  quantity: number;
+  unitPrice: number;
+  total: number;
+  unitName?: string;
+  unitMultiplier?: number;
+}
+
+export interface Quote {
+  id: string;
+  storeId: string;
+  userId?: string | null;
+  quoteNumber: string;
+  customerName: string;
+  customerPhone?: string | null;
+  customerAddress?: string | null;
+  subtotal: number;
+  tax: number;
+  discount: number;
+  total: number;
+  status: "draft" | "sent" | "accepted" | "converted" | "rejected" | "expired";
+  validityDate?: string | null;
+  notes?: string | null;
+  saleId?: string | null;
+  createdAt: string;
+  updatedAt?: string;
+  items: QuoteItem[];
+}
+
 export interface Order {
   id: string;
   supplierName: string;
@@ -232,6 +265,7 @@ export interface StoreState {
   settings: StoreSettings;
   batches: ProductBatch[];
   priceHistory: PriceHistoryEntry[];
+  quotes: Quote[];
 }
 
 // ─── Actions ─────────────────────────────────────────────────
@@ -272,6 +306,10 @@ type Action =
   | { type: "DELETE_BATCH"; payload: string }
   | { type: "SET_PRICE_HISTORY"; payload: PriceHistoryEntry[] }
   | { type: "ADD_PRICE_HISTORY_ENTRY"; payload: PriceHistoryEntry }
+  | { type: "ADD_QUOTE"; payload: Quote }
+  | { type: "UPDATE_QUOTE"; payload: Quote }
+  | { type: "DELETE_QUOTE"; payload: string }
+  | { type: "CONVERT_QUOTE_TO_SALE"; payload: { quoteId: string; sale: Sale } }
   | { type: "ADD_INVENTORY_SESSION"; payload: InventorySession }
   | { type: "OPEN_CASH_SESSION"; payload: CashSession }
   | { type: "CLOSE_CASH_SESSION"; payload: CashSession }
@@ -332,6 +370,7 @@ const initialState: StoreState = {
   activeCashSession: null,
   batches: [],
   priceHistory: [],
+  quotes: [],
   settings: { name: "MaBoutiquePro", logo: "/logo.png", currency: "FCFA", taxRate: 0, city: "Lomé", country: "Togo", email: "contact@maboutiquepro.app", phone: "+228 98 37 61 01", allowNegativeStock: false },
 };
 
@@ -842,6 +881,56 @@ function storeReducer(state: StoreState, action: Action): StoreState {
       return { ...state, priceHistory: action.payload };
     case "ADD_PRICE_HISTORY_ENTRY":
       return { ...state, priceHistory: [action.payload, ...(state.priceHistory || [])] };
+    case "ADD_QUOTE":
+      return { ...state, quotes: [action.payload, ...(state.quotes || [])] };
+    case "UPDATE_QUOTE":
+      return {
+        ...state,
+        quotes: (state.quotes || []).map((q) => (q.id === action.payload.id ? action.payload : q))
+      };
+    case "DELETE_QUOTE":
+      return {
+        ...state,
+        quotes: (state.quotes || []).filter((q) => q.id !== action.payload)
+      };
+    case "CONVERT_QUOTE_TO_SALE": {
+      const { quoteId, sale } = action.payload;
+      const updatedQuotes = (state.quotes || []).map((q) =>
+        q.id === quoteId ? { ...q, status: "converted" as const, saleId: sale.id } : q
+      );
+
+      let updatedBatches = [...(state.batches || [])];
+      const updatedProducts = state.products.map((p) => {
+        const saleItem = sale.items.find((i) => i.productId === p.id);
+        if (!saleItem) return p;
+        const qtyToDeduct = (saleItem.quantityReference !== undefined && saleItem.quantityReference !== null && Number(saleItem.quantityReference) > 0)
+          ? Number(saleItem.quantityReference)
+          : (Number(saleItem.quantity) * (Number(saleItem.unitMultiplier) || 1));
+
+        let remainingToDeduct = qtyToDeduct;
+        updatedBatches = updatedBatches.map((b) => {
+          if (b.productId === p.id && b.currentQuantity > 0 && remainingToDeduct > 0) {
+            const deduct = Math.min(b.currentQuantity, remainingToDeduct);
+            remainingToDeduct -= deduct;
+            return { ...b, currentQuantity: b.currentQuantity - deduct };
+          }
+          return b;
+        });
+
+        const newStock = state.settings.allowNegativeStock
+          ? p.stock - qtyToDeduct
+          : Math.max(0, p.stock - qtyToDeduct);
+        return { ...p, stock: newStock };
+      });
+
+      return {
+        ...state,
+        sales: [sale, ...state.sales],
+        products: updatedProducts,
+        batches: updatedBatches,
+        quotes: updatedQuotes
+      };
+    }
     case "DELETE_ORDER":
       return { ...state, orders: state.orders.filter((o) => o.id !== action.payload) };
     case "UPDATE_ORDER_STATUS": {
@@ -1022,7 +1111,8 @@ function storeReducer(state: StoreState, action: Action): StoreState {
         cashSessions: action.payload.cashSessions || [],
         activeCashSession: action.payload.activeCashSession || null,
         batches: action.payload.batches || [],
-        priceHistory: action.payload.priceHistory || []
+        priceHistory: action.payload.priceHistory || [],
+        quotes: action.payload.quotes || []
       };
     }
     default:
@@ -1038,6 +1128,7 @@ interface StoreContextType {
   customers: Customer[];
   expenses: Expense[];
   orders: Order[];
+  quotes: Quote[];
   dispatch: (action: Action) => void;
   formatPrice: (amount: number) => string;
   lowStockProducts: Product[];
@@ -1860,7 +1951,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           saleItemCostsRes,
           productUnitsRes,
           productBatchesRes,
-          productPriceHistoryRes
+          productPriceHistoryRes,
+          quotesRes
         ] = await Promise.all([
           supabase.from('settings').select('*').eq('store_id', activeStore.id).maybeSingle(),
           supabase.from('categories').select('*').eq('store_id', activeStore.id),
@@ -1882,7 +1974,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           // Charger product_units pour tous les membres (nécessaire au scan caisse et gestion produits)
           supabase.from('product_units').select('*').eq('store_id', activeStore.id),
           supabase.from('product_batches').select('*').eq('store_id', activeStore.id).order('expiry_date', { ascending: true }),
-          supabase.from('product_price_history').select('*').eq('store_id', activeStore.id).order('created_at', { ascending: false })
+          supabase.from('product_price_history').select('*').eq('store_id', activeStore.id).order('created_at', { ascending: false }),
+          supabase.from('quotes').select('*, items:quote_items(*)').eq('store_id', activeStore.id).order('created_at', { ascending: false })
         ]);
 
         const productUnitsData = productUnitsRes?.data;
@@ -1958,6 +2051,42 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             }))
           : [];
 
+        const quotesData = (quotesRes as any)?.data;
+        const loadedQuotes: Quote[] = Array.isArray(quotesData)
+          ? quotesData.map((q: any) => ({
+              id: q.id,
+              storeId: q.store_id,
+              userId: q.user_id,
+              quoteNumber: q.quote_number,
+              customerName: q.customer_name,
+              customerPhone: q.customer_phone,
+              customerAddress: q.customer_address,
+              subtotal: Number(q.subtotal) || 0,
+              tax: Number(q.tax) || 0,
+              discount: Number(q.discount) || 0,
+              total: Number(q.total) || 0,
+              status: q.status || "draft",
+              validityDate: q.validity_date,
+              notes: q.notes,
+              saleId: q.sale_id,
+              createdAt: q.created_at,
+              updatedAt: q.updated_at,
+              items: Array.isArray(q.items)
+                ? q.items.map((qi: any) => ({
+                    id: qi.id,
+                    quoteId: qi.quote_id,
+                    productId: qi.product_id,
+                    productName: qi.product_name,
+                    quantity: Number(qi.quantity) || 1,
+                    unitPrice: Number(qi.unit_price) || 0,
+                    total: Number(qi.total) || 0,
+                    unitName: qi.unit_name || "Unité",
+                    unitMultiplier: Number(qi.unit_multiplier) || 1,
+                  }))
+                : []
+            }))
+          : [];
+
         let cachedSettings: any = null;
         if (typeof window !== "undefined" && activeStore?.id) {
           try {
@@ -1994,6 +2123,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           products: [],
           batches: loadedBatches,
           priceHistory: loadedPriceHistory,
+          quotes: loadedQuotes,
           settings: { ...defaultSettings, ...(cachedSettings || {}) }
         };
 
@@ -2742,6 +2872,121 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           }
         }
       }
+      else if (action.type === "ADD_QUOTE") {
+        const q = action.payload;
+        if (activeStore?.id) {
+          try {
+            await supabase.from('quotes').insert([{
+              id: q.id,
+              store_id: activeStore.id,
+              user_id: user?.id || null,
+              quote_number: q.quoteNumber,
+              customer_name: q.customerName,
+              customer_phone: q.customerPhone || null,
+              customer_address: q.customerAddress || null,
+              subtotal: q.subtotal,
+              tax: q.tax,
+              discount: q.discount,
+              total: q.total,
+              status: q.status,
+              validity_date: q.validityDate || null,
+              notes: q.notes || null,
+              created_at: q.createdAt
+            }]);
+            if (q.items && q.items.length > 0) {
+              const itemsToInsert = q.items.map((it) => ({
+                id: it.id,
+                quote_id: q.id,
+                store_id: activeStore.id,
+                product_id: it.productId,
+                product_name: it.productName,
+                quantity: it.quantity,
+                unit_price: it.unitPrice,
+                total: it.total,
+                unit_name: it.unitName || "Unité",
+                unit_multiplier: it.unitMultiplier || 1
+              }));
+              await supabase.from('quote_items').insert(itemsToInsert);
+            }
+          } catch (errQ) {
+            console.warn("Supabase add quote notice:", errQ);
+          }
+        }
+      }
+      else if (action.type === "UPDATE_QUOTE") {
+        const q = action.payload;
+        if (activeStore?.id) {
+          try {
+            await supabase.from('quotes').update({
+              quote_number: q.quoteNumber,
+              customer_name: q.customerName,
+              customer_phone: q.customerPhone || null,
+              customer_address: q.customerAddress || null,
+              subtotal: q.subtotal,
+              tax: q.tax,
+              discount: q.discount,
+              total: q.total,
+              status: q.status,
+              validity_date: q.validityDate || null,
+              notes: q.notes || null,
+              updated_at: new Date().toISOString()
+            }).eq('id', q.id).eq('store_id', activeStore.id);
+
+            await supabase.from('quote_items').delete().eq('quote_id', q.id);
+            if (q.items && q.items.length > 0) {
+              const itemsToInsert = q.items.map((it) => ({
+                id: it.id,
+                quote_id: q.id,
+                store_id: activeStore.id,
+                product_id: it.productId,
+                product_name: it.productName,
+                quantity: it.quantity,
+                unit_price: it.unitPrice,
+                total: it.total,
+                unit_name: it.unitName || "Unité",
+                unit_multiplier: it.unitMultiplier || 1
+              }));
+              await supabase.from('quote_items').insert(itemsToInsert);
+            }
+          } catch (errQ) {
+            console.warn("Supabase update quote notice:", errQ);
+          }
+        }
+      }
+      else if (action.type === "DELETE_QUOTE") {
+        const quoteId = action.payload;
+        if (activeStore?.id) {
+          try {
+            await supabase.from('quotes').delete().eq('id', quoteId).eq('store_id', activeStore.id);
+          } catch (errQ) {
+            console.warn("Supabase delete quote notice:", errQ);
+          }
+        }
+      }
+      else if (action.type === "CONVERT_QUOTE_TO_SALE") {
+        const { quoteId, sale } = action.payload;
+        if (activeStore?.id) {
+          try {
+            // Tenter d'utiliser convert_quote_to_sale si disponible
+            const { error: convErr } = await supabase.rpc('convert_quote_to_sale', {
+              p_quote_id: quoteId,
+              p_sale_id: sale.id,
+              p_payment_method: sale.paymentMethod || "cash",
+              p_amount_paid: sale.amountPaid || sale.total
+            });
+            if (convErr) {
+              // Fallback manuel : mise à jour du statut du devis
+              await supabase.from('quotes').update({
+                status: "converted",
+                sale_id: sale.id,
+                updated_at: new Date().toISOString()
+              }).eq('id', quoteId);
+            }
+          } catch (errConv) {
+            console.warn("Supabase convert quote notice:", errConv);
+          }
+        }
+      }
       else if (action.type === "ADD_EXPENSE") {
         const e = action.payload;
         const { error } = await supabase.from('expenses').insert([{ store_id: activeStore.id, 
@@ -3090,6 +3335,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       customers: state.customers,
       expenses: state.expenses,
       orders: state.orders,
+      quotes: state.quotes || [],
       state, 
       dispatch, 
       formatPrice, 

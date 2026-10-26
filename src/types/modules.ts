@@ -152,11 +152,11 @@ export const MODULES_CATALOG: Record<ModuleKey, ModuleDefinition> = {
     key: 'quotes',
     label: 'Devis & Proformas',
     description: 'Génération de devis commerciaux transformables en ventes directes.',
-    category: 'future',
-    minTier: 'PRO',
-    routes: [],
-    isPlaceholder: true,
-    adminOnly: true,
+    category: 'commercial',
+    minTier: 'STARTER',
+    routes: ['/quotes'],
+    isPlaceholder: false,
+    adminOnly: false,
   },
 };
 
@@ -165,9 +165,9 @@ export const MODULES_CATALOG: Record<ModuleKey, ModuleDefinition> = {
  * Reproduit EXACTEMENT les accès actuels sans dupliquer les quotas numériques.
  */
 export const TIER_MODULES: Record<SubscriptionTier, ModuleKey[]> = {
-  STARTER: ['core', 'expenses'],
-  PRO: ['core', 'expenses', 'debts', 'receipts_invoices', 'inventory', 'orders', 'analytics', 'team', 'multi_units'],
-  BUSINESS: ['core', 'expenses', 'debts', 'receipts_invoices', 'inventory', 'orders', 'analytics', 'team', 'multi_store', 'multi_units'],
+  STARTER: ['core', 'expenses', 'quotes'],
+  PRO: ['core', 'expenses', 'debts', 'receipts_invoices', 'inventory', 'orders', 'analytics', 'team', 'multi_units', 'quotes'],
+  BUSINESS: ['core', 'expenses', 'debts', 'receipts_invoices', 'inventory', 'orders', 'analytics', 'team', 'multi_store', 'multi_units', 'quotes'],
 };
 
 /**
@@ -181,6 +181,7 @@ export const KNOWN_MODULE_KEYS: Set<ModuleKey> = new Set(
  * Modules activés par défaut pour les boutiques existantes (rétro-compatibilité 100%)
  */
 export const DEFAULT_ENABLED_MODULES: ModuleKey[] = [
+  'quotes',
   'debts',
   'receipts_invoices',
   'inventory',
