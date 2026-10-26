@@ -31,12 +31,13 @@ import { ProductBatch, PriceHistoryEntry } from "@/context/StoreContext";
 import { TrendingUp, TrendingDown, History, ArrowRight, DollarSign } from "lucide-react";
 
 export default function ProductsPage() {
-  const { role, activeStore } = useAuth();
+  const { role, activeStore, tier, isModuleActive } = useAuth();
   const { state, dispatch, formatPrice } = useStore();
   const isMultiUnitsEnabled = useMemo(() => {
-    if (!activeStore) return false;
-    return resolveModuleStatus('multi_units', activeStore.tier, activeStore.enabled_modules) === 'available';
-  }, [activeStore]);
+    if (role === 'admin') return true;
+    if (!activeStore) return true;
+    return isModuleActive ? isModuleActive('multi_units') : true;
+  }, [activeStore, isModuleActive, role]);
 
   const [formUnits, setFormUnits] = useState<{ id?: string; name: string; multiplier: number; price: string | number; barcode: string }[]>([]);
   const [search, setSearch] = useState("");
@@ -52,6 +53,7 @@ export default function ProductsPage() {
   const [editProduct, setEditProduct] = useState<Product | null>(null);
   const emptyForm = { name: "", sku: "", category: "Vêtements", price: 0, cost: 0, stock: 0, minStock: 5, image: "📦" };
   const [form, setForm] = useState(emptyForm);
+  const [initialBatch, setInitialBatch] = useState<{ batchNumber: string; expiryDate: string }>({ batchNumber: '', expiryDate: '' });
   const [expiryFilter, setExpiryFilter] = useState<"all" | "expired" | "soon">("all");
   const [selectedProductForBatches, setSelectedProductForBatches] = useState<Product | null>(null);
   const [newBatchForm, setNewBatchForm] = useState({ batchNumber: "", expiryDate: "", quantity: 1 });
@@ -102,6 +104,7 @@ export default function ProductsPage() {
     setEditProduct(null);
     setForm({ ...emptyForm, category: state.categories[0]?.name || "Divers" });
     setFormUnits([]);
+    setInitialBatch({ batchNumber: '', expiryDate: '' });
     setShowModal(true);
   };
 
@@ -126,6 +129,12 @@ export default function ProductsPage() {
         barcode: u.barcode || "",
       }))
     );
+    const existingBatch = (state.batches || []).find((b) => b.productId === p.id && b.currentQuantity > 0);
+    if (existingBatch) {
+      setInitialBatch({ batchNumber: existingBatch.batchNumber, expiryDate: existingBatch.expiryDate });
+    } else {
+      setInitialBatch({ batchNumber: '', expiryDate: '' });
+    }
     setShowModal(true);
   };
 
@@ -148,11 +157,11 @@ export default function ProductsPage() {
         isReference: false,
       }));
 
+    const newProdId = "p" + Date.now();
     if (editProduct) {
       parsedUnits.forEach((u) => (u.productId = editProduct.id));
       dispatch({ type: "UPDATE_PRODUCT", payload: { ...editProduct, ...form, cost: costToSave, sku: finalSku, units: parsedUnits } });
     } else {
-      const newProdId = "p" + Date.now();
       parsedUnits.forEach((u) => (u.productId = newProdId));
       const newProduct: Product = {
         id: newProdId,
@@ -163,6 +172,25 @@ export default function ProductsPage() {
         units: parsedUnits,
       };
       dispatch({ type: "ADD_PRODUCT", payload: newProduct });
+    }
+
+    if (initialBatch.expiryDate && initialBatch.expiryDate.trim()) {
+      const targetProdId = editProduct ? editProduct.id : newProdId;
+      const existingBatches = (state.batches || []).filter((b) => b.productId === targetProdId);
+      const alreadyExists = existingBatches.some((b) => b.expiryDate === initialBatch.expiryDate);
+      if (!alreadyExists) {
+        const newBatch: ProductBatch = {
+          id: 'b_' + Date.now() + '_' + Math.random().toString(36).substring(7),
+          storeId: activeStore?.id || '',
+          productId: targetProdId,
+          batchNumber: initialBatch.batchNumber.trim() || ('LOT-' + new Date().getFullYear() + '-' + Math.floor(100 + Math.random() * 900)),
+          expiryDate: initialBatch.expiryDate,
+          initialQuantity: Number(form.stock) > 0 ? Number(form.stock) : 1,
+          currentQuantity: Number(form.stock) > 0 ? Number(form.stock) : 1,
+          createdAt: new Date().toISOString(),
+        };
+        dispatch({ type: 'ADD_BATCH', payload: newBatch });
+      }
     }
     setShowModal(false);
   };
@@ -378,6 +406,13 @@ export default function ProductsPage() {
                   <div className="flex-1 min-w-0">
                     <h3 className="text-sm font-semibold truncate">{p.name}</h3>
                     <p className="text-[10px] text-muted-foreground mt-0.5">{p.sku} • {p.category}</p>
+                    {p.units && p.units.length > 0 && (
+                      <div className="mt-1 flex flex-wrap gap-1">
+                        <span className="inline-flex items-center gap-1 rounded bg-blue-500/10 border border-blue-500/20 px-1.5 py-0.5 text-[9px] font-medium text-blue-600 dark:text-blue-400">
+                          <Layers className="h-2.5 w-2.5" /> {p.units.length + 1} formats ({p.units.map((u) => u.name).join(', ')})
+                        </span>
+                      </div>
+                    )}
                   </div>
                 </div>
 
@@ -435,9 +470,16 @@ export default function ProductsPage() {
                       setSelectedProductForBatches(p);
                       setNewBatchForm({ batchNumber: "", expiryDate: "", quantity: 1 });
                     }}
-                    className="rounded-full bg-secondary hover:bg-secondary/80 px-2 py-0.5 text-[10px] font-medium text-muted-foreground transition-colors flex items-center gap-1"
+                    className={`rounded-full px-2 py-0.5 text-[10px] font-medium transition-colors flex items-center gap-1 ${
+                      (state.batches || []).filter(b => b.productId === p.id).length > 0
+                        ? 'bg-secondary hover:bg-secondary/80 text-muted-foreground'
+                        : 'bg-amber-500/10 hover:bg-amber-500/20 text-amber-700 dark:text-amber-400 border border-amber-500/20'
+                    }`}
                   >
-                    📦 {(state.batches || []).filter(b => b.productId === p.id).length} lot(s)
+                    <Package className="h-3 w-3" />
+                    {(state.batches || []).filter(b => b.productId === p.id).length > 0
+                      ? `${(state.batches || []).filter(b => b.productId === p.id).length} lot(s)`
+                      : '+ DLC / Lot'}
                   </button>
                   <button
                     onClick={() => {
@@ -787,6 +829,44 @@ export default function ProductsPage() {
                   )}
                 </div>
               )}
+
+              {/* Section Traçabilité & Date de Péremption (DLC / Lots) */}
+              <div className="border border-border/60 rounded-xl p-3.5 bg-secondary/15 space-y-3">
+                <div>
+                  <h4 className="text-xs font-semibold text-foreground flex items-center gap-1.5">
+                    <Calendar className="h-3.5 w-3.5 text-amber-500" />
+                    Date de Péremption & N° de Lot (Optionnel)
+                  </h4>
+                  <p className="text-[11px] text-muted-foreground">
+                    Idéal pour épicerie, boissons, parapharmacie, cosmétique et articles périssables.
+                  </p>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-[11px] font-medium text-muted-foreground mb-1 block">
+                      Date Limite (DLC / DLUO)
+                    </label>
+                    <input
+                      type="date"
+                      value={initialBatch.expiryDate}
+                      onChange={(e) => setInitialBatch({ ...initialBatch, expiryDate: e.target.value })}
+                      className="w-full rounded-xl border border-border/60 bg-secondary/30 px-3 py-2 text-xs focus:border-primary/40 focus:outline-none focus:ring-2 focus:ring-primary/20"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[11px] font-medium text-muted-foreground mb-1 block">
+                      N° de Lot (Batch)
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="Ex: LOT-2026-01 (auto si vide)"
+                      value={initialBatch.batchNumber}
+                      onChange={(e) => setInitialBatch({ ...initialBatch, batchNumber: e.target.value })}
+                      className="w-full rounded-xl border border-border/60 bg-secondary/30 px-3 py-2 text-xs focus:border-primary/40 focus:outline-none focus:ring-2 focus:ring-primary/20"
+                    />
+                  </div>
+                </div>
+              </div>
 
               {/* Preview */}
               {form.name && (

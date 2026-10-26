@@ -193,6 +193,7 @@ export const DEFAULT_ENABLED_MODULES: ModuleKey[] = [
   'analytics',
   'team',
   'multi_store',
+  'multi_units',
 ];
 
 /**
@@ -383,7 +384,8 @@ export function resolveModuleStatus(
       .filter((k) => KNOWN_MODULE_KEYS.has(k as ModuleKey))
   );
 
-  const allowedByTier = TIER_MODULES[tier]?.includes(moduleKey) ?? false;
+  const effectiveTier = tier || 'PRO';
+  const allowedByTier = TIER_MODULES[effectiveTier]?.includes(moduleKey) ?? false;
   if (!allowedByTier) {
     return 'locked';
   }
