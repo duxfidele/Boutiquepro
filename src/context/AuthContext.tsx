@@ -341,7 +341,17 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
                 if (raw) cachedModules = JSON.parse(raw);
               } catch {}
             }
-            const finalModules = st?.enabled_modules || cachedModules || DEFAULT_ENABLED_MODULES;
+            const finalModules = (cachedModules && Array.isArray(cachedModules) && cachedModules.length > 0)
+              ? cachedModules
+              : (st?.enabled_modules || DEFAULT_ENABLED_MODULES);
+            
+            let cachedSector: string | null = null;
+            if (typeof window !== "undefined" && (st?.id || d.store_id)) {
+              try {
+                cachedSector = localStorage.getItem(`store_sector_${st?.id || d.store_id}`);
+              } catch {}
+            }
+            const finalSector = cachedSector || st?.business_sector || null;
 
             return {
               role: d.role,
@@ -353,7 +363,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
               subscription_status: adminSub?.status || st?.subscription_status || "trial",
               subscription_ends_at: (adminSub?.status === 'active' ? adminSub?.current_period_ends_at : (adminSub?.trial_ends_at || adminSub?.current_period_ends_at)) || st?.subscription_ends_at || fallbackEndsAt,
               enabled_modules: finalModules,
-              business_sector: st?.business_sector || null,
+              business_sector: finalSector,
             };
           })
           .filter((d: any) => d.id);
@@ -656,26 +666,13 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     }
 
     try {
-      const updates: any = {
-        enabled_modules: newModules,
-      };
-      if (newSector !== undefined) {
-        updates.business_sector = newSector;
-      }
-
-      const { error } = await supabase
-        .from("stores")
-        .update(updates)
-        .eq("id", activeStore.id);
-
-      if (error) throw error;
-
       const updatedStore = {
         ...activeStore,
         enabled_modules: newModules,
         ...(newSector !== undefined ? { business_sector: newSector } : {}),
       };
 
+      // 1. Sauvegarde locale immédiate (instantanée et persistante)
       handleSetActiveStore(updatedStore);
       setStores((prev) =>
         prev.map((s) => (s.id === activeStore.id ? updatedStore : s))
@@ -684,7 +681,38 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       if (typeof window !== "undefined") {
         try {
           localStorage.setItem(`store_modules_${activeStore.id}`, JSON.stringify(newModules));
+          if (newSector !== undefined && newSector !== null) {
+            localStorage.setItem(`store_sector_${activeStore.id}`, String(newSector));
+          }
         } catch {}
+      }
+
+      // 2. Synchronisation Supabase via RPC sécurisée ou fallback direct
+      const updates: any = {
+        enabled_modules: newModules,
+      };
+      if (newSector !== undefined) {
+        updates.business_sector = newSector;
+      }
+
+      try {
+        const { error: rpcError } = await supabase.rpc("update_store_modules", {
+          p_store_id: activeStore.id,
+          p_modules: newModules,
+          p_business_sector: newSector || null,
+        });
+
+        if (rpcError) {
+          const { error: directError } = await supabase
+            .from("stores")
+            .update(updates)
+            .eq("id", activeStore.id);
+          if (directError) {
+            console.warn("Notice synchronisation stores.enabled_modules:", directError);
+          }
+        }
+      } catch (syncErr) {
+        console.warn("Avertissement synchronisation distante modules:", syncErr);
       }
 
       return { success: true };

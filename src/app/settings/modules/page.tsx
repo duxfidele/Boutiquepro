@@ -28,6 +28,7 @@ import {
   Layers,
   Info,
   ShieldCheck,
+  Loader2,
 } from "lucide-react";
 
 export default function StoreModulesPage() {
@@ -40,6 +41,7 @@ export default function StoreModulesPage() {
   const [saving, setSaving] = useState(false);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [justSaved, setJustSaved] = useState(false);
 
   // Redirection immédiate si rôle caissier
   useEffect(() => {
@@ -48,11 +50,20 @@ export default function StoreModulesPage() {
     }
   }, [role, router]);
 
-  // État local des modules activés
+  // État local des modules activés avec priorité au cache local de la boutique
   const [selectedModules, setSelectedModules] = useState<Set<ModuleKey>>(() => {
-    const initial = activeStore?.enabled_modules && Array.isArray(activeStore.enabled_modules) && activeStore.enabled_modules.length > 0
-      ? activeStore.enabled_modules
-      : DEFAULT_ENABLED_MODULES;
+    let cached: string[] | null = null;
+    if (typeof window !== "undefined" && activeStore?.id) {
+      try {
+        const raw = localStorage.getItem(`store_modules_${activeStore.id}`);
+        if (raw) cached = JSON.parse(raw);
+      } catch {}
+    }
+    const initial = (cached && Array.isArray(cached) && cached.length > 0)
+      ? cached
+      : (activeStore?.enabled_modules && Array.isArray(activeStore.enabled_modules) && activeStore.enabled_modules.length > 0
+        ? activeStore.enabled_modules
+        : DEFAULT_ENABLED_MODULES);
     return new Set(initial as ModuleKey[]);
   });
 
@@ -61,14 +72,26 @@ export default function StoreModulesPage() {
     (activeStore?.business_sector as StoreSector) || null
   );
 
+  const currentStoreIdRef = React.useRef(activeStore?.id);
   useEffect(() => {
-    if (activeStore?.enabled_modules && Array.isArray(activeStore.enabled_modules) && activeStore.enabled_modules.length > 0) {
-      setSelectedModules(new Set(activeStore.enabled_modules as ModuleKey[]));
+    if (activeStore?.id && activeStore.id !== currentStoreIdRef.current) {
+      currentStoreIdRef.current = activeStore.id;
+      let cached: string[] | null = null;
+      try {
+        const raw = localStorage.getItem(`store_modules_${activeStore.id}`);
+        if (raw) cached = JSON.parse(raw);
+      } catch {}
+      const initial = (cached && Array.isArray(cached) && cached.length > 0)
+        ? cached
+        : (activeStore?.enabled_modules && Array.isArray(activeStore.enabled_modules) && activeStore.enabled_modules.length > 0
+          ? activeStore.enabled_modules
+          : DEFAULT_ENABLED_MODULES);
+      setSelectedModules(new Set(initial as ModuleKey[]));
+      if (activeStore?.business_sector) {
+        setSelectedSector(activeStore.business_sector as StoreSector);
+      }
     }
-    if (activeStore?.business_sector) {
-      setSelectedSector(activeStore.business_sector as StoreSector);
-    }
-  }, [activeStore]);
+  }, [activeStore?.id]);
 
   const toggleModule = (key: ModuleKey, isLocked: boolean, isCore?: boolean) => {
     if (isCore) return; // Core ne peut jamais être désactivé
@@ -98,8 +121,12 @@ export default function StoreModulesPage() {
 
     setSaving(false);
     if (res.success) {
+      setJustSaved(true);
       setSuccessMessage("Configuration des modules enregistrée avec succès !");
-      setTimeout(() => setSuccessMessage(null), 4000);
+      setTimeout(() => {
+        setJustSaved(false);
+        setSuccessMessage(null);
+      }, 4000);
     } else {
       setErrorMessage(res.error || "Une erreur est survenue lors de l'enregistrement.");
     }
@@ -151,10 +178,28 @@ export default function StoreModulesPage() {
             type="button"
             onClick={handleSave}
             disabled={saving}
-            className="inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-primary text-primary-foreground font-bold text-sm shadow-md hover:opacity-90 active:scale-95 transition-all disabled:opacity-50"
+            className={`inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl font-bold text-sm shadow-md transition-all ${
+              justSaved
+                ? "bg-emerald-600 text-white"
+                : "bg-primary text-primary-foreground hover:opacity-90 active:scale-95"
+            } disabled:opacity-50`}
           >
-            <Save className="w-4 h-4" />
-            <span>{saving ? "Enregistrement..." : "Enregistrer"}</span>
+            {saving ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin" />
+                <span>Enregistrement...</span>
+              </>
+            ) : justSaved ? (
+              <>
+                <CheckCircle2 className="w-4 h-4" />
+                <span>Enregistré !</span>
+              </>
+            ) : (
+              <>
+                <Save className="w-4 h-4" />
+                <span>Enregistrer</span>
+              </>
+            )}
           </button>
         </div>
       </div>
@@ -362,15 +407,47 @@ export default function StoreModulesPage() {
       </div>
 
       {/* Pied de page action */}
-      <div className="flex justify-end pt-4 border-t border-border/50">
+      <div className="flex flex-col sm:flex-row items-center justify-between gap-4 pt-4 border-t border-border/50">
+        <div className="w-full sm:w-auto">
+          {successMessage && (
+            <div className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-700 dark:text-emerald-300 text-xs font-semibold animate-scale-in">
+              <CheckCircle2 className="w-4 h-4 shrink-0" />
+              <span>{successMessage}</span>
+            </div>
+          )}
+          {errorMessage && (
+            <div className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-destructive/15 border border-destructive/30 text-destructive text-xs font-semibold animate-scale-in">
+              <AlertTriangle className="w-4 h-4 shrink-0" />
+              <span>{errorMessage}</span>
+            </div>
+          )}
+        </div>
         <button
           type="button"
           onClick={handleSave}
           disabled={saving}
-          className="inline-flex items-center justify-center gap-2 px-6 py-3 rounded-xl bg-primary text-primary-foreground font-bold text-sm shadow-md hover:opacity-90 active:scale-95 transition-all disabled:opacity-50"
+          className={`w-full sm:w-auto inline-flex items-center justify-center gap-2 px-6 py-3 rounded-xl font-bold text-sm shadow-md transition-all ${
+            justSaved
+              ? "bg-emerald-600 text-white"
+              : "bg-primary text-primary-foreground hover:opacity-90 active:scale-95"
+          } disabled:opacity-50`}
         >
-          <Save className="w-4 h-4" />
-          <span>{saving ? "Enregistrement en cours..." : "Enregistrer les modifications"}</span>
+          {saving ? (
+            <>
+              <Loader2 className="w-4 h-4 animate-spin" />
+              <span>Enregistrement en cours...</span>
+            </>
+          ) : justSaved ? (
+            <>
+              <CheckCircle2 className="w-4 h-4" />
+              <span>Modifications enregistrées !</span>
+            </>
+          ) : (
+            <>
+              <Save className="w-4 h-4" />
+              <span>Enregistrer les modifications</span>
+            </>
+          )}
         </button>
       </div>
 
