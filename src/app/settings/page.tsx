@@ -6,7 +6,7 @@ import { useStore } from "@/context/StoreContext";
 import { useAuth } from "@/context/AuthContext";
 import { supabase } from "@/lib/supabase";
 import Link from "next/link";
-import { Save, Sparkles, Trash2, Image as ImageIcon, CreditCard, Store, DollarSign, Percent, MapPin, Mail, Phone, Loader2, User, Layers, ArrowRight } from "lucide-react";
+import { Save, Sparkles, Trash2, Image as ImageIcon, CreditCard, Store, DollarSign, Percent, MapPin, Mail, Phone, Loader2, User, Layers, ArrowRight, PackageCheck } from "lucide-react";
 import { useRouter } from "next/navigation";
 
 export default function SettingsPage() {
@@ -21,6 +21,7 @@ export default function SettingsPage() {
   const { user, stores, activeStore, setActiveStore, role } = useAuth();
   const [phone, setPhone] = useState(state.settings.phone || "");
   const [managerName, setManagerName] = useState(state.settings.managerName || user?.user_metadata?.full_name || "Fr Fidèle");
+  const [allowNegativeStock, setAllowNegativeStock] = useState<boolean>(state.settings.allowNegativeStock ?? false);
   const [saved, setSaved] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [showSubModal, setShowSubModal] = useState(false);
@@ -42,6 +43,7 @@ export default function SettingsPage() {
     setEmail(state.settings.email || "");
     setPhone(state.settings.phone || "");
     setManagerName(state.settings.managerName || user?.user_metadata?.full_name || "Fr Fidèle");
+    setAllowNegativeStock(Boolean(state.settings.allowNegativeStock));
   }, [state.settings, user]);
 
   // Compression automatique du logo pour éviter de saturer le quota du navigateur ou de Supabase
@@ -129,7 +131,8 @@ export default function SettingsPage() {
           city,
           country,
           email,
-          phone
+          phone,
+          allowNegativeStock
         }
       });
       if (managerName.trim()) {
@@ -325,6 +328,57 @@ export default function SettingsPage() {
                 className="w-full bg-secondary/50 border border-border/50 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
               />
             </div>
+          </div>
+        </div>
+
+        {/* Gestion des Stocks & Encaissement */}
+        <div className="pt-6 border-t border-border/40 space-y-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="text-sm font-bold flex items-center gap-2">
+                <PackageCheck className="w-4 h-4 text-primary" />
+                Gestion des Ventes &amp; Stocks Épuisés
+              </h3>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Définissez le comportement de la caisse lorsque le stock d&apos;un article atteint 0.
+              </p>
+            </div>
+            <span className={`text-[11px] font-bold px-2.5 py-1 rounded-full border ${
+              allowNegativeStock 
+                ? "bg-emerald-500/10 text-emerald-600 border-emerald-500/20" 
+                : "bg-blue-500/10 text-blue-600 border-blue-500/20"
+            }`}>
+              {allowNegativeStock ? "Mode Souple (Stock Négatif)" : "Mode Strict (Sécurisé)"}
+            </span>
+          </div>
+
+          <div className="flex items-start justify-between gap-4 p-4 rounded-xl bg-secondary/30 border border-border/50">
+            <div className="space-y-1">
+              <label htmlFor="allowNegativeStock" className="text-sm font-semibold cursor-pointer select-none">
+                Autoriser la vente en stock épuisé (Stock négatif)
+              </label>
+              <p className="text-xs text-muted-foreground leading-relaxed">
+                {allowNegativeStock
+                  ? "✓ Actif : La caissière peut encaisser des articles dont le stock informatique est à 0. Très utile si la marchandise est déjà physiquement en magasin avant la saisie de la facture fournisseur. Le stock sera automatiquement régularisé lors de la réception de commande."
+                  : "🔒 Inactif (Recommandé par défaut) : Tout encaissement est strictement bloqué si la quantité demandée dépasse le stock disponible en magasin."}
+              </p>
+            </div>
+            <button
+              type="button"
+              role="switch"
+              aria-checked={allowNegativeStock}
+              id="allowNegativeStock"
+              onClick={() => setAllowNegativeStock(!allowNegativeStock)}
+              className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 ${
+                allowNegativeStock ? "bg-primary" : "bg-muted-foreground/30"
+              }`}
+            >
+              <span
+                className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-lg ring-0 transition duration-200 ease-in-out ${
+                  allowNegativeStock ? "translate-x-5" : "translate-x-0"
+                }`}
+              />
+            </button>
           </div>
         </div>
 

@@ -244,6 +244,7 @@ export default function POSPage() {
 
   const filteredProducts = useMemo(() => {
     const sLower = search.toLowerCase();
+    const allowNegative = Boolean(state.settings?.allowNegativeStock);
     return state.products.filter((p) => {
       const matchSearch =
         p.name.toLowerCase().includes(sLower) ||
@@ -253,9 +254,9 @@ export default function POSPage() {
           (u.barcode && u.barcode.toLowerCase() === sLower)
         ));
       const matchCategory = categoryFilter === "Tous" || p.category === categoryFilter;
-      return matchSearch && matchCategory && p.stock > 0;
+      return matchSearch && matchCategory && (allowNegative ? true : p.stock > 0);
     });
-  }, [state.products, search, categoryFilter]);
+  }, [state.products, search, categoryFilter, state.settings?.allowNegativeStock, isMultiUnits]);
 
   const cart = (state.cart || []).filter((c) => c && c.product);
   const subtotal = cart.reduce((sum, c) => {
@@ -279,6 +280,22 @@ export default function POSPage() {
 
   const handleCompleteSale = () => {
     if (cart.length === 0) return;
+
+    const allowNegativeStock = Boolean(state.settings?.allowNegativeStock);
+    if (!allowNegativeStock) {
+      for (const item of cart) {
+        const mult = item.selectedUnit?.multiplier ?? 1;
+        const refNeeded = (item.quantity || 1) * mult;
+        if (refNeeded > item.product.stock) {
+          alert(
+            "⚠️ Encaissement bloqué (Mode Strict) :\n\n" +
+            "L'article \"" + item.product.name + "\" a un stock disponible insuffisant (" + item.product.stock + " disponible, " + refNeeded + " demandé).\n\n" +
+            "Pour autoriser la vente avant la saisie de l'arrivage fournisseur, activez l'option \"Autoriser la vente en stock épuisé\" dans les Paramètres de la boutique."
+          );
+          return;
+        }
+      }
+    }
 
     if (!activeCashSession) {
       alert("⚠️ La caisse est actuellement fermée. Veuillez d'abord ouvrir la caisse avec votre fond de caisse initial pour commencer les encaissements.");
@@ -786,7 +803,16 @@ export default function POSPage() {
                   <ProductAvatar name={p.name} size="lg" className="mb-1 group-hover:scale-110 transition-transform" />
                   <p className="text-xs font-semibold truncate w-full">{p.name}</p>
                   <p className="text-sm font-bold text-primary">{formatPrice(p.price)}</p>
-                  <p className="text-[10px] text-muted-foreground">Stock: {p.stock}</p>
+                  <div className="flex items-center justify-center gap-1">
+                    <p className={`text-[10px] font-medium ${p.stock <= 0 ? (state.settings?.allowNegativeStock ? "text-amber-500 font-bold" : "text-destructive font-bold") : "text-muted-foreground"}`}>
+                      Stock: {p.stock}
+                    </p>
+                    {p.stock <= 0 && (
+                      <span className={`text-[9px] px-1 py-0.2 rounded font-semibold ${state.settings?.allowNegativeStock ? "bg-amber-500/10 text-amber-600" : "bg-destructive/10 text-destructive"}`}>
+                        {p.stock === 0 ? "Épuisé" : "Différé"}
+                      </span>
+                    )}
+                  </div>
                   {inCart && (
                     <span className="absolute -top-1.5 -right-1.5 flex h-6 w-6 items-center justify-center rounded-full bg-primary text-[10px] font-bold text-white shadow-sm">
                       {inCart.quantity}
@@ -882,7 +908,15 @@ export default function POSPage() {
                   {(() => {
                     const mult = item.selectedUnit?.multiplier ?? 1;
                     const refNeeded = item.quantity * mult;
+                    const allowNegative = Boolean(state.settings?.allowNegativeStock);
                     if (refNeeded > item.product.stock) {
+                      if (allowNegative) {
+                        return (
+                          <p className="text-[9px] text-blue-500 font-semibold mt-0.5">
+                            ℹ️ Vente différée (Stock: {item.product.stock}, requis: {refNeeded})
+                          </p>
+                        );
+                      }
                       return (
                         <p className="text-[9px] text-amber-500 font-semibold mt-0.5">
                           ⚠️ Stock dispo: {item.product.stock} (requis: {refNeeded})

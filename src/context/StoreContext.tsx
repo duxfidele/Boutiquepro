@@ -137,6 +137,7 @@ export interface StoreSettings {
   email?: string;
   phone?: string;
   managerName?: string;
+  allowNegativeStock?: boolean;
 }
 
 export interface Category {
@@ -289,7 +290,7 @@ const initialState: StoreState = {
   inventorySessions: [],
   cashSessions: [],
   activeCashSession: null,
-  settings: { name: "MaBoutiquePro", logo: "/logo.png", currency: "FCFA", taxRate: 0, city: "Lomé", country: "Togo", email: "contact@maboutiquepro.app", phone: "+228 98 37 61 01" },
+  settings: { name: "MaBoutiquePro", logo: "/logo.png", currency: "FCFA", taxRate: 0, city: "Lomé", country: "Togo", email: "contact@maboutiquepro.app", phone: "+228 98 37 61 01", allowNegativeStock: false },
 };
 
 const getInitialStoreState = (defaultState: StoreState): StoreState => {
@@ -615,6 +616,7 @@ function storeReducer(state: StoreState, action: Action): StoreState {
         ? state.sales.map((s) => (s.id === action.payload.id ? { ...s, ...action.payload } : s))
         : [action.payload, ...state.sales];
 
+      const allowNegative = Boolean(state.settings?.allowNegativeStock);
       const updatedProducts = state.products.map((p) => {
         const soldItem = action.payload.items.find((i) => i.productId === p.id);
         const qtyToDeduct = soldItem
@@ -622,7 +624,14 @@ function storeReducer(state: StoreState, action: Action): StoreState {
             ? Number(soldItem.quantityReference)
             : (Number(soldItem.quantity) * (Number(soldItem.unitMultiplier) || 1))
           : 0;
-        return soldItem ? { ...p, stock: Math.max(0, p.stock - qtyToDeduct) } : p;
+        return soldItem
+          ? {
+              ...p,
+              stock: allowNegative
+                ? Math.round((p.stock - qtyToDeduct) * 1000) / 1000
+                : Math.max(0, Math.round((p.stock - qtyToDeduct) * 1000) / 1000)
+            }
+          : p;
       });
 
       let updatedActiveSession = state.activeCashSession;
@@ -1777,13 +1786,17 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             country: settings.country || cachedSettings?.country || defaultSettings.country,
             email: settings.email || cachedSettings?.email || defaultSettings.email,
             phone: settings.phone || cachedSettings?.phone || defaultSettings.phone,
-            managerName: (settings as any).manager_name || cachedSettings?.managerName || defaultSettings.managerName
+            managerName: (settings as any).manager_name || cachedSettings?.managerName || defaultSettings.managerName,
+            allowNegativeStock: (settings as any).allow_negative_stock !== undefined && (settings as any).allow_negative_stock !== null
+              ? Boolean((settings as any).allow_negative_stock)
+              : (cachedSettings?.allowNegativeStock ?? false)
           };
         } else if (cachedSettings) {
           payload.settings = {
             ...defaultSettings,
             ...cachedSettings,
-            name: activeStore?.name || cachedSettings.name || defaultSettings.name
+            name: activeStore?.name || cachedSettings.name || defaultSettings.name,
+            allowNegativeStock: cachedSettings.allowNegativeStock ?? false
           };
         }
         if (categories && categories.length > 0) payload.categories = categories;
@@ -2200,6 +2213,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         if (s.email !== undefined) updates.email = s.email;
         if (s.phone !== undefined) updates.phone = s.phone;
         if (s.managerName !== undefined) updates.manager_name = s.managerName;
+        if (s.allowNegativeStock !== undefined) updates.allow_negative_stock = s.allowNegativeStock;
         
         // 1. Sauvegarde locale immédiate pour garantir zéro perte
         if (typeof window !== "undefined" && activeStore?.id) {

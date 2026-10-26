@@ -308,12 +308,22 @@ export default function ProductsPage() {
               </div>
 
               {/* Stock badge */}
-              {p.stock <= p.minStock && (
+              {p.stock < 0 ? (
+                <div className="absolute top-3 right-3 flex items-center gap-1 rounded-full bg-red-600 px-2 py-0.5 text-[10px] font-bold text-white badge-pulse shadow-sm">
+                  <AlertTriangle className="h-3 w-3" />
+                  Stock négatif ({p.stock})
+                </div>
+              ) : p.stock === 0 ? (
+                <div className="absolute top-3 right-3 flex items-center gap-1 rounded-full bg-amber-500 px-2 py-0.5 text-[10px] font-bold text-white shadow-sm">
+                  <AlertTriangle className="h-3 w-3" />
+                  Rupture (0)
+                </div>
+              ) : p.stock <= p.minStock ? (
                 <div className="absolute top-3 right-3 flex items-center gap-1 rounded-full bg-destructive/90 px-2 py-0.5 text-[10px] font-bold text-white badge-pulse">
                   <AlertTriangle className="h-3 w-3" />
                   Stock bas
                 </div>
-              )}
+              ) : null}
 
               {/* Content */}
               <div className="p-4">
@@ -396,7 +406,7 @@ export default function ProductsPage() {
                   <td className="px-4 py-3 text-right text-sm font-medium">{formatPrice(p.price)}</td>
                   {role === "admin" && <td className="px-4 py-3 text-right text-xs text-muted-foreground">{formatPrice(p.cost)}</td>}
                   <td className="px-4 py-3 text-right">
-                    <span className={`text-sm font-semibold ${p.stock <= p.minStock ? "text-destructive" : ""}`}>
+                    <span className={`text-sm font-semibold ${p.stock < 0 ? "text-red-600 font-bold" : p.stock <= p.minStock ? "text-destructive" : ""}`}>
                       {p.stock}
                     </span>
                   </td>
