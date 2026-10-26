@@ -16,7 +16,7 @@
 | **Phase 2** | ~~Sanctuarisation des Coûts Figés (`sale_item_costs`) & RLS Caissier~~ | ✅ **FAIT & VALIDÉ** | Rapports [`BENI.md`](file:///home/fideleatchade/.gemini/antigravity-ide/brain/e0d28ad8-ac41-492c-a977-6f3fe6e34690/Ma%20boutique/saas-boutique/BENI.md) et [`PEMO.md`](file:///home/fideleatchade/.gemini/antigravity-ide/brain/e0d28ad8-ac41-492c-a977-6f3fe6e34690/Ma%20boutique/saas-boutique/PEMO.md) |
 | **Phase 3** | ~~Unités Multiples & Conditionnements (Cartons, Packs, Vrac)~~ | ✅ **FAIT & VALIDÉ** | Rapport [`RAPPORT_PHASE3.md`](file:///home/fideleatchade/.gemini/antigravity-ide/brain/e0d28ad8-ac41-492c-a977-6f3fe6e34690/Ma%20boutique/saas-boutique/RAPPORT_PHASE3.md) |
 | **Étape 3.1** | ~~Vente au Montant / Vrac Fractionné (ex: 100 F, 250 F...) & Stock Décimal~~ | ✅ **FAIT & VALIDÉ** | Commit [`eb12a17`](file:///home/fideleatchade/.gemini/antigravity-ide/brain/e0d28ad8-ac41-492c-a977-6f3fe6e34690/Ma%20boutique/saas-boutique/.git) + testé en base |
-| **Étape 3.2** | Réglage Optionnel « Gestion du stock épuisé / négatif » | ⏳ **À FAIRE (Prochaine étape)** | Prêt à être conçu |
+| **Étape 3.2** | ~~Réglage Optionnel « Gestion du stock épuisé / négatif »~~ | ✅ **FAIT & VALIDÉ** | Tests automatisés validés en base (Mode strict 0, Mode souple -2, régularisation +5) |
 | **Étape 4** | Module « Traçabilité & Dates de Péremption par Lot » | ⏳ **À FAIRE** | Prévu pour l'alimentation/dépôts |
 | **Étape 5** | Module « Historique des Fluctuations de Prix » (`price_history`) | ⏳ **À FAIRE** | Traçabilité des hausses/baisses |
 | **Étape 6** | Module « Devis & Factures Proforma » (`quotes`) | ⏳ **À FAIRE** | Conversion devis en vente directe |
@@ -55,15 +55,18 @@
 - ~~Bascule instantanée possible vers le `Mode Qté` classique à tout moment.~~
 - ~~Test d'intégration en conditions réelles validé à 100% dans la base de données.~~
 
+### ~~5. Étape 3.2 : Réglage Optionnel « Gestion du Stock Épuisé / Négatif »~~ (TERMINÉE)
+- ~~Colonne `allow_negative_stock` ajoutée dans `settings` avec script de migration et de rollback.~~
+- ~~Mise à jour sécurisée de `create_sale` : décrémente sous 0 si activé (`stock = stock - v_quantity_ref`), sinon bloque le plancher à 0 (`stock = GREATEST(0, stock - v_quantity_ref)`).~~
+- ~~Dans les Paramètres (`/settings`) : Interrupteur interactif avec badges `Mode Strict (Sécurisé)` vs `Mode Souple (Stock Négatif)`.~~
+- ~~Au POS (`/pos`) : Contrôle bloquant en Mode Strict si la quantité dépasse le stock disponible ; Vente fluide en Mode Souple avec mention `ℹ️ Vente différée`.~~
+- ~~Au Catalogue (`/products`) : Badge rouge `Stock négatif (-X)`, badge orange `Rupture (0)` et badge d'alerte de stock bas.~~
+- ~~Régularisation mathématique automatique prouvée lors de la réception de commande (`-2 + 5 = +3`).~~
+- ~~Validation 100% automatisée en conditions réelles dans Supabase avec le compte caissier.~~
+
 ---
 
-## 🚀 DÉTAIL DES PROCHAINES ÉTAPES (AU RETOUR DE FR FIDÈLE)
-
-### ⏳ Étape 3.2 : Réglage Optionnel « Gestion du Stock Épuisé / Négatif »
-* **Objectif :** Laisser le choix au commerçant dans ses Paramètres de boutique (`/settings`) :
-  1. **Mode Strict (par défaut)** : Bloquer l'encaissement d'un article si le stock physique est insuffisant (alerte rouge anti-rupture).
-  2. **Mode Souple (Stock Négatif autorisé)** : Laisser la caissière vendre même si le système affiche 0 en stock (pratique courante au marché quand la marchandise physique est en rayon mais que la facture fournisseur n'a pas encore été saisie sur l'ordinateur), avec régularisation automatique lors de l'entrée de stock.
-* **Impact :** Zéro régression, simple bascule dans les paramètres.
+## 🚀 DÉTAIL DES PROCHAINES ÉTAPES
 
 ### ⏳ Étape 4 : Module « Traçabilité & Dates de Péremption par Lot » (Priorité Fr Fidèle)
 * **Objectif :** Permettre le suivi des produits périssables (alimentation, supérette, cosmétique, pharmacie).
