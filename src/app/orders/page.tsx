@@ -21,6 +21,7 @@ import {
   Sparkles
 } from "lucide-react";
 import { ProductAvatar } from "@/components/ui/ProductAvatar";
+import { formatDecomposedStock } from "@/lib/stockDisplay";
 
 export default function OrdersPage() {
   const { state, dispatch, formatPrice, lowStockProducts } = useStore();
@@ -420,7 +421,7 @@ export default function OrdersPage() {
                         className="w-full text-left px-4 py-2 text-sm hover:bg-secondary flex justify-between items-center"
                       >
                         <span className="flex items-center gap-2"><ProductAvatar name={p.name} size="sm" className="w-6 h-6 text-[10px]" /> {p.name}</span>
-                        <span className="text-xs text-muted-foreground">Stock actuel: {p.stock}</span>
+                        <span className="text-xs text-muted-foreground">{formatDecomposedStock(p.stock, p.unit, p.units).fullSummary}</span>
                       </button>
                     ))}
                   </div>

@@ -5,6 +5,7 @@ import { useStore, Product, ProductUnit } from "@/context/StoreContext";
 import { useAuth } from "@/context/AuthContext";
 import { resolveModuleStatus } from "@/types/modules";
 import { ProductAvatar } from "@/components/ui/ProductAvatar";
+import { formatDecomposedStock } from "@/lib/stockDisplay";
 import { exportInventoryValuation } from "@/lib/accountingExport";
 import { FileSpreadsheet, Download, Upload } from "lucide-react";
 import ProductExcelImportModal from "@/components/products/ProductExcelImportModal";
@@ -513,10 +514,19 @@ export default function ProductsPage() {
                     <h3 className="text-sm font-semibold truncate">{p.name}</h3>
                     <p className="text-[10px] text-muted-foreground mt-0.5">{p.sku} • {p.category}</p>
                     {p.units && p.units.length > 0 && (
-                      <div className="mt-1 flex flex-wrap gap-1">
-                        <span className="inline-flex items-center gap-1 rounded bg-blue-500/10 border border-blue-500/20 px-1.5 py-0.5 text-[9px] font-medium text-blue-600 dark:text-blue-400">
-                          <Layers className="h-2.5 w-2.5" /> {p.units.length + 1} formats ({p.units.map((u) => u.name).join(', ')})
-                        </span>
+                      <div className="mt-1.5 flex flex-wrap gap-1">
+                        {p.units.map((u) => {
+                          const uPrice = u.price ?? (p.price * u.multiplier);
+                          return (
+                            <span
+                              key={u.id}
+                              className="inline-flex items-center gap-1 rounded-md bg-secondary/80 border border-border/50 px-1.5 py-0.5 text-[9px] font-medium text-foreground"
+                              title={`Format ${u.name} (x${u.multiplier} ${p.unit || 'u'}) : ${formatPrice(uPrice)}`}
+                            >
+                              <span className="font-semibold text-primary">{u.name}</span>: {formatPrice(uPrice)}
+                            </span>
+                          );
+                        })}
                       </div>
                     )}
                   </div>
@@ -530,12 +540,23 @@ export default function ProductsPage() {
                       {role === "admin" && p.cost > 0 && ` • Coût: ${formatPrice(p.cost)}`}
                     </p>
                   </div>
-                  <div className="text-right">
-                    <p className={`text-sm font-semibold ${p.stock <= p.minStock ? "text-destructive" : "text-foreground"}`}>
-                      {p.stock}
-                    </p>
-                    <p className="text-[10px] text-muted-foreground">{p.unit ? `${p.unit}s en stock` : "en stock"}</p>
-                  </div>
+                  {(() => {
+                    const decomp = formatDecomposedStock(p.stock, p.unit, p.units);
+                    return (
+                      <div className="text-right">
+                        <p className={`text-sm font-bold ${p.stock <= p.minStock ? "text-destructive" : "text-foreground"}`}>
+                          {p.stock.toLocaleString("fr-FR", { maximumFractionDigits: 3 })} <span className="text-xs font-normal text-muted-foreground">{p.unit || "u"}</span>
+                        </p>
+                        {decomp.hasWholesaleFormat && decomp.wholesalePacks > 0 ? (
+                          <p className="text-[10px] font-semibold text-primary" title={decomp.fullSummary}>
+                            {decomp.decomposedText}
+                          </p>
+                        ) : (
+                          <p className="text-[10px] text-muted-foreground">en stock</p>
+                        )}
+                      </div>
+                    );
+                  })()}
                 </div>
 
                                 {/* Badges de Péremption & Lots */}
@@ -626,7 +647,14 @@ export default function ProductsPage() {
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-3">
                       <ProductAvatar name={p.name} size="sm" />
-                      <span className="text-sm font-medium">{p.name}</span>
+                      <div>
+                        <span className="text-sm font-medium block">{p.name}</span>
+                        {p.units && p.units.length > 0 && (
+                          <span className="text-[10px] text-muted-foreground block truncate max-w-xs">
+                            Formats : {p.units.map(u => `${u.name} (${formatPrice(u.price ?? (p.price * u.multiplier))})`).join(" • ")}
+                          </span>
+                        )}
+                      </div>
                     </div>
                   </td>
                   <td className="px-4 py-3 text-xs text-muted-foreground">{p.sku}</td>
@@ -639,12 +667,24 @@ export default function ProductsPage() {
                   </td>
                   {role === "admin" && <td className="px-4 py-3 text-right text-xs text-muted-foreground">{formatPrice(p.cost)}</td>}
                   <td className="px-4 py-3 text-right">
-                    <div className="flex items-baseline justify-end gap-1">
-                      <span className={`text-sm font-semibold ${p.stock < 0 ? "text-red-600 font-bold" : p.stock <= p.minStock ? "text-destructive" : ""}`}>
-                        {p.stock}
-                      </span>
-                      <span className="text-[10px] text-muted-foreground">{p.unit || "u"}</span>
-                    </div>
+                    {(() => {
+                      const decomp = formatDecomposedStock(p.stock, p.unit, p.units);
+                      return (
+                        <div>
+                          <div className="flex items-baseline justify-end gap-1">
+                            <span className={`text-sm font-semibold ${p.stock < 0 ? "text-red-600 font-bold" : p.stock <= p.minStock ? "text-destructive" : ""}`}>
+                              {p.stock.toLocaleString("fr-FR", { maximumFractionDigits: 3 })}
+                            </span>
+                            <span className="text-[10px] text-muted-foreground">{p.unit || "u"}</span>
+                          </div>
+                          {decomp.hasWholesaleFormat && decomp.wholesalePacks > 0 && (
+                            <p className="text-[9px] text-primary font-medium text-right mt-0.5" title={decomp.fullSummary}>
+                              {decomp.decomposedText}
+                            </p>
+                          )}
+                        </div>
+                      );
+                    })()}
                     {(() => {
                       const prodBatches = (state.batches || [])
                         .filter((b) => b.productId === p.id && b.currentQuantity > 0)
@@ -979,8 +1019,11 @@ export default function ProductsPage() {
                         Conditionnements & Vente en Gros / Demi-gros
                       </h4>
                       <p className="text-[11px] text-muted-foreground">
-                        Vendez par carton, bidon, sac ou pack tout en décomptant le stock en {form.unit ? `${form.unit}s` : 'unités'}.
+                        Vendez par carton, bidon, sac ou pack tout en décomptant le même stock physique en {form.unit ? `${form.unit}s` : 'unités'}.
                       </p>
+                      <div className="mt-1.5 p-2 rounded-lg bg-primary/5 border border-primary/20 text-[10px] text-muted-foreground leading-relaxed">
+                        <strong className="text-foreground">Tarification 100% libre par format :</strong> Vous fixez le prix de chaque format selon vos convenances. Vendre un bidon de 25 L à 22 500 FCFA n'impose pas de vendre le litre à 900 FCFA. Chaque conditionnement a son propre prix de vente indépendant.
+                      </div>
                     </div>
                     <button
                       type="button"

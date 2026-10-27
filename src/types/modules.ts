@@ -193,7 +193,7 @@ export const DEFAULT_ENABLED_MODULES: ModuleKey[] = [
   'analytics',
   'team',
   'multi_store',
-  'multi_units',
+  // multi_units est activable sur demande ou via profil secteur, jamais imposé par défaut
 ];
 
 /**

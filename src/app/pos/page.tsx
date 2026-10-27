@@ -3,6 +3,7 @@
 import React, { useState, useMemo, useRef } from "react";
 import { useStore, Sale, CashSession, getSalesForSession, getSessionStats, SessionStats, DebtPayment, Quote, QuoteItem } from "@/context/StoreContext";
 import { ProductAvatar } from "@/components/ui/ProductAvatar";
+import { formatDecomposedStock } from "@/lib/stockDisplay";
 import {
   ShoppingCart,
   Search,
@@ -358,6 +359,8 @@ export default function POSPage() {
           batchId: primaryBatch?.id,
           batchNumber: primaryBatch?.batchNumber,
           expiryDate: primaryBatch?.expiryDate,
+          isAmountMode: Boolean(c.isAmountMode),
+          customTotal: c.customTotal,
         };
       }),
       subtotal,
@@ -878,16 +881,28 @@ export default function POSPage() {
                     <span className="text-[10px] font-normal text-muted-foreground ml-0.5">/{p.unit || "u"}</span>
                   </p>
                   <div className="flex flex-col items-center justify-center gap-0.5">
-                    <div className="flex items-center justify-center gap-1">
-                      <p className={`text-[10px] font-medium ${p.stock <= 0 ? (state.settings?.allowNegativeStock ? "text-amber-500 font-bold" : "text-destructive font-bold") : "text-muted-foreground"}`}>
-                        Stock: {p.stock} {p.unit ? p.unit : ""}
-                      </p>
-                      {p.stock <= 0 && (
-                        <span className={`text-[9px] px-1 py-0.2 rounded font-semibold ${state.settings?.allowNegativeStock ? "bg-amber-500/10 text-amber-600" : "bg-destructive/10 text-destructive"}`}>
-                          {p.stock === 0 ? "Épuisé" : "Différé"}
-                        </span>
-                      )}
-                    </div>
+                    {(() => {
+                      const decomp = formatDecomposedStock(p.stock, p.unit, p.units);
+                      return (
+                        <>
+                          <div className="flex items-center justify-center gap-1">
+                            <p className={`text-[10px] font-medium ${p.stock <= 0 ? (state.settings?.allowNegativeStock ? "text-amber-500 font-bold" : "text-destructive font-bold") : "text-muted-foreground"}`}>
+                              Stock: {p.stock.toLocaleString("fr-FR", { maximumFractionDigits: 3 })} {p.unit || ""}
+                            </p>
+                            {p.stock <= 0 && (
+                              <span className={`text-[9px] px-1 py-0.2 rounded font-semibold ${state.settings?.allowNegativeStock ? "bg-amber-500/10 text-amber-600" : "bg-destructive/10 text-destructive"}`}>
+                                {p.stock === 0 ? "Épuisé" : "Différé"}
+                              </span>
+                            )}
+                          </div>
+                          {decomp.hasWholesaleFormat && decomp.wholesalePacks > 0 && (
+                            <span className="text-[8px] font-semibold text-primary truncate max-w-[120px]" title={decomp.fullSummary}>
+                              {decomp.decomposedText}
+                            </span>
+                          )}
+                        </>
+                      );
+                    })()}
                     {(() => {
                       const prodBatches = (state.batches || [])
                         .filter((b) => b.productId === p.id && b.currentQuantity > 0)
@@ -1154,8 +1169,14 @@ export default function POSPage() {
                         <div className="flex items-center gap-1.5 mt-0.5">
                           {isAmount ? (
                             <>
-                              <span className="text-[9px] text-muted-foreground font-medium">
-                                ≈ {item.quantity} {unitLabel}
+                              <span className="text-[9px] text-primary font-bold bg-primary/10 px-1 py-0.2 rounded">
+                                = {item.quantity} {unitLabel}
+                                {(unitLabel.toLowerCase().includes("litre") || unitLabel.toLowerCase().includes("l")) && item.quantity < 1 && (
+                                  <span className="text-muted-foreground font-normal ml-0.5">({Math.round(item.quantity * 1000)} ml)</span>
+                                )}
+                                {(unitLabel.toLowerCase().includes("kg") || unitLabel.toLowerCase().includes("kilo")) && item.quantity < 1 && (
+                                  <span className="text-muted-foreground font-normal ml-0.5">({Math.round(item.quantity * 1000)} g)</span>
+                                )}
                               </span>
                               <button
                                 type="button"
