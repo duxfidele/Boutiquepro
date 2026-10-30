@@ -142,8 +142,11 @@ export default function ProductsPage() {
   const [wholesaleMultiplier, setWholesaleMultiplier] = useState<number | "">("");
   const [wholesalePurchaseCost, setWholesalePurchaseCost] = useState<number | "">("");
   const [wholesaleSellingPrice, setWholesaleSellingPrice] = useState<number | "">("");
+  const [wholesalePurchasedQty, setWholesalePurchasedQty] = useState<number | "">("");
+  const [retailPurchasedQty, setRetailPurchasedQty] = useState<number | "">("");
   const [wholesaleStockPacks, setWholesaleStockPacks] = useState<number | "">("");
   const [retailExtraStock, setRetailExtraStock] = useState<number | "">("");
+  const [wholesaleMinStockPacks, setWholesaleMinStockPacks] = useState<number | "">("");
   const [showCostCalculator, setShowCostCalculator] = useState(false);
   const [calcCartonPrice, setCalcCartonPrice] = useState("");
   const [calcCartonUnits, setCalcCartonUnits] = useState("");
@@ -224,8 +227,11 @@ export default function ProductsPage() {
     setWholesaleMultiplier(24);
     setWholesalePurchaseCost("");
     setWholesaleSellingPrice("");
+    setWholesalePurchasedQty("");
+    setRetailPurchasedQty("");
     setWholesaleStockPacks("");
     setRetailExtraStock("");
+    setWholesaleMinStockPacks(2);
     setShowCostCalculator(false);
     setCalcCartonPrice("");
     setCalcCartonUnits("");
@@ -257,8 +263,12 @@ export default function ProductsPage() {
       const mult = Number(existingWholesale.multiplier) || 1;
       const packs = Math.floor((p.stock || 0) / mult);
       const rem = Math.round(((p.stock || 0) % mult) * 1000) / 1000;
+      setWholesalePurchasedQty(packs > 0 ? packs : "");
+      setRetailPurchasedQty("");
       setWholesaleStockPacks(packs > 0 ? packs : "");
       setRetailExtraStock(rem > 0 ? rem : "");
+      const minPacks = Math.ceil((p.minStock || 0) / mult);
+      setWholesaleMinStockPacks(minPacks > 0 ? minPacks : 2);
       setFormUnits(
         (p.units || [])
           .filter((u) => u.id !== existingWholesale.id)
@@ -277,8 +287,11 @@ export default function ProductsPage() {
       setWholesaleMultiplier("");
       setWholesalePurchaseCost("");
       setWholesaleSellingPrice("");
+      setWholesalePurchasedQty("");
+      setRetailPurchasedQty(p.stock > 0 ? p.stock : "");
       setWholesaleStockPacks("");
       setRetailExtraStock("");
+      setWholesaleMinStockPacks("");
       setFormUnits(
         (p.units || []).map((u) => ({
           id: u.id,
@@ -308,9 +321,17 @@ export default function ProductsPage() {
     
     const finalSku = form.sku.trim() || (form.name.substring(0, 3).toUpperCase() + "-" + Math.floor(1000 + Math.random() * 9000));
     
-    // Si achat en gros, dériver le coût unitaire et le stock physique total
+    // Si achat en gros, dériver le coût unitaire, le stock physique total et le seuil d'alerte
     let effectiveCost = role === "admin" ? (Number(form.cost) || 0) : 0;
     let effectiveStock = Number(form.stock) || 0;
+    let effectiveMinStock = Number(form.minStock) || 0;
+
+    if (purchaseMode === "wholesale" && Number(wholesaleMultiplier) > 0) {
+      const mult = Number(wholesaleMultiplier);
+      if (wholesaleMinStockPacks !== "" && Number(wholesaleMinStockPacks) > 0) {
+        effectiveMinStock = Math.round(Number(wholesaleMinStockPacks) * mult);
+      }
+    }
 
     const allUnitsList = [...formUnits];
 
@@ -362,6 +383,7 @@ export default function ProductsPage() {
           ...editProduct, 
           ...form, 
           stock: effectiveStock, 
+          minStock: effectiveMinStock,
           unit: form.unit, 
           cost: costToSave, 
           sku: finalSku, 
@@ -374,6 +396,7 @@ export default function ProductsPage() {
         id: newProdId,
         ...form,
         stock: effectiveStock,
+        minStock: effectiveMinStock,
         unit: form.unit,
         cost: costToSave,
         sku: finalSku,
@@ -915,28 +938,28 @@ export default function ProductsPage() {
               {/* SECTION 2 : MODE D'APPROVISIONNEMENT & ACHATS (Gros prioritaire) */}
               <div className="rounded-2xl border border-primary/25 bg-secondary/10 p-4 space-y-4">
                 <div className="space-y-2 border-b border-border/40 pb-3">
-                  <div className="flex items-center justify-between">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
                     <span className="text-xs font-bold uppercase tracking-wide text-primary flex items-center gap-1.5">
                       <Package className="h-4 w-4" />
-                      Mode d'approvisionnement fournisseur
+                      1. Mode d'approvisionnement fournisseur
                     </span>
-                    <span className="text-[11px] text-muted-foreground hidden sm:inline">
-                      Sélectionnez comment vous achetez auprès du grossiste
+                    <span className="text-[11px] text-muted-foreground">
+                      Comment achetez-vous ce produit auprès du grossiste ?
                     </span>
                   </div>
 
-                  {/* Boutons de bascule horizontaux propres, 100% de largeur, sans débordement */}
-                  <div className="grid grid-cols-2 gap-2 p-1 rounded-xl bg-secondary/60 border border-border/50">
+                  {/* Boutons de bascule horizontaux aérés et réactifs */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 p-1.5 rounded-xl bg-secondary/70 border border-border/50">
                     <button
                       type="button"
                       onClick={() => setPurchaseMode("wholesale")}
                       className={`flex items-center justify-center gap-2 py-2 px-3 rounded-lg text-xs font-bold transition-all ${
                         purchaseMode === "wholesale"
                           ? "bg-primary text-primary-foreground shadow-sm"
-                          : "text-muted-foreground hover:text-foreground hover:bg-secondary/80"
+                          : "text-muted-foreground hover:text-foreground hover:bg-secondary"
                       }`}
                     >
-                      <Package className="h-4 w-4" />
+                      <Package className="h-4 w-4 shrink-0" />
                       <span>📦 Achat en Gros / Carton (Recommandé)</span>
                     </button>
                     <button
@@ -945,10 +968,10 @@ export default function ProductsPage() {
                       className={`flex items-center justify-center gap-2 py-2 px-3 rounded-lg text-xs font-bold transition-all ${
                         purchaseMode === "retail"
                           ? "bg-primary text-primary-foreground shadow-sm"
-                          : "text-muted-foreground hover:text-foreground hover:bg-secondary/80"
+                          : "text-muted-foreground hover:text-foreground hover:bg-secondary"
                       }`}
                     >
-                      <ShoppingBag className="h-4 w-4" />
+                      <ShoppingBag className="h-4 w-4 shrink-0" />
                       <span>🛍️ Achat direct à la Pièce</span>
                     </button>
                   </div>
@@ -960,7 +983,7 @@ export default function ProductsPage() {
                     <label className="text-xs font-semibold text-foreground flex items-center gap-1.5">
                       <span>Unité physique de base (au détail) :</span>
                     </label>
-                    <span className="text-[10px] text-muted-foreground">Ex: Litre, Kilogramme, Boîte...</span>
+                    <span className="text-[10px] text-muted-foreground">Ex: Pièce, Litre, Kilogramme, Boîte...</span>
                   </div>
                   <div className="flex flex-wrap gap-1.5">
                     {BASE_UNITS.map((u) => {
@@ -1013,7 +1036,7 @@ export default function ProductsPage() {
 
                 {/* SOUS-PANNEAU ACHAT EN GROS (PRIVILÉGIÉ PAR DÉFAUT) */}
                 {purchaseMode === "wholesale" ? (
-                  <div className="rounded-xl border border-primary/25 bg-card/80 p-3.5 space-y-3 shadow-xs">
+                  <div className="rounded-xl border border-primary/25 bg-card/80 p-3.5 space-y-3.5 shadow-xs">
                     <div className="flex flex-wrap items-center justify-between gap-1.5 pb-2 border-b border-border/40">
                       <span className="text-[11px] font-bold text-primary flex items-center gap-1">
                         <Sparkles className="h-3 w-3 text-amber-500" />
@@ -1037,6 +1060,7 @@ export default function ProductsPage() {
                       </div>
                     </div>
 
+                    {/* Ligne 1 : Nom, Contenance, Prix d'achat carton */}
                     <div className="grid grid-cols-1 sm:grid-cols-12 gap-3 items-end">
                       <div className="sm:col-span-4">
                         <label className="text-[11px] font-semibold text-muted-foreground block mb-1">
@@ -1044,7 +1068,7 @@ export default function ProductsPage() {
                         </label>
                         <input
                           type="text"
-                          placeholder="Ex: Bidon de 25 L, Carton de 50"
+                          placeholder="Ex: carton de 30, Bidon de 25 L"
                           value={wholesaleName}
                           onChange={(e) => setWholesaleName(e.target.value)}
                           className="w-full rounded-xl border border-border/60 bg-secondary/30 px-3 py-2 text-xs font-semibold focus:border-primary/40 focus:outline-none focus:ring-2 focus:ring-primary/20"
@@ -1056,7 +1080,7 @@ export default function ProductsPage() {
                         </label>
                         <input
                           type="number"
-                          placeholder="Ex: 25"
+                          placeholder="Ex: 30"
                           min="0.001"
                           step="any"
                           value={wholesaleMultiplier}
@@ -1067,11 +1091,11 @@ export default function ProductsPage() {
                       {role === "admin" && (
                         <div className="sm:col-span-5">
                           <label className="text-[11px] font-semibold text-muted-foreground block mb-1" title="Prix total payé au fournisseur pour ce format">
-                            Prix d'achat payé au fournisseur (FCFA) *
+                            Prix d'achat payé pour 1 {wholesaleName || 'format'} (FCFA) *
                           </label>
                           <input
                             type="number"
-                            placeholder="Ex: 17500"
+                            placeholder="Ex: 600000"
                             min="0"
                             value={wholesalePurchaseCost}
                             onChange={(e) => {
@@ -1104,21 +1128,74 @@ export default function ProductsPage() {
                       </div>
                     )}
 
-                    {/* Stock initial saisi en cartons / bidons */}
-                    <div className="pt-2 border-t border-border/40">
-                      <label className="text-xs font-bold text-foreground block mb-1">
-                        📦 Stock initial disponible à la boutique :
-                      </label>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 items-center">
-                        <div>
+                    {/* Ligne 2 : QUANTITÉ ACHETÉE AU FOURNISSEUR (GROS) */}
+                    <div className="p-3 rounded-xl bg-primary/5 border border-primary/20 space-y-2">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
+                        <label className="text-xs font-bold text-primary flex items-center gap-1.5">
+                          🚚 Quantité achetée lors de l'approvisionnement :
+                        </label>
+                        <span className="text-[10px] text-muted-foreground">
+                          Facture fournisseur ou arrivage
+                        </span>
+                      </div>
+                      <div className="grid grid-cols-1 sm:grid-cols-12 gap-3 items-center">
+                        <div className="sm:col-span-6">
                           <label className="text-[10px] font-semibold text-muted-foreground block mb-1">
-                            Nombre de {wholesaleName || 'cartons / bidons'} complets
+                            Nombre de {wholesaleName || 'cartons'} achetés au fournisseur
                           </label>
                           <input
                             type="number"
                             min="0"
                             step="any"
-                            placeholder="Ex: 10"
+                            placeholder="Ex: 5"
+                            value={wholesalePurchasedQty}
+                            onChange={(e) => {
+                              const qty = e.target.value === "" ? "" : parseFloat(e.target.value);
+                              setWholesalePurchasedQty(qty);
+                              // Si le stock disponible n'est pas encore saisi, pré-remplir avec la quantité achetée
+                              if (wholesaleStockPacks === "" && qty !== "") {
+                                setWholesaleStockPacks(qty);
+                                const mult = Number(wholesaleMultiplier) || 1;
+                                setForm({ ...form, stock: Number(qty) * mult });
+                              }
+                            }}
+                            className="w-full rounded-xl border border-primary/40 bg-card px-3 py-2 text-xs font-bold text-primary focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+                          />
+                        </div>
+                        <div className="sm:col-span-6">
+                          {role === "admin" && wholesalePurchasedQty && Number(wholesalePurchasedQty) > 0 && wholesalePurchaseCost && Number(wholesalePurchaseCost) > 0 && (
+                            <div className="text-[11px] p-2 rounded-lg bg-card border border-border/50 text-muted-foreground">
+                              <span>Total facture achat fournisseur :</span>
+                              <div className="font-extrabold text-foreground text-sm">
+                                {formatPrice(Number(wholesalePurchasedQty) * Number(wholesalePurchaseCost))}
+                                <span className="text-[10px] font-normal text-muted-foreground ml-1.5">
+                                  ({Number(wholesalePurchasedQty) * (Number(wholesaleMultiplier) || 1)} {form.unit ? `${form.unit}s` : 'unités'})
+                                </span>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Ligne 3 : STOCK ACTUELLEMENT DISPONIBLE EN RAYON / RÉSERVE */}
+                    <div className="pt-2 border-t border-border/40 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <label className="text-xs font-bold text-foreground block">
+                          📦 Stock actuellement disponible à la boutique :
+                        </label>
+                        <span className="text-[10px] text-muted-foreground">Ce qui est réellement en rayon/réserve</span>
+                      </div>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 items-center">
+                        <div>
+                          <label className="text-[10px] font-semibold text-muted-foreground block mb-1">
+                            Nombre de {wholesaleName || 'cartons'} complets restants
+                          </label>
+                          <input
+                            type="number"
+                            min="0"
+                            step="any"
+                            placeholder="Ex: 1"
                             value={wholesaleStockPacks}
                             onChange={(e) => {
                               const packs = e.target.value === "" ? "" : parseFloat(e.target.value);
@@ -1159,10 +1236,48 @@ export default function ProductsPage() {
                         </p>
                       )}
                     </div>
+
+                    {/* Ligne 4 : SEUIL D'ALERTE STOCK FAIBLE EXPRIMÉ EN CARTONS */}
+                    <div className="pt-2 border-t border-border/40">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 mb-1">
+                        <label className="text-xs font-bold text-foreground">
+                          ⚠️ Seuil d'alerte stock faible (en {wholesaleName || 'cartons'}) :
+                        </label>
+                        <span className="text-[10px] text-muted-foreground">
+                          Alerte dès qu'il reste moins de ce nombre de formats
+                        </span>
+                      </div>
+                      <div className="grid grid-cols-1 sm:grid-cols-12 gap-3 items-center">
+                        <div className="sm:col-span-5">
+                          <input
+                            type="number"
+                            min="0"
+                            step="any"
+                            placeholder="Ex: 2"
+                            value={wholesaleMinStockPacks}
+                            onChange={(e) => {
+                              const p = e.target.value === "" ? "" : parseFloat(e.target.value);
+                              setWholesaleMinStockPacks(p);
+                              const mult = Number(wholesaleMultiplier) || 1;
+                              const refUnits = (Number(p) || 0) * mult;
+                              setForm({ ...form, minStock: refUnits });
+                            }}
+                            className="w-full rounded-xl border border-amber-500/40 bg-amber-500/5 px-3 py-2 text-xs font-bold text-amber-600 dark:text-amber-400 focus:border-amber-500 focus:outline-none focus:ring-2 focus:ring-amber-500/20"
+                          />
+                        </div>
+                        <div className="sm:col-span-7">
+                          {wholesaleMinStockPacks !== "" && Number(wholesaleMinStockPacks) > 0 && (
+                            <span className="text-[11px] font-medium text-muted-foreground">
+                              = Alerte déclenchée si le stock passe sous <strong className="text-foreground">{Math.round(Number(wholesaleMinStockPacks) * (Number(wholesaleMultiplier) || 1))} {form.unit ? `${form.unit}s` : 'unités'}</strong>
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
                   </div>
                 ) : (
-                  /* SOUS-PANNEAU ACHAT À LA PIÈCE / UNITÉ DIRECTE */
-                  <div className="rounded-xl border border-border/60 bg-card/80 p-3.5 space-y-3 shadow-xs">
+                  /* SOUS-PANNEAU ACHAT DIRECT À LA PIÈCE / UNITÉ */
+                  <div className="rounded-xl border border-border/60 bg-card/80 p-3.5 space-y-3.5 shadow-xs">
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                       {role === "admin" && (
                         <div>
@@ -1180,7 +1295,40 @@ export default function ProductsPage() {
                       )}
                       <div>
                         <label className="text-xs font-medium text-muted-foreground mb-1 block">
-                          Stock initial en {form.unit ? `${form.unit}s` : 'unités'} *
+                          Quantité achetée au fournisseur (en {form.unit ? `${form.unit}s` : 'unités'})
+                        </label>
+                        <input
+                          type="number"
+                          step="any"
+                          min="0"
+                          placeholder="Ex: 50"
+                          value={retailPurchasedQty}
+                          onChange={(e) => {
+                            const q = e.target.value === "" ? "" : parseFloat(e.target.value);
+                            setRetailPurchasedQty(q);
+                            if (form.stock === 0 && q !== "") {
+                              setForm({ ...form, stock: Number(q) });
+                            }
+                          }}
+                          className="w-full rounded-xl border border-border/60 bg-secondary/30 px-3 py-2 text-xs font-semibold focus:border-primary/40 focus:outline-none focus:ring-2 focus:ring-primary/20"
+                        />
+                      </div>
+                    </div>
+
+                    {role === "admin" && retailPurchasedQty && Number(retailPurchasedQty) > 0 && form.cost && Number(form.cost) > 0 && (
+                      <div className="text-[11px] p-2 rounded-lg bg-secondary/30 border border-border/50 text-muted-foreground">
+                        <span>Total facture approvisionnement :</span>
+                        <span className="font-extrabold text-foreground ml-1.5">
+                          {formatPrice(Number(retailPurchasedQty) * Number(form.cost))}
+                        </span>
+                      </div>
+                    )}
+
+                    {/* Stock disponible et alerte au détail */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 border-t border-border/40">
+                      <div>
+                        <label className="text-xs font-medium text-muted-foreground mb-1 block">
+                          Stock actuellement disponible en {form.unit ? `${form.unit}s` : 'unités'} *
                         </label>
                         <input
                           type="number"
@@ -1189,28 +1337,26 @@ export default function ProductsPage() {
                           placeholder="Ex: 50"
                           value={form.stock !== undefined ? form.stock : ""}
                           onChange={(e) => setForm({ ...form, stock: e.target.value === "" ? 0 : parseFloat(e.target.value) })}
-                          className="w-full rounded-xl border border-border/60 bg-secondary/30 px-3 py-2 text-xs font-semibold focus:border-primary/40 focus:outline-none focus:ring-2 focus:ring-primary/20"
+                          className="w-full rounded-xl border border-border/60 bg-secondary/30 px-3 py-2 text-xs font-bold text-primary focus:border-primary/40 focus:outline-none focus:ring-2 focus:ring-primary/20"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-xs font-medium text-muted-foreground mb-1 block">
+                          Seuil d'alerte stock faible (en {form.unit ? `${form.unit}s` : 'unités'})
+                        </label>
+                        <input
+                          type="number"
+                          step="any"
+                          min="0"
+                          placeholder="Ex: 10"
+                          value={form.minStock !== undefined ? form.minStock : ""}
+                          onChange={(e) => setForm({ ...form, minStock: e.target.value === "" ? 0 : parseFloat(e.target.value) })}
+                          className="w-full rounded-xl border border-amber-500/40 bg-amber-500/5 px-3 py-2 text-xs font-bold text-amber-600 dark:text-amber-400 focus:border-amber-500 focus:outline-none focus:ring-2 focus:ring-amber-500/20"
                         />
                       </div>
                     </div>
                   </div>
                 )}
-
-                {/* Stock d'alerte minimum */}
-                <div className="max-w-xs">
-                  <label className="text-xs font-medium text-muted-foreground mb-1 block">
-                    Seuil d'alerte stock faible (en <span className="font-bold text-foreground">{form.unit ? `${form.unit}s` : 'unités'}</span>)
-                  </label>
-                  <input
-                    type="number"
-                    step="any"
-                    min="0"
-                    placeholder="Ex: 10"
-                    value={form.minStock !== undefined ? form.minStock : ""}
-                    onChange={(e) => setForm({ ...form, minStock: e.target.value === "" ? 0 : parseFloat(e.target.value) })}
-                    className="w-full rounded-xl border border-border/60 bg-secondary/30 px-3 py-2 text-xs font-medium focus:border-primary/40 focus:outline-none focus:ring-2 focus:ring-primary/20"
-                  />
-                </div>
               </div>
 
               {/* SECTION 3 : TARIFS DE REVENTE (Gros & Détail 100% Indépendants) */}
