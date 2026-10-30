@@ -145,6 +145,7 @@ export default function ProductsPage() {
   const [wholesalePurchasedQty, setWholesalePurchasedQty] = useState<number | "">("");
   const [wholesalePurchasedExtraPieces, setWholesalePurchasedExtraPieces] = useState<number | "">("");
   const [retailPurchasedQty, setRetailPurchasedQty] = useState<number | "">("");
+  const [previousStockBeforePurchase, setPreviousStockBeforePurchase] = useState<number>(0);
   const [wholesaleStockPacks, setWholesaleStockPacks] = useState<number | "">("");
   const [retailExtraStock, setRetailExtraStock] = useState<number | "">("");
   const [wholesaleMinStockPacks, setWholesaleMinStockPacks] = useState<number | "">("");
@@ -231,6 +232,7 @@ export default function ProductsPage() {
     setWholesalePurchasedQty("");
     setWholesalePurchasedExtraPieces("");
     setRetailPurchasedQty("");
+    setPreviousStockBeforePurchase(0);
     setWholesaleStockPacks("");
     setRetailExtraStock("");
     setWholesaleMinStockPacks(2);
@@ -265,8 +267,9 @@ export default function ProductsPage() {
       const mult = Number(existingWholesale.multiplier) || 1;
       const packs = Math.floor((p.stock || 0) / mult);
       const rem = Math.round(((p.stock || 0) % mult) * 1000) / 1000;
-      setWholesalePurchasedQty(packs > 0 ? packs : "");
-      setWholesalePurchasedExtraPieces(rem > 0 ? rem : "");
+      setPreviousStockBeforePurchase(Number(p.stock) || 0);
+      setWholesalePurchasedQty("");
+      setWholesalePurchasedExtraPieces("");
       setRetailPurchasedQty("");
       setWholesaleStockPacks(packs > 0 ? packs : "");
       setRetailExtraStock(rem > 0 ? rem : "");
@@ -290,9 +293,10 @@ export default function ProductsPage() {
       setWholesaleMultiplier("");
       setWholesalePurchaseCost("");
       setWholesaleSellingPrice("");
+      setPreviousStockBeforePurchase(Number(p.stock) || 0);
       setWholesalePurchasedQty("");
       setWholesalePurchasedExtraPieces("");
-      setRetailPurchasedQty(p.stock > 0 ? p.stock : "");
+      setRetailPurchasedQty("");
       setWholesaleStockPacks("");
       setRetailExtraStock("");
       setWholesaleMinStockPacks("");
@@ -1132,14 +1136,52 @@ export default function ProductsPage() {
                       </div>
                     )}
 
-                    {/* Ligne 2 : QUANTITÉ ACHETÉE AU FOURNISSEUR (GROS : CARTONS + PIÈCES DÉTAIL) */}
-                    <div className="p-3.5 rounded-xl bg-primary/5 border border-primary/20 space-y-3">
+                    {/* SÉQUENCE PROGRESSIVE : 1. STOCK AVANT ACHAT -> 2. ARRIVAGE ACHETÉ -> 3. TOTAL GLOBAL DISPONIBLE */}
+                    
+                    {/* ÉTAPE A : STOCK DISPONIBLE AVANT L'ACHAT (AUTOMATIQUE) */}
+                    <div className="p-3 rounded-xl bg-secondary/30 border border-border/50 space-y-1.5">
+                      <div className="flex items-center justify-between">
+                        <label className="text-xs font-bold text-foreground flex items-center gap-1.5">
+                          🕒 Stock disponible en boutique AVANT l'achat :
+                        </label>
+                        <span className="text-[10px] text-muted-foreground bg-secondary/80 px-2 py-0.5 rounded-md border border-border/40">
+                          Automatique (déjà en rayon/réserve)
+                        </span>
+                      </div>
+                      {(() => {
+                        const mult = Number(wholesaleMultiplier) || 1;
+                        const prevTotal = Number(previousStockBeforePurchase) || 0;
+                        const prevPacks = Math.floor(prevTotal / mult);
+                        const prevExtra = Math.round((prevTotal % mult) * 1000) / 1000;
+
+                        return (
+                          <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
+                            <span className="text-muted-foreground">
+                              {prevTotal > 0 ? (
+                                <>
+                                  Reste actuel : <strong className="text-foreground font-semibold">{prevPacks} {wholesaleName || 'carton(s)'}</strong>
+                                  {prevExtra > 0 ? <> + <strong className="text-foreground font-semibold">{prevExtra} {form.unit || 'pièce(s)'}</strong></> : ''}
+                                </>
+                              ) : (
+                                <span className="italic text-muted-foreground">Aucun stock préalable (nouveau produit ou stock épuisé : 0)</span>
+                              )}
+                            </span>
+                            <span className="font-extrabold text-foreground bg-card px-2.5 py-1 rounded-lg border border-border/60 text-xs">
+                              = {prevTotal.toLocaleString("fr-FR", { maximumFractionDigits: 3 })} {form.unit ? `${form.unit}s` : 'pièces'}
+                            </span>
+                          </div>
+                        );
+                      })()}
+                    </div>
+
+                    {/* ÉTAPE B : NOUVEL ARRIVAGE / QUANTITÉ ACHETÉE (CARTONS + PIÈCES) */}
+                    <div className="p-3.5 rounded-xl bg-primary/5 border border-primary/25 space-y-3">
                       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
                         <label className="text-xs font-bold text-primary flex items-center gap-1.5">
-                          🚚 Arrivage / Quantité achetée au fournisseur :
+                          🚚 Nouvel arrivage / Quantité achetée au fournisseur :
                         </label>
                         <span className="text-[10px] text-muted-foreground">
-                          Ex: 10 boîtes de 24 + 13 pièces
+                          Indiquez les cartons et pièces achetés
                         </span>
                       </div>
 
@@ -1160,13 +1202,11 @@ export default function ProductsPage() {
                               setWholesalePurchasedQty(qty);
                               const mult = Number(wholesaleMultiplier) || 1;
                               const extra = Number(wholesalePurchasedExtraPieces) || 0;
-                              const totalPurchasedUnits = (Number(qty) || 0) * mult + extra;
-                              // Synchroniser avec le stock disponible si l'utilisateur saisit son arrivage
-                              if (wholesaleStockPacks === "" || wholesaleStockPacks === wholesalePurchasedQty) {
-                                setWholesaleStockPacks(qty);
-                                setRetailExtraStock(wholesalePurchasedExtraPieces);
-                                setForm({ ...form, stock: totalPurchasedUnits });
-                              }
+                              const arrivagePieces = (Number(qty) || 0) * mult + extra;
+                              const newGrandTotal = (Number(previousStockBeforePurchase) || 0) + arrivagePieces;
+                              setForm({ ...form, stock: newGrandTotal });
+                              setWholesaleStockPacks(Math.floor(newGrandTotal / mult));
+                              setRetailExtraStock(Math.round((newGrandTotal % mult) * 1000) / 1000);
                             }}
                             className="w-full rounded-xl border border-primary/40 bg-card px-3 py-2 text-xs font-bold text-primary focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
                           />
@@ -1175,7 +1215,7 @@ export default function ProductsPage() {
                         {/* Partie 2 : Pièces / Détails supplémentaires */}
                         <div className="sm:col-span-4">
                           <label className="text-[10px] font-semibold text-muted-foreground block mb-1">
-                            + {form.unit ? `${form.unit}s` : 'Pièces'} supplémentaires
+                            + {form.unit ? `${form.unit}s` : 'Pièces'} supplémentaires achetées
                           </label>
                           <input
                             type="number"
@@ -1188,39 +1228,37 @@ export default function ProductsPage() {
                               setWholesalePurchasedExtraPieces(extra);
                               const mult = Number(wholesaleMultiplier) || 1;
                               const packs = Number(wholesalePurchasedQty) || 0;
-                              const totalPurchasedUnits = packs * mult + (Number(extra) || 0);
-                              // Synchroniser avec le stock disponible
-                              if (retailExtraStock === "" || retailExtraStock === wholesalePurchasedExtraPieces) {
-                                setRetailExtraStock(extra);
-                                setWholesaleStockPacks(wholesalePurchasedQty);
-                                setForm({ ...form, stock: totalPurchasedUnits });
-                              }
+                              const arrivagePieces = packs * mult + (Number(extra) || 0);
+                              const newGrandTotal = (Number(previousStockBeforePurchase) || 0) + arrivagePieces;
+                              setForm({ ...form, stock: newGrandTotal });
+                              setWholesaleStockPacks(Math.floor(newGrandTotal / mult));
+                              setRetailExtraStock(Math.round((newGrandTotal % mult) * 1000) / 1000);
                             }}
                             className="w-full rounded-xl border border-border/60 bg-card px-3 py-2 text-xs font-semibold focus:border-primary/40 focus:outline-none focus:ring-2 focus:ring-primary/20"
                           />
                         </div>
 
-                        {/* Partie 3 : TOTAL AUTOMATIQUE EN PIÈCES & MONTANT FACTURE */}
+                        {/* Partie 3 : Total arrivage & Montant facture */}
                         <div className="sm:col-span-4">
                           {(() => {
                             const mult = Number(wholesaleMultiplier) || 1;
                             const packs = Number(wholesalePurchasedQty) || 0;
                             const extra = Number(wholesalePurchasedExtraPieces) || 0;
-                            const totalPieces = packs * mult + extra;
+                            const arrivagePieces = packs * mult + extra;
                             const unitCost = Number(form.cost) || (Number(wholesalePurchaseCost) > 0 && mult > 0 ? Number(wholesalePurchaseCost) / mult : 0);
                             const totalInvoice = (packs * (Number(wholesalePurchaseCost) || 0)) + (extra * unitCost);
 
                             return (
                               <div className="p-2 rounded-xl bg-card border border-primary/30 shadow-2xs">
                                 <span className="text-[10px] font-bold text-primary block">
-                                  🔢 Total automatique :
+                                  📦 Arrivage seul :
                                 </span>
                                 <div className="text-xs font-black text-foreground">
-                                  {totalPieces.toLocaleString("fr-FR", { maximumFractionDigits: 3 })} {form.unit ? `${form.unit}s` : 'pièces'}
+                                  +{arrivagePieces.toLocaleString("fr-FR", { maximumFractionDigits: 3 })} {form.unit ? `${form.unit}s` : 'pièces'}
                                 </div>
                                 {role === "admin" && totalInvoice > 0 && (
                                   <div className="text-[10px] text-muted-foreground mt-0.5 border-t border-border/30 pt-0.5">
-                                    Facture : <strong className="text-foreground">{formatPrice(Math.round(totalInvoice))}</strong>
+                                    Facture arrivage : <strong className="text-foreground">{formatPrice(Math.round(totalInvoice))}</strong>
                                   </div>
                                 )}
                               </div>
@@ -1228,78 +1266,49 @@ export default function ProductsPage() {
                           })()}
                         </div>
                       </div>
-
-                      {/* Récapitulatif visuel limpide de l'arrivage */}
-                      {(Number(wholesalePurchasedQty) > 0 || Number(wholesalePurchasedExtraPieces) > 0) && (
-                        <div className="p-2 rounded-lg bg-primary/10 border border-primary/25 text-[11px] font-medium text-foreground flex items-center justify-between">
-                          <span>
-                            📦 <strong>Arrivage décomposé :</strong> {Number(wholesalePurchasedQty) || 0} {wholesaleName || 'boîte(s)'}
-                            {Number(wholesalePurchasedExtraPieces) > 0 ? ` + ${wholesalePurchasedExtraPieces} ${form.unit || 'pièce(s)'}` : ''}
-                          </span>
-                          <span className="font-bold text-primary bg-primary/20 px-2 py-0.5 rounded-full text-[10px]">
-                            = {(Number(wholesalePurchasedQty) || 0) * (Number(wholesaleMultiplier) || 1) + (Number(wholesalePurchasedExtraPieces) || 0)} {form.unit ? `${form.unit}s` : 'pièces au total'}
-                          </span>
-                        </div>
-                      )}
                     </div>
 
-                    {/* Ligne 3 : STOCK ACTUELLEMENT DISPONIBLE EN RAYON / RÉSERVE */}
-                    <div className="pt-2 border-t border-border/40 space-y-2">
-                      <div className="flex items-center justify-between">
-                        <label className="text-xs font-bold text-foreground block">
-                          📦 Stock actuellement disponible à la boutique :
+                    {/* ÉTAPE C : TOTAL GLOBAL AUTOMATIQUE APRÈS ACHAT */}
+                    <div className="p-3.5 rounded-xl bg-emerald-500/10 border-2 border-emerald-500/30 space-y-2">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
+                        <label className="text-xs font-bold text-emerald-700 dark:text-emerald-400 flex items-center gap-1.5">
+                          ✨ TOTAL GLOBAL DISPONIBLE APRÈS ACHAT (Calculé automatiquement) :
                         </label>
-                        <span className="text-[10px] text-muted-foreground">Ce qui est réellement en rayon/réserve</span>
+                        <span className="text-[10px] font-bold text-emerald-600 bg-emerald-500/20 px-2 py-0.5 rounded-full">
+                          ✓ Stock physique effectif pour la vente
+                        </span>
                       </div>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 items-center">
-                        <div>
-                          <label className="text-[10px] font-semibold text-muted-foreground block mb-1">
-                            Nombre de {wholesaleName || 'cartons'} complets restants
-                          </label>
-                          <input
-                            type="number"
-                            min="0"
-                            step="any"
-                            placeholder="Ex: 1"
-                            value={wholesaleStockPacks}
-                            onChange={(e) => {
-                              const packs = e.target.value === "" ? "" : parseFloat(e.target.value);
-                              setWholesaleStockPacks(packs);
-                              const mult = Number(wholesaleMultiplier) || 1;
-                              const extra = Number(retailExtraStock) || 0;
-                              const totalUnits = (Number(packs) || 0) * mult + extra;
-                              setForm({ ...form, stock: totalUnits });
-                            }}
-                            className="w-full rounded-xl border border-border/60 bg-secondary/30 px-3 py-2 text-xs font-bold text-primary focus:border-primary/40 focus:outline-none focus:ring-2 focus:ring-primary/20"
-                          />
-                        </div>
-                        <div>
-                          <label className="text-[10px] font-semibold text-muted-foreground block mb-1">
-                            + Restes entamés au détail ({form.unit ? `${form.unit}s` : 'unités'})
-                          </label>
-                          <input
-                            type="number"
-                            min="0"
-                            step="any"
-                            placeholder="Ex: 5"
-                            value={retailExtraStock}
-                            onChange={(e) => {
-                              const extra = e.target.value === "" ? "" : parseFloat(e.target.value);
-                              setRetailExtraStock(extra);
-                              const mult = Number(wholesaleMultiplier) || 1;
-                              const packs = Number(wholesaleStockPacks) || 0;
-                              const totalUnits = packs * mult + (Number(extra) || 0);
-                              setForm({ ...form, stock: totalUnits });
-                            }}
-                            className="w-full rounded-xl border border-border/60 bg-secondary/30 px-3 py-2 text-xs font-medium focus:border-primary/40 focus:outline-none focus:ring-2 focus:ring-primary/20"
-                          />
-                        </div>
-                      </div>
-                      {(Number(wholesaleStockPacks) > 0 || Number(retailExtraStock) > 0) && (
-                        <p className="mt-2 text-[11px] font-semibold text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-2.5 py-1 rounded-lg border border-emerald-500/20">
-                          📦 Total stock physique unique enregistré : <strong>{(Number(wholesaleStockPacks) || 0) * (Number(wholesaleMultiplier) || 1) + (Number(retailExtraStock) || 0)} {form.unit ? `${form.unit}s` : 'unités'}</strong>
-                        </p>
-                      )}
+
+                      {(() => {
+                        const mult = Number(wholesaleMultiplier) || 1;
+                        const prev = Number(previousStockBeforePurchase) || 0;
+                        const packs = Number(wholesalePurchasedQty) || 0;
+                        const extra = Number(wholesalePurchasedExtraPieces) || 0;
+                        const arrivage = packs * mult + extra;
+                        const grandTotal = prev + arrivage;
+                        const totalPacks = Math.floor(grandTotal / mult);
+                        const totalExtra = Math.round((grandTotal % mult) * 1000) / 1000;
+
+                        return (
+                          <div className="grid grid-cols-1 sm:grid-cols-12 gap-3 items-center pt-1">
+                            <div className="sm:col-span-7">
+                              <p className="text-xs text-foreground font-medium">
+                                <span className="text-muted-foreground">{prev} avant</span> + <span className="text-primary font-bold">{arrivage} arrivage</span> =
+                              </p>
+                              <p className="text-sm font-black text-emerald-700 dark:text-emerald-400 flex items-center gap-1.5">
+                                <span>{totalPacks} {wholesaleName || 'carton(s)'}</span>
+                                {totalExtra > 0 && <span>+ {totalExtra} {form.unit || 'pièce(s)'}</span>}
+                              </p>
+                            </div>
+                            <div className="sm:col-span-5 text-right sm:border-l sm:border-emerald-500/20 sm:pl-3">
+                              <span className="text-[10px] text-muted-foreground block">Total physique unique :</span>
+                              <div className="text-base font-black text-emerald-600 dark:text-emerald-400">
+                                {grandTotal.toLocaleString("fr-FR", { maximumFractionDigits: 3 })} {form.unit ? `${form.unit}s` : 'pièces'}
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })()}
                     </div>
 
                     {/* Ligne 4 : SEUIL D'ALERTE STOCK FAIBLE EXPRIMÉ EN CARTONS */}
