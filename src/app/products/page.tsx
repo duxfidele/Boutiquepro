@@ -870,7 +870,7 @@ export default function ProductsPage() {
       {/* Modal Create/Edit Product */}
       {showModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm animate-fade-in p-4" onClick={() => setShowModal(false)}>
-          <div className="w-full max-w-lg rounded-2xl border border-border/50 bg-card p-6 shadow-2xl animate-scale-in max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+          <div className="w-full max-w-2xl rounded-2xl border border-border/50 bg-card p-6 shadow-2xl animate-scale-in max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-6">
               <h2 className="text-lg font-bold">{editProduct ? "Modifier le produit" : "Nouveau produit"}</h2>
               <button onClick={() => setShowModal(false)} className="p-1 rounded-lg hover:bg-secondary">
@@ -912,42 +912,44 @@ export default function ProductsPage() {
                 </select>
               </div>
 
-              {/* SECTION 2 : MODE D'APPROVISIONNEMENT & ACHATS (Gros d'abord vs Pièce) */}
-              <div className="rounded-2xl border-2 border-primary/20 bg-gradient-to-b from-primary/5 via-secondary/15 to-transparent p-4 space-y-4">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-border/50 pb-3">
-                  <div>
-                    <h3 className="text-xs font-bold uppercase tracking-wider text-primary flex items-center gap-1.5">
-                      <Package className="h-4 w-4 text-primary" />
-                      1. Mode d'achat fournisseur (Comment achetez-vous ce produit ?)
-                    </h3>
-                    <p className="text-[11px] text-muted-foreground mt-0.5">
-                      Privilégiez l'achat en gros ou carton pour les supérettes, boutiques et grossistes.
-                    </p>
+              {/* SECTION 2 : MODE D'APPROVISIONNEMENT & ACHATS (Gros prioritaire) */}
+              <div className="rounded-2xl border border-primary/25 bg-secondary/10 p-4 space-y-4">
+                <div className="space-y-2 border-b border-border/40 pb-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold uppercase tracking-wide text-primary flex items-center gap-1.5">
+                      <Package className="h-4 w-4" />
+                      Mode d'approvisionnement fournisseur
+                    </span>
+                    <span className="text-[11px] text-muted-foreground hidden sm:inline">
+                      Sélectionnez comment vous achetez auprès du grossiste
+                    </span>
                   </div>
-                  <div className="inline-flex rounded-xl bg-secondary/80 p-1 border border-border/60 self-start sm:self-auto shrink-0 shadow-xs">
+
+                  {/* Boutons de bascule horizontaux propres, 100% de largeur, sans débordement */}
+                  <div className="grid grid-cols-2 gap-2 p-1 rounded-xl bg-secondary/60 border border-border/50">
                     <button
                       type="button"
                       onClick={() => setPurchaseMode("wholesale")}
-                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                      className={`flex items-center justify-center gap-2 py-2 px-3 rounded-lg text-xs font-bold transition-all ${
                         purchaseMode === "wholesale"
                           ? "bg-primary text-primary-foreground shadow-sm"
-                          : "text-muted-foreground hover:text-foreground"
+                          : "text-muted-foreground hover:text-foreground hover:bg-secondary/80"
                       }`}
                     >
-                      <Package className="h-3.5 w-3.5" />
-                      <span>📦 Achat en Gros / Carton (Privilégié)</span>
+                      <Package className="h-4 w-4" />
+                      <span>📦 Achat en Gros / Carton (Recommandé)</span>
                     </button>
                     <button
                       type="button"
                       onClick={() => setPurchaseMode("retail")}
-                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                      className={`flex items-center justify-center gap-2 py-2 px-3 rounded-lg text-xs font-bold transition-all ${
                         purchaseMode === "retail"
                           ? "bg-primary text-primary-foreground shadow-sm"
-                          : "text-muted-foreground hover:text-foreground"
+                          : "text-muted-foreground hover:text-foreground hover:bg-secondary/80"
                       }`}
                     >
-                      <ShoppingBag className="h-3.5 w-3.5" />
-                      <span>🛍️ Achat à la Pièce</span>
+                      <ShoppingBag className="h-4 w-4" />
+                      <span>🛍️ Achat direct à la Pièce</span>
                     </button>
                   </div>
                 </div>
