@@ -1,4 +1,4 @@
-const { formatDecomposedStock } = require("./src/lib/stockDisplay");
+const { formatDecomposedStock } = require("../src/lib/stockDisplay");
 
 console.log("=================================================");
 console.log("🧪 SUITE DE TESTS COMPLÈTE : SCÉNARIOS A À J");

@@ -28,7 +28,9 @@ import {
   Calendar,
   ShieldCheck,
   Check,
-  Sparkles
+  Sparkles,
+  ShoppingBag,
+  HelpCircle
 } from "lucide-react";
 import { ProductBatch, PriceHistoryEntry } from "@/context/StoreContext";
 import { TrendingUp, TrendingDown, History, ArrowRight, DollarSign } from "lucide-react";
@@ -40,6 +42,18 @@ const BASE_UNITS = [
   { id: 'metre', label: 'Mètre (m)', icon: '📏', presets: ['Rouleau de 100 m', 'Rouleau de 50 m', 'Rouleau de 25 m'] },
   { id: 'sachet', label: 'Sachet / Paquet', icon: '🍬', presets: ['Carton de 50', 'Carton de 20', 'Paquet de 10'] },
   { id: 'boite', label: 'Boîte / Conserve', icon: '🥫', presets: ['Carton (24)', 'Carton (12)', 'Pack (6)'] },
+];
+
+const MARKET_WHOLESALE_PRESETS = [
+  { name: 'Bidon de 25 L', multiplier: 25, unit: 'Litre (L)', icon: '🥛' },
+  { name: 'Carton de 24', multiplier: 24, unit: 'Pièce / Unité', icon: '📦' },
+  { name: 'Sac de 50 kg', multiplier: 50, unit: 'Kilogramme (kg)', icon: '⚖️' },
+  { name: 'Carton de 50 boîtes', multiplier: 50, unit: 'Boîte / Conserve', icon: '🥫' },
+  { name: 'Carton de 50 sachets', multiplier: 50, unit: 'Sachet / Paquet', icon: '🍬' },
+  { name: 'Pack de 12 bouteilles', multiplier: 12, unit: 'Pièce / Unité', icon: '🥤' },
+  { name: 'Pack de 6 bouteilles', multiplier: 6, unit: 'Pièce / Unité', icon: '🧃' },
+  { name: 'Bidon de 10 L', multiplier: 10, unit: 'Litre (L)', icon: '🛢️' },
+  { name: 'Sac de 25 kg', multiplier: 25, unit: 'Kilogramme (kg)', icon: '🌾' },
 ];
 
 const renderExpiryBadge = (nearestBatch: ProductBatch) => {
@@ -123,6 +137,13 @@ export default function ProductsPage() {
   }, [activeStore, isModuleActive, role]);
 
   const [formUnits, setFormUnits] = useState<{ id?: string; name: string; multiplier: number; price: string | number; cost?: string | number; barcode: string }[]>([]);
+  const [purchaseMode, setPurchaseMode] = useState<"wholesale" | "retail">("wholesale");
+  const [wholesaleName, setWholesaleName] = useState("");
+  const [wholesaleMultiplier, setWholesaleMultiplier] = useState<number | "">("");
+  const [wholesalePurchaseCost, setWholesalePurchaseCost] = useState<number | "">("");
+  const [wholesaleSellingPrice, setWholesaleSellingPrice] = useState<number | "">("");
+  const [wholesaleStockPacks, setWholesaleStockPacks] = useState<number | "">("");
+  const [retailExtraStock, setRetailExtraStock] = useState<number | "">("");
   const [showCostCalculator, setShowCostCalculator] = useState(false);
   const [calcCartonPrice, setCalcCartonPrice] = useState("");
   const [calcCartonUnits, setCalcCartonUnits] = useState("");
@@ -198,6 +219,13 @@ export default function ProductsPage() {
     setEditProduct(null);
     setForm({ ...emptyForm, category: state.categories[0]?.name || "Divers", unit: "Pièce / Unité" });
     setFormUnits([]);
+    setPurchaseMode("wholesale");
+    setWholesaleName("Carton de 24");
+    setWholesaleMultiplier(24);
+    setWholesalePurchaseCost("");
+    setWholesaleSellingPrice("");
+    setWholesaleStockPacks("");
+    setRetailExtraStock("");
     setShowCostCalculator(false);
     setCalcCartonPrice("");
     setCalcCartonUnits("");
@@ -218,16 +246,51 @@ export default function ProductsPage() {
       minStock: p.minStock,
       image: p.image
     });
-    setFormUnits(
-      (p.units || []).map((u) => ({
-        id: u.id,
-        name: u.name,
-        multiplier: u.multiplier,
-        price: u.price !== null && u.price !== undefined ? u.price : "",
-        cost: u.cost !== null && u.cost !== undefined ? u.cost : "",
-        barcode: u.barcode || "",
-      }))
-    );
+
+    const existingWholesale = (p.units || []).find((u) => Number(u.multiplier) > 1);
+    if (existingWholesale) {
+      setPurchaseMode("wholesale");
+      setWholesaleName(existingWholesale.name);
+      setWholesaleMultiplier(existingWholesale.multiplier);
+      setWholesalePurchaseCost(existingWholesale.cost !== null && existingWholesale.cost !== undefined ? existingWholesale.cost : "");
+      setWholesaleSellingPrice(existingWholesale.price !== null && existingWholesale.price !== undefined ? existingWholesale.price : "");
+      const mult = Number(existingWholesale.multiplier) || 1;
+      const packs = Math.floor((p.stock || 0) / mult);
+      const rem = Math.round(((p.stock || 0) % mult) * 1000) / 1000;
+      setWholesaleStockPacks(packs > 0 ? packs : "");
+      setRetailExtraStock(rem > 0 ? rem : "");
+      setFormUnits(
+        (p.units || [])
+          .filter((u) => u.id !== existingWholesale.id)
+          .map((u) => ({
+            id: u.id,
+            name: u.name,
+            multiplier: u.multiplier,
+            price: u.price !== null && u.price !== undefined ? u.price : "",
+            cost: u.cost !== null && u.cost !== undefined ? u.cost : "",
+            barcode: u.barcode || "",
+          }))
+      );
+    } else {
+      setPurchaseMode("retail");
+      setWholesaleName("");
+      setWholesaleMultiplier("");
+      setWholesalePurchaseCost("");
+      setWholesaleSellingPrice("");
+      setWholesaleStockPacks("");
+      setRetailExtraStock("");
+      setFormUnits(
+        (p.units || []).map((u) => ({
+          id: u.id,
+          name: u.name,
+          multiplier: u.multiplier,
+          price: u.price !== null && u.price !== undefined ? u.price : "",
+          cost: u.cost !== null && u.cost !== undefined ? u.cost : "",
+          barcode: u.barcode || "",
+        }))
+      );
+    }
+
     setShowCostCalculator(false);
     setCalcCartonPrice("");
     setCalcCartonUnits("");
@@ -244,9 +307,39 @@ export default function ProductsPage() {
     if (!form.name) return;
     
     const finalSku = form.sku.trim() || (form.name.substring(0, 3).toUpperCase() + "-" + Math.floor(1000 + Math.random() * 9000));
-    const costToSave = role === "admin" ? (Number(form.cost) || 0) : 0;
+    
+    // Si achat en gros, dériver le coût unitaire et le stock physique total
+    let effectiveCost = role === "admin" ? (Number(form.cost) || 0) : 0;
+    let effectiveStock = Number(form.stock) || 0;
 
-    const parsedUnits: ProductUnit[] = formUnits
+    const allUnitsList = [...formUnits];
+
+    if (purchaseMode === "wholesale" && wholesaleName.trim() && Number(wholesaleMultiplier) > 0) {
+      const mult = Number(wholesaleMultiplier);
+      const wCost = wholesalePurchaseCost !== "" ? Number(wholesalePurchaseCost) : null;
+      const wPrice = wholesaleSellingPrice !== "" ? Number(wholesaleSellingPrice) : null;
+
+      if (wCost !== null && wCost > 0 && mult > 0 && role === "admin") {
+        effectiveCost = Math.round((wCost / mult) * 100) / 100;
+      }
+
+      const packs = Number(wholesaleStockPacks) || 0;
+      const extra = Number(retailExtraStock) || 0;
+      effectiveStock = Math.round((packs * mult + extra) * 1000) / 1000;
+
+      allUnitsList.unshift({
+        id: editProduct?.units?.find(u => u.name === wholesaleName.trim())?.id,
+        name: wholesaleName.trim(),
+        multiplier: mult,
+        price: wPrice !== null ? wPrice : "",
+        cost: wCost !== null ? wCost : "",
+        barcode: "",
+      });
+    }
+
+    const costToSave = role === "admin" ? effectiveCost : 0;
+
+    const parsedUnits: ProductUnit[] = allUnitsList
       .filter((u) => u.name.trim().length > 0 && Number(u.multiplier) > 0)
       .map((u) => ({
         id: u.id || ("pu_" + Math.random().toString(36).substring(7)),
@@ -256,19 +349,31 @@ export default function ProductsPage() {
         multiplier: Number(u.multiplier),
         price: (u.price !== "" && u.price !== null && u.price !== undefined && Number(u.price) > 0) ? Number(u.price) : null,
         cost: (u.cost !== "" && u.cost !== null && u.cost !== undefined && Number(u.cost) > 0) ? Number(u.cost) : null,
-        barcode: u.barcode.trim() || null,
+        barcode: u.barcode ? u.barcode.trim() : null,
         isReference: false,
       }));
 
     const newProdId = "p" + Date.now();
     if (editProduct) {
       parsedUnits.forEach((u) => (u.productId = editProduct.id));
-      dispatch({ type: "UPDATE_PRODUCT", payload: { ...editProduct, ...form, unit: form.unit, cost: costToSave, sku: finalSku, units: parsedUnits } });
+      dispatch({ 
+        type: "UPDATE_PRODUCT", 
+        payload: { 
+          ...editProduct, 
+          ...form, 
+          stock: effectiveStock, 
+          unit: form.unit, 
+          cost: costToSave, 
+          sku: finalSku, 
+          units: parsedUnits 
+        } 
+      });
     } else {
       parsedUnits.forEach((u) => (u.productId = newProdId));
       const newProduct: Product = {
         id: newProdId,
         ...form,
+        stock: effectiveStock,
         unit: form.unit,
         cost: costToSave,
         sku: finalSku,
@@ -807,195 +912,292 @@ export default function ProductsPage() {
                 </select>
               </div>
 
-              {/* Sélecteur visuel d'Unité de mesure de base */}
-              <div className="rounded-2xl border border-border/60 bg-secondary/20 p-3.5 space-y-2">
-                <div className="flex items-center justify-between">
-                  <label className="text-xs font-bold text-foreground flex items-center gap-1.5">
-                    <Package className="h-3.5 w-3.5 text-primary" />
-                    <span>Unité de mesure de base (Vente au détail) *</span>
-                  </label>
-                  <span className="text-[10px] text-muted-foreground">Sélectionnez d'abord l'unité :</span>
-                </div>
-                <div className="flex flex-wrap gap-1.5">
-                  {BASE_UNITS.map((u) => {
-                    const isSelected = form.unit === u.label;
-                    return (
-                      <button
-                        type="button"
-                        key={u.id}
-                        onClick={() => setForm({ ...form, unit: u.label })}
-                        className={`px-3 py-1.5 rounded-xl text-xs font-semibold border transition-all flex items-center gap-1.5 ${
-                          isSelected
-                            ? "bg-primary text-primary-foreground border-primary shadow-xs"
-                            : "bg-card hover:bg-secondary text-muted-foreground hover:text-foreground border-border/60"
-                        }`}
-                      >
-                        <span>{u.icon}</span>
-                        <span>{u.label}</span>
-                      </button>
-                    );
-                  })}
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const custom = prompt("Entrez l'unité personnalisée (ex: Barre, Portion, Tasse, Botte) :", form.unit);
-                      if (custom && custom.trim()) {
-                        setForm({ ...form, unit: custom.trim() });
-                      }
-                    }}
-                    className={`px-2.5 py-1.5 rounded-xl text-xs font-medium border transition-all flex items-center gap-1 ${
-                      !BASE_UNITS.some((u) => u.label === form.unit) && form.unit
-                        ? "bg-primary text-primary-foreground border-primary font-bold"
-                        : "bg-card text-muted-foreground border-border/60 hover:bg-secondary"
-                    }`}
-                    title="Saisir une autre unité"
-                  >
-                    <span>✏️</span>
-                    <span>{!BASE_UNITS.some((u) => u.label === form.unit) && form.unit ? form.unit : "Autre..."}</span>
-                  </button>
-                </div>
-              </div>
-
-              {/* Prix de vente & Coût d'achat basés sur l'unité */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="text-xs font-medium text-muted-foreground mb-1.5 block">
-                    Prix de vente par <span className="font-bold text-foreground">{form.unit || 'unité'}</span> (FCFA) *
-                  </label>
-                  <input
-                    type="number"
-                    placeholder="Ex: 850"
-                    value={form.price || ""}
-                    onChange={(e) => setForm({ ...form, price: Number(e.target.value) })}
-                    className="w-full rounded-xl border border-border/60 bg-secondary/30 px-3 py-2.5 text-base sm:text-sm focus:border-primary/40 focus:outline-none focus:ring-2 focus:ring-primary/20 font-semibold"
-                  />
-                </div>
-                {role === 'admin' && (
+              {/* SECTION 2 : MODE D'APPROVISIONNEMENT & ACHATS (Gros d'abord vs Pièce) */}
+              <div className="rounded-2xl border-2 border-primary/20 bg-gradient-to-b from-primary/5 via-secondary/15 to-transparent p-4 space-y-4">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-border/50 pb-3">
                   <div>
-                    <div className="flex items-center justify-between mb-1.5">
-                      <label className="text-xs font-medium text-muted-foreground block">
-                        Coût d&apos;achat par <span className="font-bold text-foreground">{form.unit || 'unité'}</span> (FCFA)
-                      </label>
-                      <button
-                        type="button"
-                        onClick={() => setShowCostCalculator(!showCostCalculator)}
-                        className="text-[11px] text-primary hover:underline font-semibold flex items-center gap-1 transition-colors"
-                      >
-                        <Calculator className="h-3 w-3" />
-                        {showCostCalculator ? "Fermer calculateur" : "Acheté en carton / gros ?"}
-                      </button>
-                    </div>
-                    <input
-                      type="number"
-                      placeholder="Ex: 700"
-                      value={form.cost || ""}
-                      onChange={(e) => setForm({ ...form, cost: Number(e.target.value) })}
-                      className="w-full rounded-xl border border-border/60 bg-secondary/30 px-3 py-2.5 text-base sm:text-sm focus:border-primary/40 focus:outline-none focus:ring-2 focus:ring-primary/20 font-medium"
-                    />
+                    <h3 className="text-xs font-bold uppercase tracking-wider text-primary flex items-center gap-1.5">
+                      <Package className="h-4 w-4 text-primary" />
+                      1. Mode d'achat fournisseur (Comment achetez-vous ce produit ?)
+                    </h3>
+                    <p className="text-[11px] text-muted-foreground mt-0.5">
+                      Privilégiez l'achat en gros ou carton pour les supérettes, boutiques et grossistes.
+                    </p>
+                  </div>
+                  <div className="inline-flex rounded-xl bg-secondary/80 p-1 border border-border/60 self-start sm:self-auto shrink-0 shadow-xs">
+                    <button
+                      type="button"
+                      onClick={() => setPurchaseMode("wholesale")}
+                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                        purchaseMode === "wholesale"
+                          ? "bg-primary text-primary-foreground shadow-sm"
+                          : "text-muted-foreground hover:text-foreground"
+                      }`}
+                    >
+                      <Package className="h-3.5 w-3.5" />
+                      <span>📦 Achat en Gros / Carton (Privilégié)</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setPurchaseMode("retail")}
+                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                        purchaseMode === "retail"
+                          ? "bg-primary text-primary-foreground shadow-sm"
+                          : "text-muted-foreground hover:text-foreground"
+                      }`}
+                    >
+                      <ShoppingBag className="h-3.5 w-3.5" />
+                      <span>🛍️ Achat à la Pièce</span>
+                    </button>
+                  </div>
+                </div>
 
-                    {/* Suggestions directes depuis les conditionnements existants */}
-                    {formUnits.some(u => u.cost && Number(u.cost) > 0 && Number(u.multiplier) > 0) && (
-                      <div className="mt-1.5 flex flex-wrap gap-1.5 items-center">
-                        <span className="text-[10px] text-muted-foreground">Déduire depuis :</span>
-                        {formUnits.filter(u => u.cost && Number(u.cost) > 0 && Number(u.multiplier) > 0).map((u, i) => {
-                          const unitCost = Math.round((Number(u.cost) / Number(u.multiplier)) * 100) / 100;
-                          return (
-                            <button
-                              key={i}
-                              type="button"
-                              onClick={() => setForm({ ...form, cost: unitCost })}
-                              className="text-[10px] px-2 py-0.5 rounded bg-primary/10 hover:bg-primary/20 text-primary font-semibold flex items-center gap-1 border border-primary/20"
-                              title="Définir ce coût unitaire"
-                            >
-                              ⚡ {u.name} ({formatPrice(unitCost)}/{form.unit || 'u'})
-                            </button>
-                          );
-                        })}
-                      </div>
-                    )}
+                {/* SÉLECTEUR DE L'UNITÉ DE MESURE DE BASE (RÉFÉRENCE DÉTAIL) */}
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-semibold text-foreground flex items-center gap-1.5">
+                      <span>Unité physique de base (au détail) :</span>
+                    </label>
+                    <span className="text-[10px] text-muted-foreground">Ex: Litre, Kilogramme, Boîte...</span>
+                  </div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {BASE_UNITS.map((u) => {
+                      const isSelected = form.unit === u.label;
+                      return (
+                        <button
+                          type="button"
+                          key={u.id}
+                          onClick={() => {
+                            setForm({ ...form, unit: u.label });
+                            if (purchaseMode === "wholesale" && (!wholesaleName || wholesaleName === "Carton de 24")) {
+                              const matchPreset = MARKET_WHOLESALE_PRESETS.find(p => p.unit === u.label);
+                              if (matchPreset) {
+                                setWholesaleName(matchPreset.name);
+                                setWholesaleMultiplier(matchPreset.multiplier);
+                              }
+                            }
+                          }}
+                          className={`px-3 py-1.5 rounded-xl text-xs font-semibold border transition-all flex items-center gap-1.5 ${
+                            isSelected
+                              ? "bg-primary text-primary-foreground border-primary shadow-xs"
+                              : "bg-card hover:bg-secondary text-muted-foreground hover:text-foreground border-border/60"
+                          }`}
+                        >
+                          <span>{u.icon}</span>
+                          <span>{u.label}</span>
+                        </button>
+                      );
+                    })}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const custom = prompt("Entrez l'unité personnalisée (ex: Barre, Portion, Tasse, Botte) :", form.unit);
+                        if (custom && custom.trim()) {
+                          setForm({ ...form, unit: custom.trim() });
+                        }
+                      }}
+                      className={`px-2.5 py-1.5 rounded-xl text-xs font-medium border transition-all flex items-center gap-1 ${
+                        !BASE_UNITS.some((u) => u.label === form.unit) && form.unit
+                          ? "bg-primary text-primary-foreground border-primary font-bold"
+                          : "bg-card text-muted-foreground border-border/60 hover:bg-secondary"
+                      }`}
+                      title="Saisir une autre unité"
+                    >
+                      <span>✏️</span>
+                      <span>{!BASE_UNITS.some((u) => u.label === form.unit) && form.unit ? form.unit : "Autre..."}</span>
+                    </button>
+                  </div>
+                </div>
 
-                    {/* Calculateur rapide pour achat en carton / gros */}
-                    {showCostCalculator && (
-                      <div className="mt-2 p-3 rounded-xl bg-primary/5 border border-primary/20 space-y-2.5 animate-fade-in shadow-xs">
-                        <div className="flex items-center justify-between">
-                          <span className="text-xs font-bold text-primary flex items-center gap-1.5">
-                            <Package className="h-3.5 w-3.5" />
-                            Calculer le coût unitaire depuis un carton ou gros
-                          </span>
-                          <button type="button" onClick={() => setShowCostCalculator(false)} className="text-muted-foreground hover:text-foreground p-0.5">
-                            <X className="h-3.5 w-3.5" />
+                {/* SOUS-PANNEAU ACHAT EN GROS (PRIVILÉGIÉ PAR DÉFAUT) */}
+                {purchaseMode === "wholesale" ? (
+                  <div className="rounded-xl border border-primary/25 bg-card/80 p-3.5 space-y-3 shadow-xs">
+                    <div className="flex flex-wrap items-center justify-between gap-1.5 pb-2 border-b border-border/40">
+                      <span className="text-[11px] font-bold text-primary flex items-center gap-1">
+                        <Sparkles className="h-3 w-3 text-amber-500" />
+                        Formats fréquents sur le marché :
+                      </span>
+                      <div className="flex flex-wrap gap-1">
+                        {MARKET_WHOLESALE_PRESETS.filter(p => !form.unit || p.unit === form.unit).slice(0, 5).map((p, idx) => (
+                          <button
+                            key={idx}
+                            type="button"
+                            onClick={() => {
+                              setWholesaleName(p.name);
+                              setWholesaleMultiplier(p.multiplier);
+                              setForm({ ...form, unit: p.unit });
+                            }}
+                            className="text-[10px] px-2 py-0.5 rounded-md bg-secondary/80 hover:bg-primary/10 hover:text-primary text-foreground border border-border/50 font-medium transition-all"
+                          >
+                            {p.icon} {p.name}
                           </button>
-                        </div>
-                        <p className="text-[10px] text-muted-foreground leading-relaxed">
-                          Indiquez le montant total payé au fournisseur pour le carton/bidon et la quantité d&apos;unités contenues :
-                        </p>
-                        <div className="grid grid-cols-12 gap-2 items-end">
-                          <div className="col-span-5">
-                            <label className="text-[9px] font-semibold text-muted-foreground block mb-1">
-                              Prix d&apos;achat du carton (FCFA)
-                            </label>
-                            <input
-                              type="number"
-                              placeholder="Ex: 12000"
-                              value={calcCartonPrice}
-                              onChange={(e) => setCalcCartonPrice(e.target.value)}
-                              className="w-full bg-card border border-border/60 rounded-lg px-2.5 py-1.5 text-xs font-semibold"
-                            />
-                          </div>
-                          <div className="col-span-4">
-                            <label className="text-[9px] font-semibold text-muted-foreground block mb-1">
-                              Unités (ex: 24)
-                            </label>
-                            <input
-                              type="number"
-                              placeholder="24"
-                              min="0.1"
-                              step="any"
-                              value={calcCartonUnits}
-                              onChange={(e) => setCalcCartonUnits(e.target.value)}
-                              className="w-full bg-card border border-border/60 rounded-lg px-2.5 py-1.5 text-xs text-center font-bold text-primary"
-                            />
-                          </div>
-                          <div className="col-span-3">
-                            <button
-                              type="button"
-                              disabled={!calcCartonPrice || !calcCartonUnits || Number(calcCartonUnits) <= 0}
-                              onClick={() => {
-                                const uCost = Math.round((Number(calcCartonPrice) / Number(calcCartonUnits)) * 100) / 100;
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-12 gap-3 items-end">
+                      <div className="sm:col-span-4">
+                        <label className="text-[11px] font-semibold text-muted-foreground block mb-1">
+                          Nom du format d'achat gros *
+                        </label>
+                        <input
+                          type="text"
+                          placeholder="Ex: Bidon de 25 L, Carton de 50"
+                          value={wholesaleName}
+                          onChange={(e) => setWholesaleName(e.target.value)}
+                          className="w-full rounded-xl border border-border/60 bg-secondary/30 px-3 py-2 text-xs font-semibold focus:border-primary/40 focus:outline-none focus:ring-2 focus:ring-primary/20"
+                        />
+                      </div>
+                      <div className="sm:col-span-3">
+                        <label className="text-[11px] font-semibold text-muted-foreground block mb-1" title="Nombre d'unités contenues">
+                          Contenance ({form.unit ? `${form.unit}s` : 'unités'}) *
+                        </label>
+                        <input
+                          type="number"
+                          placeholder="Ex: 25"
+                          min="0.001"
+                          step="any"
+                          value={wholesaleMultiplier}
+                          onChange={(e) => setWholesaleMultiplier(e.target.value === "" ? "" : parseFloat(e.target.value))}
+                          className="w-full rounded-xl border border-border/60 bg-secondary/30 px-3 py-2 text-xs text-center font-bold text-primary focus:border-primary/40 focus:outline-none focus:ring-2 focus:ring-primary/20"
+                        />
+                      </div>
+                      {role === "admin" && (
+                        <div className="sm:col-span-5">
+                          <label className="text-[11px] font-semibold text-muted-foreground block mb-1" title="Prix total payé au fournisseur pour ce format">
+                            Prix d'achat payé au fournisseur (FCFA) *
+                          </label>
+                          <input
+                            type="number"
+                            placeholder="Ex: 17500"
+                            min="0"
+                            value={wholesalePurchaseCost}
+                            onChange={(e) => {
+                              const val = e.target.value === "" ? "" : parseFloat(e.target.value);
+                              setWholesalePurchaseCost(val);
+                              if (val && Number(val) > 0 && wholesaleMultiplier && Number(wholesaleMultiplier) > 0) {
+                                const uCost = Math.round((Number(val) / Number(wholesaleMultiplier)) * 100) / 100;
                                 setForm({ ...form, cost: uCost });
-                                setShowCostCalculator(false);
-                              }}
-                              className="w-full py-1.5 px-2 rounded-lg bg-primary text-primary-foreground font-bold text-[11px] disabled:opacity-50 hover:opacity-90 shadow-sm transition-all"
-                            >
-                              Appliquer ({calcCartonPrice && calcCartonUnits && Number(calcCartonUnits) > 0 ? Math.round(Number(calcCartonPrice) / Number(calcCartonUnits)) : 0} F)
-                            </button>
-                          </div>
+                              }
+                            }}
+                            className="w-full rounded-xl border border-amber-500/40 bg-amber-500/5 px-3 py-2 text-xs font-bold text-amber-600 dark:text-amber-400 focus:border-primary/40 focus:outline-none focus:ring-2 focus:ring-primary/20"
+                          />
                         </div>
+                      )}
+                    </div>
+
+                    {/* Aperçu financier du coût de revient dérivé */}
+                    {role === "admin" && wholesalePurchaseCost && wholesaleMultiplier && Number(wholesaleMultiplier) > 0 && (
+                      <div className="p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/20 text-xs flex flex-wrap items-center justify-between gap-2">
+                        <span className="text-muted-foreground flex items-center gap-1.5">
+                          ⚡ <strong className="text-foreground">Coût unitaire équivalent :</strong> 
+                          <span>{wholesalePurchaseCost} FCFA ÷ {wholesaleMultiplier} {form.unit || 'u'} =</span>
+                          <span className="font-bold text-amber-600 dark:text-amber-400 text-sm">
+                            {formatPrice(Math.round((Number(wholesalePurchaseCost) / Number(wholesaleMultiplier)) * 100) / 100)} / {form.unit || 'unité'}
+                          </span>
+                        </span>
+                        <span className="text-[10px] text-emerald-600 font-semibold bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20">
+                          ✓ Appliqué automatiquement au stock
+                        </span>
                       </div>
                     )}
+
+                    {/* Stock initial saisi en cartons / bidons */}
+                    <div className="pt-2 border-t border-border/40">
+                      <label className="text-xs font-bold text-foreground block mb-1">
+                        📦 Stock initial disponible à la boutique :
+                      </label>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 items-center">
+                        <div>
+                          <label className="text-[10px] font-semibold text-muted-foreground block mb-1">
+                            Nombre de {wholesaleName || 'cartons / bidons'} complets
+                          </label>
+                          <input
+                            type="number"
+                            min="0"
+                            step="any"
+                            placeholder="Ex: 10"
+                            value={wholesaleStockPacks}
+                            onChange={(e) => {
+                              const packs = e.target.value === "" ? "" : parseFloat(e.target.value);
+                              setWholesaleStockPacks(packs);
+                              const mult = Number(wholesaleMultiplier) || 1;
+                              const extra = Number(retailExtraStock) || 0;
+                              const totalUnits = (Number(packs) || 0) * mult + extra;
+                              setForm({ ...form, stock: totalUnits });
+                            }}
+                            className="w-full rounded-xl border border-border/60 bg-secondary/30 px-3 py-2 text-xs font-bold text-primary focus:border-primary/40 focus:outline-none focus:ring-2 focus:ring-primary/20"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-[10px] font-semibold text-muted-foreground block mb-1">
+                            + Restes entamés au détail ({form.unit ? `${form.unit}s` : 'unités'})
+                          </label>
+                          <input
+                            type="number"
+                            min="0"
+                            step="any"
+                            placeholder="Ex: 5"
+                            value={retailExtraStock}
+                            onChange={(e) => {
+                              const extra = e.target.value === "" ? "" : parseFloat(e.target.value);
+                              setRetailExtraStock(extra);
+                              const mult = Number(wholesaleMultiplier) || 1;
+                              const packs = Number(wholesaleStockPacks) || 0;
+                              const totalUnits = packs * mult + (Number(extra) || 0);
+                              setForm({ ...form, stock: totalUnits });
+                            }}
+                            className="w-full rounded-xl border border-border/60 bg-secondary/30 px-3 py-2 text-xs font-medium focus:border-primary/40 focus:outline-none focus:ring-2 focus:ring-primary/20"
+                          />
+                        </div>
+                      </div>
+                      {(Number(wholesaleStockPacks) > 0 || Number(retailExtraStock) > 0) && (
+                        <p className="mt-2 text-[11px] font-semibold text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-2.5 py-1 rounded-lg border border-emerald-500/20">
+                          📦 Total stock physique unique enregistré : <strong>{(Number(wholesaleStockPacks) || 0) * (Number(wholesaleMultiplier) || 1) + (Number(retailExtraStock) || 0)} {form.unit ? `${form.unit}s` : 'unités'}</strong>
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                ) : (
+                  /* SOUS-PANNEAU ACHAT À LA PIÈCE / UNITÉ DIRECTE */
+                  <div className="rounded-xl border border-border/60 bg-card/80 p-3.5 space-y-3 shadow-xs">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      {role === "admin" && (
+                        <div>
+                          <label className="text-xs font-medium text-muted-foreground mb-1 block">
+                            Coût d'achat par {form.unit || 'unité'} (FCFA) *
+                          </label>
+                          <input
+                            type="number"
+                            placeholder="Ex: 700"
+                            value={form.cost || ""}
+                            onChange={(e) => setForm({ ...form, cost: Number(e.target.value) })}
+                            className="w-full rounded-xl border border-border/60 bg-secondary/30 px-3 py-2 text-xs font-semibold focus:border-primary/40 focus:outline-none focus:ring-2 focus:ring-primary/20"
+                          />
+                        </div>
+                      )}
+                      <div>
+                        <label className="text-xs font-medium text-muted-foreground mb-1 block">
+                          Stock initial en {form.unit ? `${form.unit}s` : 'unités'} *
+                        </label>
+                        <input
+                          type="number"
+                          step="any"
+                          min="0"
+                          placeholder="Ex: 50"
+                          value={form.stock !== undefined ? form.stock : ""}
+                          onChange={(e) => setForm({ ...form, stock: e.target.value === "" ? 0 : parseFloat(e.target.value) })}
+                          className="w-full rounded-xl border border-border/60 bg-secondary/30 px-3 py-2 text-xs font-semibold focus:border-primary/40 focus:outline-none focus:ring-2 focus:ring-primary/20"
+                        />
+                      </div>
+                    </div>
                   </div>
                 )}
-              </div>
 
-              {/* Stock initial & Stock minimum basés sur l'unité */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="text-xs font-medium text-muted-foreground mb-1.5 block">
-                    Stock initial (en <span className="font-bold text-foreground">{form.unit ? `${form.unit}s` : 'unités'}</span>)
-                  </label>
-                  <input
-                    type="number"
-                    step="any"
-                    min="0"
-                    placeholder="Ex: 100"
-                    value={form.stock !== undefined ? form.stock : ""}
-                    onChange={(e) => setForm({ ...form, stock: e.target.value === "" ? 0 : parseFloat(e.target.value) })}
-                    className="w-full rounded-xl border border-border/60 bg-secondary/30 px-3 py-2.5 text-base sm:text-sm focus:border-primary/40 focus:outline-none focus:ring-2 focus:ring-primary/20"
-                  />
-                </div>
-                <div>
-                  <label className="text-xs font-medium text-muted-foreground mb-1.5 block">
-                    Stock minimum d'alerte (en <span className="font-bold text-foreground">{form.unit ? `${form.unit}s` : 'unités'}</span>)
+                {/* Stock d'alerte minimum */}
+                <div className="max-w-xs">
+                  <label className="text-xs font-medium text-muted-foreground mb-1 block">
+                    Seuil d'alerte stock faible (en <span className="font-bold text-foreground">{form.unit ? `${form.unit}s` : 'unités'}</span>)
                   </label>
                   <input
                     type="number"
@@ -1004,220 +1206,160 @@ export default function ProductsPage() {
                     placeholder="Ex: 10"
                     value={form.minStock !== undefined ? form.minStock : ""}
                     onChange={(e) => setForm({ ...form, minStock: e.target.value === "" ? 0 : parseFloat(e.target.value) })}
-                    className="w-full rounded-xl border border-border/60 bg-secondary/30 px-3 py-2.5 text-base sm:text-sm focus:border-primary/40 focus:outline-none focus:ring-2 focus:ring-primary/20"
+                    className="w-full rounded-xl border border-border/60 bg-secondary/30 px-3 py-2 text-xs font-medium focus:border-primary/40 focus:outline-none focus:ring-2 focus:ring-primary/20"
                   />
                 </div>
               </div>
 
-              {/* Section Conditionnements & Vente en Gros / Demi-gros */}
-              {isMultiUnitsEnabled && (
-                <div className="border border-border/60 rounded-xl p-3.5 bg-secondary/15 space-y-3">
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                    <div>
-                      <h4 className="text-xs font-semibold text-foreground flex items-center gap-1.5">
-                        <Layers className="h-3.5 w-3.5 text-primary" />
-                        Conditionnements & Vente en Gros / Demi-gros
-                      </h4>
-                      <p className="text-[11px] text-muted-foreground">
-                        Vendez par carton, bidon, sac ou pack tout en décomptant le même stock physique en {form.unit ? `${form.unit}s` : 'unités'}.
-                      </p>
-                      <div className="mt-1.5 p-2 rounded-lg bg-primary/5 border border-primary/20 text-[10px] text-muted-foreground leading-relaxed">
-                        <strong className="text-foreground">Tarification 100% libre par format :</strong> Vous fixez le prix de chaque format selon vos convenances. Vendre un bidon de 25 L à 22 500 FCFA n'impose pas de vendre le litre à 900 FCFA. Chaque conditionnement a son propre prix de vente indépendant.
+              {/* SECTION 3 : TARIFS DE REVENTE (Gros & Détail 100% Indépendants) */}
+              <div className="rounded-2xl border-2 border-emerald-500/20 bg-gradient-to-b from-emerald-500/5 via-secondary/15 to-transparent p-4 space-y-4">
+                <div>
+                  <h3 className="text-xs font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400 flex items-center gap-1.5">
+                    <DollarSign className="h-4 w-4" />
+                    2. Prix de revente (Gros & Détail selon vos convenances)
+                  </h3>
+                  <p className="text-[11px] text-muted-foreground mt-0.5">
+                    Fixez librement vos prix. Le prix au détail n'est pas obligatoirement égal à la division du carton.
+                  </p>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  {/* Prix de vente au détail par unité de base */}
+                  <div className="p-3 rounded-xl bg-card border border-border/60 space-y-1.5 shadow-xs">
+                    <label className="text-xs font-bold text-foreground block">
+                      🛍️ Vente au DÉTAIL par <span className="text-primary font-extrabold">{form.unit || 'unité'}</span> (FCFA) *
+                    </label>
+                    <input
+                      type="number"
+                      placeholder="Ex: 1000"
+                      value={form.price || ""}
+                      onChange={(e) => setForm({ ...form, price: Number(e.target.value) })}
+                      className="w-full rounded-xl border border-primary/40 bg-secondary/30 px-3 py-2.5 text-base sm:text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 font-extrabold text-foreground"
+                    />
+                    {role === "admin" && form.price > 0 && form.cost > 0 && (
+                      <div className="flex items-center justify-between text-[10px] pt-1">
+                        <span className="text-muted-foreground">Marge détail :</span>
+                        <span className="font-bold text-emerald-600">
+                          +{formatPrice(form.price - form.cost)} ({Math.round(((form.price - form.cost) / form.price) * 100)}%)
+                        </span>
                       </div>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => setFormUnits([...formUnits, { name: "", multiplier: 1, price: "", cost: "", barcode: "" }])}
-                      className="text-xs bg-primary/10 text-primary hover:bg-primary/20 px-2.5 py-1.5 rounded-lg font-semibold transition-colors flex items-center gap-1 shrink-0 self-start sm:self-auto"
-                    >
-                      <Plus className="h-3.5 w-3.5" /> Ajouter un format
-                    </button>
+                    )}
                   </div>
 
-                  {/* Suggestions rapides selon l'unité de base */}
-                  {(() => {
-                    const activeBase = BASE_UNITS.find(b => b.label === form.unit);
-                    const presets = activeBase?.presets || ["Carton (24)", "Pack (6)", "Demi-portion (0.5)"];
-                    return (
-                      <div className="flex flex-wrap items-center gap-1.5 pt-1 border-t border-border/40">
-                        <span className="text-[10px] text-muted-foreground flex items-center gap-1">
-                          <Sparkles className="h-3 w-3 text-amber-500" />
-                          Suggestions rapides :
-                        </span>
-                        {presets.map((presetName) => (
-                          <button
-                            key={presetName}
-                            type="button"
-                            onClick={() => {
-                              const match = presetName.match(/\d+(\.\d+)?/);
-                              const mult = match ? parseFloat(match[0]) : 1;
-                              const autoCost = form.cost && mult ? Math.round(Number(form.cost) * mult) : "";
-                              setFormUnits([...formUnits, { name: presetName, multiplier: mult, price: "", cost: autoCost, barcode: "" }]);
-                            }}
-                            className="text-[10px] px-2 py-0.5 rounded-md bg-card hover:bg-primary/10 hover:text-primary text-foreground border border-border/50 font-medium transition-all shadow-xs"
-                          >
-                            + {presetName}
-                          </button>
-                        ))}
-                      </div>
-                    );
-                  })()}
-
-                  {formUnits.length === 0 ? (
-                    <p className="text-[11px] text-muted-foreground italic py-1">
-                      Aucun conditionnement secondaire configuré (produit vendu uniquement à l'unité de base : {form.unit || 'Pièce'}).
-                    </p>
+                  {/* Prix de vente en gros du carton/bidon */}
+                  {purchaseMode === "wholesale" && wholesaleName ? (
+                    <div className="p-3 rounded-xl bg-card border border-border/60 space-y-1.5 shadow-xs">
+                      <label className="text-xs font-bold text-foreground block">
+                        📦 Vente en GROS par <span className="text-amber-600 dark:text-amber-400 font-extrabold">{wholesaleName}</span> (FCFA)
+                      </label>
+                      <input
+                        type="number"
+                        placeholder="Ex: 22500"
+                        value={wholesaleSellingPrice}
+                        onChange={(e) => setWholesaleSellingPrice(e.target.value === "" ? "" : parseFloat(e.target.value))}
+                        className="w-full rounded-xl border border-amber-500/40 bg-secondary/30 px-3 py-2.5 text-base sm:text-sm focus:border-amber-500 focus:outline-none focus:ring-2 focus:ring-amber-500/20 font-extrabold text-foreground"
+                      />
+                      {role === "admin" && wholesaleSellingPrice && wholesalePurchaseCost && (
+                        <div className="flex items-center justify-between text-[10px] pt-1">
+                          <span className="text-muted-foreground">Marge gros :</span>
+                          <span className="font-bold text-amber-600">
+                            +{formatPrice(Number(wholesaleSellingPrice) - Number(wholesalePurchaseCost))} ({Math.round(((Number(wholesaleSellingPrice) - Number(wholesalePurchaseCost)) / Number(wholesaleSellingPrice)) * 100)}%)
+                          </span>
+                        </div>
+                      )}
+                    </div>
                   ) : (
-                    <div className="space-y-2.5 max-h-56 overflow-y-auto pr-1">
-                      {formUnits.map((u, idx) => {
-                        const mult = Number(u.multiplier) || 1;
-                        const autoSaleProrata = form.price && mult ? Number(form.price) * mult : 0;
-                        const autoCostProrata = form.cost && mult ? Number(form.cost) * mult : 0;
-                        
-                        const effectiveCartonPrice = (u.price !== "" && u.price !== undefined && u.price !== null && Number(u.price) > 0)
-                          ? Number(u.price)
-                          : autoSaleProrata;
+                    <div className="p-3 rounded-xl bg-secondary/20 border border-dashed border-border/60 flex flex-col justify-center items-center text-center">
+                      <span className="text-xs font-medium text-muted-foreground">Aucun format gros principal</span>
+                      <span className="text-[10px] text-muted-foreground/70">Passez en mode "Achat en Gros" ci-dessus pour configurer un carton.</span>
+                    </div>
+                  )}
+                </div>
 
-                        const effectiveCartonCost = (u.cost !== "" && u.cost !== undefined && u.cost !== null && Number(u.cost) > 0)
-                          ? Number(u.cost)
-                          : autoCostProrata;
+                {/* Formats de vente supplémentaires libres (ex: Demi-litre, Quart, Pack de 6, etc.) */}
+                {isMultiUnitsEnabled && (
+                  <div className="pt-3 border-t border-border/40 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <h4 className="text-xs font-bold text-foreground flex items-center gap-1.5">
+                          <Layers className="h-3.5 w-3.5 text-primary" />
+                          Autres conditionnements & fractions libres
+                        </h4>
+                        <p className="text-[10px] text-muted-foreground">
+                          Exemple : Demi-litre (0.5 L à 550 FCFA), Quart de litre, Pack intermédiaire...
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setFormUnits([...formUnits, { name: "", multiplier: 1, price: "", cost: "", barcode: "" }])}
+                        className="text-xs bg-primary/10 text-primary hover:bg-primary/20 px-2.5 py-1.5 rounded-lg font-semibold transition-colors flex items-center gap-1"
+                      >
+                        <Plus className="h-3.5 w-3.5" /> Ajouter un format
+                      </button>
+                    </div>
 
-                        const equivUnitCost = (u.cost && Number(u.cost) > 0 && mult > 0)
-                          ? Math.round((Number(u.cost) / mult) * 100) / 100
-                          : (Number(form.cost) || 0);
+                    {formUnits.length > 0 && (
+                      <div className="space-y-2.5 max-h-52 overflow-y-auto pr-1">
+                        {formUnits.map((u, idx) => {
+                          const mult = Number(u.multiplier) || 1;
+                          const autoSaleProrata = form.price && mult ? Number(form.price) * mult : 0;
+                          const autoCostProrata = form.cost && mult ? Number(form.cost) * mult : 0;
+                          const effectivePrice = (u.price !== "" && u.price !== undefined && u.price !== null && Number(u.price) > 0)
+                            ? Number(u.price)
+                            : autoSaleProrata;
+                          const effectiveCost = (u.cost !== "" && u.cost !== undefined && u.cost !== null && Number(u.cost) > 0)
+                            ? Number(u.cost)
+                            : autoCostProrata;
 
-                        const cartonMarginVal = effectiveCartonPrice > 0 ? (effectiveCartonPrice - effectiveCartonCost) : 0;
-                        const cartonMarginPercent = effectiveCartonPrice > 0 ? Math.round((cartonMarginVal / effectiveCartonPrice) * 100) : 0;
-
-                        return (
-                          <div key={idx} className="p-3 rounded-xl bg-card border border-border/60 text-xs space-y-2.5 shadow-xs">
-                            <div className="grid grid-cols-12 gap-2 items-center">
-                              {/* Nom */}
-                              <div className="col-span-12 sm:col-span-4">
-                                <label className="text-[10px] font-semibold text-muted-foreground block mb-1">
-                                  Format (Carton, Bidon, Boîte)
-                                </label>
-                                <input
-                                  type="text"
-                                  placeholder={
-                                    form.unit?.toLowerCase().includes("litre")
-                                      ? "Ex: Bidon de 25 L, Bouteille 1.5 L"
-                                      : form.unit?.toLowerCase().includes("kg")
-                                      ? "Ex: Sac de 50 kg, Carton de 10 kg"
-                                      : "Ex: Carton de 24, Pack de 6"
-                                  }
-                                  value={u.name}
-                                  onChange={(e) => {
-                                    const next = [...formUnits];
-                                    next[idx].name = e.target.value;
-                                    setFormUnits(next);
-                                  }}
-                                  className="w-full bg-secondary/30 border border-border/60 rounded-lg px-2.5 py-1.5 text-xs font-medium"
-                                />
-                              </div>
-
-                              {/* Contenance */}
-                              <div className="col-span-4 sm:col-span-2">
-                                <label className="text-[10px] font-semibold text-muted-foreground block mb-1" title="Unités contenues">
-                                  Contenance ({form.unit ? `${form.unit}s` : 'Unités'})
-                                </label>
-                                <input
-                                  type="number"
-                                  placeholder="24"
-                                  min="0.001"
-                                  step="any"
-                                  value={u.multiplier || ""}
-                                  onChange={(e) => {
-                                    const next = [...formUnits];
-                                    next[idx].multiplier = Number(e.target.value);
-                                    setFormUnits(next);
-                                  }}
-                                  className="w-full bg-secondary/30 border border-border/60 rounded-lg px-2 py-1.5 text-xs font-bold text-center text-primary"
-                                />
-                              </div>
-
-                              {/* Prix d'achat du carton */}
-                              <div className="col-span-4 sm:col-span-3">
-                                <label className="text-[10px] font-semibold text-muted-foreground block mb-1" title="Prix d'achat payé au fournisseur pour ce format">
-                                  Prix d&apos;achat ({form.unit?.toLowerCase().includes('carton') ? 'carton' : 'format'})
-                                </label>
-                                <input
-                                  type="number"
-                                  placeholder={autoCostProrata > 0 ? String(autoCostProrata) : "Prorata achat"}
-                                  value={u.cost || ""}
-                                  onChange={(e) => {
-                                    const next = [...formUnits];
-                                    next[idx].cost = e.target.value;
-                                    setFormUnits(next);
-                                  }}
-                                  className="w-full bg-secondary/30 border border-border/60 rounded-lg px-2 py-1.5 text-xs font-semibold text-amber-600 dark:text-amber-400"
-                                />
-                              </div>
-
-                              {/* Prix de vente du carton */}
-                              <div className="col-span-3 sm:col-span-2">
-                                <label className="text-[10px] font-semibold text-muted-foreground block mb-1">
-                                  Prix de vente
-                                </label>
-                                <input
-                                  type="number"
-                                  placeholder={autoSaleProrata > 0 ? String(autoSaleProrata) : "Prorata vente"}
-                                  value={u.price || ""}
-                                  onChange={(e) => {
-                                    const next = [...formUnits];
-                                    next[idx].price = e.target.value;
-                                    setFormUnits(next);
-                                  }}
-                                  className="w-full bg-secondary/30 border border-border/60 rounded-lg px-2 py-1.5 text-xs font-semibold"
-                                />
-                              </div>
-
-                              {/* Bouton supprimer */}
-                              <div className="col-span-1 flex justify-center pt-3">
-                                <button
-                                  type="button"
-                                  onClick={() => setFormUnits(formUnits.filter((_, i) => i !== idx))}
-                                  className="text-destructive/70 hover:text-destructive p-1.5 rounded-lg hover:bg-destructive/10 transition-colors"
-                                  title="Supprimer ce conditionnement"
-                                >
-                                  <Trash2 className="h-4 w-4" />
-                                </button>
-                              </div>
-                            </div>
-
-                            {/* Ligne d'analyse financière du format : Coût unitaire, Rentabilité & Marge */}
-                            <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-border/30 text-[10px]">
-                              <div className="flex flex-wrap items-center gap-2">
-                                <span className="text-muted-foreground">
-                                  💡 1 {u.name || 'format'} = {mult} {form.unit || 'unité'}(s)
-                                </span>
-                                {u.cost && Number(u.cost) > 0 && mult > 0 && (
-                                  <span className="font-semibold text-foreground flex items-center gap-1">
-                                    • Coût de revient : <span className="text-amber-600 dark:text-amber-400 font-bold">{formatPrice(equivUnitCost)}</span>/{form.unit || 'u'}
-                                    <button
-                                      type="button"
-                                      onClick={() => setForm({ ...form, cost: equivUnitCost })}
-                                      className="text-primary hover:underline font-bold text-[10px] ml-1 bg-primary/10 px-1.5 py-0.5 rounded"
-                                      title="Copier ce coût vers l'article principal"
-                                    >
-                                      ⚡ Appliquer au coût de base
-                                    </button>
-                                  </span>
-                                )}
-                              </div>
-
-                              <div className="flex items-center gap-2">
-                                {effectiveCartonPrice > 0 && effectiveCartonCost > 0 && (
-                                  <span className={`px-2 py-0.5 rounded-full font-bold text-[10px] flex items-center gap-1 ${
-                                    cartonMarginVal >= 0
-                                      ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20'
-                                      : 'bg-destructive/10 text-destructive border border-destructive/20'
-                                  }`}>
-                                    Marge format : {cartonMarginVal >= 0 ? '+' : ''}{formatPrice(cartonMarginVal)} ({cartonMarginPercent}%)
-                                  </span>
-                                )}
-                                <div className="flex items-center gap-1 text-muted-foreground">
-                                  <span>Code-barres :</span>
+                          return (
+                            <div key={idx} className="p-2.5 rounded-xl bg-card border border-border/60 text-xs space-y-2 shadow-xs">
+                              <div className="grid grid-cols-12 gap-2 items-center">
+                                <div className="col-span-12 sm:col-span-4">
+                                  <label className="text-[10px] font-semibold text-muted-foreground block mb-0.5">Nom du format</label>
+                                  <input
+                                    type="text"
+                                    placeholder="Ex: Demi-litre, Pack de 6"
+                                    value={u.name}
+                                    onChange={(e) => {
+                                      const next = [...formUnits];
+                                      next[idx].name = e.target.value;
+                                      setFormUnits(next);
+                                    }}
+                                    className="w-full bg-secondary/30 border border-border/60 rounded-lg px-2 py-1 text-xs font-medium"
+                                  />
+                                </div>
+                                <div className="col-span-4 sm:col-span-2">
+                                  <label className="text-[10px] font-semibold text-muted-foreground block mb-0.5">Contenance ({form.unit || 'u'})</label>
+                                  <input
+                                    type="number"
+                                    step="any"
+                                    min="0.001"
+                                    placeholder="0.5"
+                                    value={u.multiplier || ""}
+                                    onChange={(e) => {
+                                      const next = [...formUnits];
+                                      next[idx].multiplier = Number(e.target.value);
+                                      setFormUnits(next);
+                                    }}
+                                    className="w-full bg-secondary/30 border border-border/60 rounded-lg px-2 py-1 text-xs font-bold text-center text-primary"
+                                  />
+                                </div>
+                                <div className="col-span-4 sm:col-span-3">
+                                  <label className="text-[10px] font-semibold text-muted-foreground block mb-0.5">Prix de vente libre (FCFA)</label>
+                                  <input
+                                    type="number"
+                                    placeholder="Ex: 550"
+                                    value={u.price || ""}
+                                    onChange={(e) => {
+                                      const next = [...formUnits];
+                                      next[idx].price = e.target.value;
+                                      setFormUnits(next);
+                                    }}
+                                    className="w-full bg-secondary/30 border border-border/60 rounded-lg px-2 py-1 text-xs font-bold"
+                                  />
+                                </div>
+                                <div className="col-span-3 sm:col-span-2">
+                                  <label className="text-[10px] font-semibold text-muted-foreground block mb-0.5">Code-barres</label>
                                   <input
                                     type="text"
                                     placeholder="Optionnel"
@@ -1227,18 +1369,27 @@ export default function ProductsPage() {
                                       next[idx].barcode = e.target.value;
                                       setFormUnits(next);
                                     }}
-                                    className="bg-secondary/40 border border-border/40 rounded px-1.5 py-0.5 text-[10px] w-24 font-mono text-foreground"
+                                    className="w-full bg-secondary/30 border border-border/60 rounded-lg px-2 py-1 text-[11px] font-mono"
                                   />
+                                </div>
+                                <div className="col-span-1 flex justify-center pt-3">
+                                  <button
+                                    type="button"
+                                    onClick={() => setFormUnits(formUnits.filter((_, i) => i !== idx))}
+                                    className="text-destructive/70 hover:text-destructive p-1 rounded-lg hover:bg-destructive/10"
+                                  >
+                                    <Trash2 className="h-3.5 w-3.5" />
+                                  </button>
                                 </div>
                               </div>
                             </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
-              )}
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
 
               {/* Section Traçabilité & Date de Péremption (DLC / Lots) */}
               <div className="border border-border/60 rounded-xl p-3.5 bg-secondary/15 space-y-3">
