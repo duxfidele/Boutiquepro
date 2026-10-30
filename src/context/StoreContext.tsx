@@ -1199,13 +1199,22 @@ const StoreContext = createContext<StoreContextType | undefined>(undefined);
 
 export const isSubscriptionExpiredError = (err: any): boolean => {
   if (!err) return false;
-  const msg = (err.message || err.details || '').toLowerCase();
-  return (
-    err.code === 'P0001' ||
-    msg.includes('abonnement expiré') ||
-    msg.includes('sub_gate') ||
-    msg.includes('subscription_ends_at')
-  );
+  const msg = (err.message || err.details || err.hint || "").toLowerCase();
+  const isExplicitSubGate = 
+    msg.includes("abonnement expiré") ||
+    msg.includes("sub_gate") ||
+    msg.includes("subscription_ends_at") ||
+    msg.includes("is_store_subscription_active");
+  const isSubscriptionP0001 = 
+    err.code === "P0001" && (
+      msg.includes("abonnement") ||
+      msg.includes("forfait") ||
+      msg.includes("souscription") ||
+      msg.includes("essai") ||
+      msg.includes("expired") ||
+      msg.includes("subscription")
+    );
+  return isExplicitSubGate || isSubscriptionP0001;
 };
 
 export function StoreProvider({ children }: { children: ReactNode }) {
