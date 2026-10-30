@@ -195,6 +195,29 @@ Un audit complet et rigoureux a été exécuté sur l'ensemble de l'application 
 5. **En-têtes HTTP de Sécurité :**
    - Configuration active dans `next.config.mjs` et appliquée par Vercel : `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, `Strict-Transport-Security: max-age=63072000; includeSubDomains; preload`, `Referrer-Policy: strict-origin-when-cross-origin`.
 
+### 13. Système Multi-Unités & Approvisionnement Séquentiel en 3 Temps (Gros & Détail)
+- **Séquence chronologique rigoureuse d'approvisionnement :**
+  - **Étape 1 (Stock avant achat)** : Affichage automatique du stock restant en boutique avant toute nouvelle saisie (ex: 10 cartons de 24 + 10 pièces).
+  - **Étape 2 (Nouvel arrivage)** : Saisie transparente de la quantité achetée en cartons entiers (ou bidons/sacs) et des pièces supplémentaires détachées.
+  - **Étape 3 (Stock global disponible)** : Calcul instantané et réactif du total physique post-achat ($Stock = Stock_{existant} + (Cartons \times Contenance) + Pièces$).
+- **Généralisation Gros et Pièces :** Le même flux séquentiel en 3 temps s'applique à la fois aux achats en gros et aux achats directs à la pièce/unité.
+- **Calcul automatique du Coût de Revient Unitaire :** Déduction mathématique instantanée du coût unitaire de la pièce à partir du prix d'achat du carton ($Coût\ unitaire = Prix\ carton / Contenance$) sans risque d'erreur humaine.
+- **Seuil d'alerte en cartons / colis :** Paramétrage du seuil de réapprovisionnement directement exprimé en nombre de cartons (avec conversion automatique en unités de base physiques pour les déclenchements d'alertes).
+- **Tarification libre :** Indépendance totale entre le prix de vente carton et le prix de vente à la pièce.
+
+### 14. Refonte Ergonomique du Panier de Caisse (POS 2 Lignes Anti-Chevauchement)
+- **Architecture de carte à 2 niveaux verticaux :**
+  - **Ligne 1 (Entête)** : Avatar du produit + Nom de l'article à gauche, Prix total de la ligne en grand et bouton de suppression (poubelle) à droite.
+  - **Ligne 2 (Contrôles)** : Menu déroulant de sélection du format (*Carton* ou *Détail*) à largeur contrôlée à gauche, touches de réglage de quantité `[ — ] [ Qté ] [ + ]` et bascule `Montant` à droite.
+- **Élimination définitive des chevauchements :** Espace dédié pour chaque élément interactif, prévenant toute collision même avec des intitulés longs (*Unité de base (1 000 000 FCFA)*).
+- **Résolution tolérante des formats de vente :** Acceptation sans blocage des libellés de détail (`Unité`, `Pièce`, `Pièce / Unité`, `Litre`, etc.) côté frontend et serveur SQL.
+
+### 15. Sécurisation & Synchronisation Universelle des Abonnements SaaS
+- **Synchronisation automatique Compte & Boutiques :** Liaison directe de la période payée de l'administrateur (`admin_subscriptions`) avec l'ensemble de ses boutiques et caisses.
+- **Héritage à la création (`create_new_store`) :** Toute nouvelle boutique créée par un utilisateur possédant un abonnement payant actif hérite automatiquement de sa formule et de son échéance au lieu de basculer sur un essai temporaire.
+- **Fonction PostgreSQL universelle (`is_store_subscription_active`) :** Contrôle dynamique en temps réel évitant tout blocage intempestif des ventes pour les commerçants abonnés et leurs caissiers.
+- **Intercepteur d'erreurs sécurisé (`isSubscriptionExpiredError`) :** Suppression du faux positif sur le code PostgreSQL générique `P0001` ; seuls les véritables blocages de souscription affichent le message d'abonnement expiré.
+
 ---
 
 ## 💼 Modèles d'Exploitation Commerciale
@@ -236,4 +259,6 @@ Un audit complet et rigoureux a été exécuté sur l'ensemble de l'application 
 | `src/app/api/subscription/status/route.ts` | Route API GET de vérification du statut d'abonnement d'une boutique |
 | `src/components/subscription/MonerizCheckoutModal.tsx` | Composant React Liveframe (iframe) avec gestion du protocole postMessage v1 |
 | `src/components/subscription/SubscriptionModal.tsx` | Modal de sélection d'abonnement (Pro, Business, Mensuel, Annuel) |
-| `saas_moneriz_integration.sql` | Migration SQL Supabase pour les commandes et événements Moneriz |
+| saas_moneriz_integration.sql | Migration SQL Supabase pour les commandes et événements Moneriz |
+| saas_subscription_permanent_fix.sql | Migration SQL universelle de synchronisation des abonnements et héritage des boutiques |
+| fix_create_sale_unit_name.sql | Mise à jour de la RPC create_sale pour la résolution tolérante des formats gros/détail |
