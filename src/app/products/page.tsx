@@ -1352,82 +1352,131 @@ export default function ProductsPage() {
                 ) : (
                   /* SOUS-PANNEAU ACHAT DIRECT À LA PIÈCE / UNITÉ */
                   <div className="rounded-xl border border-border/60 bg-card/80 p-3.5 space-y-3.5 shadow-xs">
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                      {role === "admin" && (
-                        <div>
-                          <label className="text-xs font-medium text-muted-foreground mb-1 block">
-                            Coût d'achat par {form.unit || 'unité'} (FCFA) *
-                          </label>
-                          <input
-                            type="number"
-                            placeholder="Ex: 700"
-                            value={form.cost || ""}
-                            onChange={(e) => setForm({ ...form, cost: Number(e.target.value) })}
-                            className="w-full rounded-xl border border-border/60 bg-secondary/30 px-3 py-2 text-xs font-semibold focus:border-primary/40 focus:outline-none focus:ring-2 focus:ring-primary/20"
-                          />
-                        </div>
-                      )}
-                      <div>
-                        <label className="text-xs font-medium text-muted-foreground mb-1 block">
-                          Quantité achetée au fournisseur (en {form.unit ? `${form.unit}s` : 'unités'})
+                    {/* ÉTAPE 1 : STOCK DISPONIBLE AVANT L'ACHAT (AUTOMATIQUE) */}
+                    <div className="p-3 rounded-xl bg-secondary/30 border border-border/50 space-y-1.5">
+                      <div className="flex items-center justify-between">
+                        <label className="text-xs font-bold text-foreground flex items-center gap-1.5">
+                          🕒 Stock disponible en boutique AVANT l'achat :
                         </label>
-                        <input
-                          type="number"
-                          step="any"
-                          min="0"
-                          placeholder="Ex: 50"
-                          value={retailPurchasedQty}
-                          onChange={(e) => {
-                            const q = e.target.value === "" ? "" : parseFloat(e.target.value);
-                            setRetailPurchasedQty(q);
-                            if (form.stock === 0 && q !== "") {
-                              setForm({ ...form, stock: Number(q) });
-                            }
-                          }}
-                          className="w-full rounded-xl border border-border/60 bg-secondary/30 px-3 py-2 text-xs font-semibold focus:border-primary/40 focus:outline-none focus:ring-2 focus:ring-primary/20"
-                        />
+                        <span className="text-[10px] text-muted-foreground bg-secondary/80 px-2 py-0.5 rounded-md border border-border/40">
+                          Automatique (déjà en rayon/réserve)
+                        </span>
+                      </div>
+                      <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
+                        <span className="text-muted-foreground">
+                          {Number(previousStockBeforePurchase) > 0 ? (
+                            <>Reste actuel enregistré : <strong className="text-foreground font-semibold">{previousStockBeforePurchase} {form.unit ? `${form.unit}s` : 'unités'}</strong></>
+                          ) : (
+                            <span className="italic text-muted-foreground">Aucun stock préalable (nouveau produit ou stock épuisé : 0)</span>
+                          )}
+                        </span>
+                        <span className="font-extrabold text-foreground bg-card px-2.5 py-1 rounded-lg border border-border/60 text-xs">
+                          = {Number(previousStockBeforePurchase).toLocaleString("fr-FR", { maximumFractionDigits: 3 })} {form.unit ? `${form.unit}s` : 'unités'}
+                        </span>
                       </div>
                     </div>
 
-                    {role === "admin" && retailPurchasedQty && Number(retailPurchasedQty) > 0 && form.cost && Number(form.cost) > 0 && (
-                      <div className="text-[11px] p-2 rounded-lg bg-secondary/30 border border-border/50 text-muted-foreground">
-                        <span>Total facture approvisionnement :</span>
-                        <span className="font-extrabold text-foreground ml-1.5">
-                          {formatPrice(Number(retailPurchasedQty) * Number(form.cost))}
+                    {/* ÉTAPE 2 : NOUVEL ARRIVAGE / QUANTITÉ ACHETÉE À LA PIÈCE */}
+                    <div className="p-3.5 rounded-xl bg-primary/5 border border-primary/25 space-y-3">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
+                        <label className="text-xs font-bold text-primary flex items-center gap-1.5">
+                          🚚 Nouvel arrivage / Quantité achetée au fournisseur :
+                        </label>
+                        <span className="text-[10px] text-muted-foreground">
+                          Indiquez les unités achetées et le coût
                         </span>
                       </div>
-                    )}
 
-                    {/* Stock disponible et alerte au détail */}
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 border-t border-border/40">
-                      <div>
-                        <label className="text-xs font-medium text-muted-foreground mb-1 block">
-                          Stock actuellement disponible en {form.unit ? `${form.unit}s` : 'unités'} *
-                        </label>
-                        <input
-                          type="number"
-                          step="any"
-                          min="0"
-                          placeholder="Ex: 50"
-                          value={form.stock !== undefined ? form.stock : ""}
-                          onChange={(e) => setForm({ ...form, stock: e.target.value === "" ? 0 : parseFloat(e.target.value) })}
-                          className="w-full rounded-xl border border-border/60 bg-secondary/30 px-3 py-2 text-xs font-bold text-primary focus:border-primary/40 focus:outline-none focus:ring-2 focus:ring-primary/20"
-                        />
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 items-end">
+                        {role === "admin" && (
+                          <div>
+                            <label className="text-xs font-medium text-muted-foreground mb-1 block">
+                              Coût d'achat par {form.unit || 'unité'} (FCFA) *
+                            </label>
+                            <input
+                              type="number"
+                              placeholder="Ex: 700"
+                              value={form.cost || ""}
+                              onChange={(e) => setForm({ ...form, cost: Number(e.target.value) })}
+                              className="w-full rounded-xl border border-border/60 bg-secondary/30 px-3 py-2 text-xs font-semibold focus:border-primary/40 focus:outline-none focus:ring-2 focus:ring-primary/20"
+                            />
+                          </div>
+                        )}
+                        <div>
+                          <label className="text-xs font-bold text-primary mb-1 block">
+                            Quantité achetée au fournisseur (en {form.unit ? `${form.unit}s` : 'unités'})
+                          </label>
+                          <input
+                            type="number"
+                            step="any"
+                            min="0"
+                            placeholder="Ex: 50"
+                            value={retailPurchasedQty}
+                            onChange={(e) => {
+                              const q = e.target.value === "" ? "" : parseFloat(e.target.value);
+                              setRetailPurchasedQty(q);
+                              const prev = Number(previousStockBeforePurchase) || 0;
+                              const arrivage = Number(q) || 0;
+                              setForm({ ...form, stock: prev + arrivage });
+                            }}
+                            className="w-full rounded-xl border border-primary/40 bg-card px-3 py-2 text-xs font-bold text-primary focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+                          />
+                        </div>
                       </div>
-                      <div>
-                        <label className="text-xs font-medium text-muted-foreground mb-1 block">
-                          Seuil d'alerte stock faible (en {form.unit ? `${form.unit}s` : 'unités'})
+
+                      {role === "admin" && retailPurchasedQty && Number(retailPurchasedQty) > 0 && form.cost && Number(form.cost) > 0 && (
+                        <div className="text-[11px] p-2 rounded-lg bg-card border border-border/50 text-muted-foreground flex items-center justify-between">
+                          <span>Total facture approvisionnement :</span>
+                          <span className="font-extrabold text-foreground text-sm">
+                            {formatPrice(Number(retailPurchasedQty) * Number(form.cost))}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* ÉTAPE 3 : TOTAL GLOBAL AUTOMATIQUE APRÈS ACHAT */}
+                    <div className="p-3.5 rounded-xl bg-emerald-500/10 border-2 border-emerald-500/30 space-y-2">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
+                        <label className="text-xs font-bold text-emerald-700 dark:text-emerald-400 flex items-center gap-1.5">
+                          ✨ TOTAL GLOBAL DISPONIBLE APRÈS ACHAT (Calculé automatiquement) :
                         </label>
-                        <input
-                          type="number"
-                          step="any"
-                          min="0"
-                          placeholder="Ex: 10"
-                          value={form.minStock !== undefined ? form.minStock : ""}
-                          onChange={(e) => setForm({ ...form, minStock: e.target.value === "" ? 0 : parseFloat(e.target.value) })}
-                          className="w-full rounded-xl border border-amber-500/40 bg-amber-500/5 px-3 py-2 text-xs font-bold text-amber-600 dark:text-amber-400 focus:border-amber-500 focus:outline-none focus:ring-2 focus:ring-amber-500/20"
-                        />
+                        <span className="text-[10px] font-bold text-emerald-600 bg-emerald-500/20 px-2 py-0.5 rounded-full">
+                          ✓ Stock physique effectif pour la vente
+                        </span>
                       </div>
+
+                      {(() => {
+                        const prev = Number(previousStockBeforePurchase) || 0;
+                        const arrivage = Number(retailPurchasedQty) || 0;
+                        const grandTotal = prev + arrivage;
+
+                        return (
+                          <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
+                            <p className="text-xs text-foreground font-medium">
+                              <span className="text-muted-foreground">{prev} avant</span> + <span className="text-primary font-bold">{arrivage} arrivage</span> =
+                            </p>
+                            <div className="text-base font-black text-emerald-600 dark:text-emerald-400 bg-card px-3 py-1 rounded-xl border border-emerald-500/30">
+                              {grandTotal.toLocaleString("fr-FR", { maximumFractionDigits: 3 })} {form.unit ? `${form.unit}s` : 'unités'}
+                            </div>
+                          </div>
+                        );
+                      })()}
+                    </div>
+
+                    {/* Seuil d'alerte stock faible en pièces */}
+                    <div className="pt-2 border-t border-border/40 max-w-sm">
+                      <label className="text-xs font-medium text-muted-foreground mb-1 block">
+                        ⚠️ Seuil d'alerte stock faible (en {form.unit ? `${form.unit}s` : 'unités'})
+                      </label>
+                      <input
+                        type="number"
+                        step="any"
+                        min="0"
+                        placeholder="Ex: 10"
+                        value={form.minStock !== undefined ? form.minStock : ""}
+                        onChange={(e) => setForm({ ...form, minStock: e.target.value === "" ? 0 : parseFloat(e.target.value) })}
+                        className="w-full rounded-xl border border-amber-500/40 bg-amber-500/5 px-3 py-2 text-xs font-bold text-amber-600 dark:text-amber-400 focus:border-amber-500 focus:outline-none focus:ring-2 focus:ring-amber-500/20"
+                      />
                     </div>
                   </div>
                 )}
