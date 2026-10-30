@@ -339,7 +339,7 @@ export default function POSPage() {
       items: cart.map((c) => {
         const mult = c.selectedUnit?.multiplier ?? 1;
         const uPrice = c.unitPrice ?? (c.selectedUnit ? (c.selectedUnit.price ?? (c.product.price * mult)) : c.product.price);
-        const uName = c.selectedUnit?.name ?? (c.product.unit || 'Unité');
+        const uName = (c.selectedUnit && c.selectedUnit.multiplier !== 1) ? c.selectedUnit.name : 'Unité';
         const qtyRef = Math.round((c.quantity * mult) * 1000) / 1000;
         const lineTotal = c.customTotal !== undefined ? c.customTotal : Math.round(uPrice * c.quantity);
         const prodBatches = (state.batches || [])
@@ -407,7 +407,7 @@ export default function POSPage() {
     const quoteItems: QuoteItem[] = cart.map((c, idx) => {
       let unitPrice = c.product.price;
       let unitMultiplier = 1;
-      let unitName = c.product.unit || "Unité";
+      let unitName = (c.selectedUnit && c.selectedUnit.multiplier !== 1) ? c.selectedUnit.name : "Unité";
 
       if (c.selectedUnit) {
         unitName = c.selectedUnit.name;
