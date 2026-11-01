@@ -2,6 +2,7 @@
 
 import React, { useState } from "react";
 import { supabase } from "@/lib/supabase";
+import { WHATSAPP_COMMUNITY_URL } from "@/lib/whatsapp";
 import {
   Store,
   Lock,
@@ -14,7 +15,9 @@ import {
   ShoppingCart,
   Building2,
   User,
-  Info
+  Info,
+  MessageCircle,
+  ExternalLink
 } from "lucide-react";
 import TurnstileWidget from "@/components/auth/TurnstileWidget";
 
@@ -369,18 +372,43 @@ export default function Login({
 
         {message && (
           <div
-            className={`mb-6 p-3.5 rounded-xl flex items-start gap-3 animate-fade-in border ${
+            className={`mb-6 p-4 rounded-2xl flex flex-col gap-3 animate-fade-in border ${
               message.type === "error"
                 ? "bg-destructive/10 border-destructive/20 text-destructive"
-                : "bg-emerald-500/10 border-emerald-500/20 text-emerald-600 dark:text-emerald-400"
+                : "bg-emerald-500/10 border-emerald-500/20 text-emerald-700 dark:text-emerald-300"
             }`}
           >
-            {message.type === "error" ? (
-              <AlertCircle className="h-5 w-5 shrink-0 mt-0.5" />
-            ) : (
-              <CheckCircle2 className="h-5 w-5 shrink-0 mt-0.5" />
+            <div className="flex items-start gap-3">
+              {message.type === "error" ? (
+                <AlertCircle className="h-5 w-5 shrink-0 mt-0.5" />
+              ) : (
+                <CheckCircle2 className="h-5 w-5 shrink-0 mt-0.5 text-emerald-600 dark:text-emerald-400" />
+              )}
+              <p className="text-sm font-medium leading-relaxed">{message.text}</p>
+            </div>
+
+            {/* Invitation Communauté WhatsApp dès l'inscription */}
+            {message.type === "success" && isSignUp && (
+              <div className="mt-2 pt-3 border-t border-emerald-500/20 space-y-2.5">
+                <div className="flex items-center gap-2 text-emerald-700 dark:text-emerald-300 font-bold text-xs uppercase tracking-wide">
+                  <span className="text-base leading-none">💬</span>
+                  <span>Rejoindre la Communauté des Commerçants</span>
+                </div>
+                <p className="text-xs text-muted-foreground leading-relaxed">
+                  Discutez avec d&apos;autres commerçants et soyez informé en direct de toutes les nouvelles mises à jour de MaBoutiquePro !
+                </p>
+                <a
+                  href={WHATSAPP_COMMUNITY_URL}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center justify-center gap-2 w-full py-2.5 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-md shadow-emerald-600/20 transition-all active:scale-[0.98]"
+                >
+                  <MessageCircle className="h-4 w-4" />
+                  <span>Intégrer le groupe WhatsApp</span>
+                  <ExternalLink className="h-3.5 w-3.5 ml-1 opacity-80" />
+                </a>
+              </div>
             )}
-            <p className="text-sm font-medium leading-relaxed">{message.text}</p>
           </div>
         )}
 

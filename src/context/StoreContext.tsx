@@ -2163,21 +2163,26 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         }
         if (categories && categories.length > 0) payload.categories = categories;
         if (products) {
-          payload.products = products.map((p: any) => ({
-            id: p.id,
-            name: p.name,
-            sku: p.sku,
-            category: p.category,
-            price: Number(p.price) || 0,
-            cost: isAdminUser ? (costsMap.get(p.id) ?? 0) : 0,
-            stock: Number(p.stock) || 0,
-            minStock: Number(p.min_stock ?? p.minStock ?? 5),
-            image: p.image || "📦",
-            createdAt: p.created_at || new Date().toISOString(),
-            userId: p.user_id,
-            storeId: p.store_id,
-            units: unitsByProduct.get(p.id) || [],
-          }));
+          payload.products = products.map((p: any) => {
+            const pUnits = unitsByProduct.get(p.id) || [];
+            const refUnit = pUnits.find((u: any) => u.isReference);
+            return {
+              id: p.id,
+              name: p.name,
+              sku: p.sku,
+              category: p.category,
+              price: Number(p.price) || 0,
+              cost: isAdminUser ? (costsMap.get(p.id) ?? 0) : 0,
+              stock: Number(p.stock) || 0,
+              minStock: Number(p.min_stock ?? p.minStock ?? 5),
+              image: p.image || "📦",
+              createdAt: p.created_at || new Date().toISOString(),
+              userId: p.user_id,
+              storeId: p.store_id,
+              unit: refUnit ? refUnit.name : "Pièce / Unité",
+              units: pUnits,
+            };
+          });
         }
         let localStoredPayments: DebtPayment[] = [];
         if (typeof window !== "undefined" && activeStore?.id) {
@@ -2472,6 +2477,31 @@ export function StoreProvider({ children }: { children: ReactNode }) {
               const { error: costError } = await supabase.from('product_costs').upsert(costRecords);
               if (costError) {
                 console.error("Supabase Batch Add Product Costs Error:", costError);
+              }
+            }
+
+            // 3. Synchronisation des unités secondaires et conditionnements dans product_units
+            const unitsToInsert: any[] = [];
+            action.payload.forEach((p) => {
+              if (Array.isArray(p.units) && p.units.length > 0) {
+                p.units.forEach((u) => {
+                  unitsToInsert.push({
+                    store_id: activeStore.id,
+                    product_id: p.id,
+                    name: u.name.trim(),
+                    multiplier: Number(u.multiplier) || 1,
+                    price: (u.price !== null && u.price !== undefined && Number(u.price) > 0) ? Number(u.price) : null,
+                    cost: (u.cost !== null && u.cost !== undefined && Number(u.cost) > 0) ? Number(u.cost) : null,
+                    barcode: u.barcode ? u.barcode.trim() : null,
+                    is_reference: Boolean(u.isReference),
+                  });
+                });
+              }
+            });
+            if (unitsToInsert.length > 0) {
+              const { error: unitsError } = await supabase.from('product_units').upsert(unitsToInsert, { onConflict: 'product_id, name' });
+              if (unitsError) {
+                console.warn("Supabase Batch Add Product Units Error:", unitsError);
               }
             }
           }

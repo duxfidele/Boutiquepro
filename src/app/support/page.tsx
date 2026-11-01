@@ -1,7 +1,8 @@
 "use client";
 
 import React, { useState } from "react";
-import { HelpCircle, ChevronDown, ChevronUp, Mail, Phone, ExternalLink } from "lucide-react";
+import { WHATSAPP_COMMUNITY_URL } from "@/lib/whatsapp";
+import { HelpCircle, ChevronDown, ChevronUp, Mail, Phone, ExternalLink, Users } from "lucide-react";
 import { useStore } from "@/context/StoreContext";
 
 const faqs = [
@@ -105,17 +106,35 @@ export default function SupportPage() {
             
             <div className="space-y-4">
               <a 
+                href={WHATSAPP_COMMUNITY_URL} 
+                target="_blank" 
+                rel="noopener noreferrer"
+                className="flex items-center gap-3 p-3 bg-emerald-500/10 rounded-xl hover:shadow-md transition-shadow border border-emerald-500/30 group"
+              >
+                <div className="h-10 w-10 flex items-center justify-center rounded-lg bg-emerald-600 text-white group-hover:scale-105 transition-transform">
+                  <Users className="h-5 w-5" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs font-bold text-emerald-700 dark:text-emerald-400 uppercase tracking-wider flex items-center gap-1">
+                    <span>Communauté WhatsApp</span>
+                    <ExternalLink className="h-3 w-3" />
+                  </p>
+                  <p className="text-xs text-muted-foreground truncate">Échanges & Nouveautés en direct</p>
+                </div>
+              </a>
+
+              <a 
                 href="https://wa.me/22898376101" 
                 target="_blank" 
                 rel="noopener noreferrer"
-                className="flex items-center gap-3 p-3 bg-white rounded-xl hover:shadow-md transition-shadow border border-border/50 group"
+                className="flex items-center gap-3 p-3 bg-white dark:bg-card rounded-xl hover:shadow-md transition-shadow border border-border/50 group"
               >
                 <div className="h-10 w-10 flex items-center justify-center rounded-lg bg-green-50 text-green-600 group-hover:bg-green-100 transition-colors">
                   <Phone className="h-5 w-5" />
                 </div>
                 <div>
-                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">WhatsApp</p>
-                  <p className="text-sm font-bold text-gray-900">+228 98 37 61 01</p>
+                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Assistance Directe Fr Fidèle</p>
+                  <p className="text-sm font-bold text-gray-900 dark:text-foreground">+228 98 37 61 01</p>
                 </div>
               </a>
 

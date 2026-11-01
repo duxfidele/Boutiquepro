@@ -2,7 +2,7 @@
 
 import React, { useState, useRef } from "react";
 import * as XLSX from "xlsx";
-import { useStore, Product } from "@/context/StoreContext";
+import { useStore, Product, ProductUnit } from "@/context/StoreContext";
 import { useAuth } from "@/context/AuthContext";
 import { supabase } from "@/lib/supabase";
 import {
@@ -19,6 +19,7 @@ import {
   Package,
   Layers,
   Sparkles,
+  Clock,
 } from "lucide-react";
 
 interface ProductExcelImportModalProps {
@@ -30,10 +31,18 @@ interface ParsedRow {
   name: string;
   category: string;
   sku: string;
+  unit: string;
   price: number;
   cost: number;
   stock: number;
   minStock: number;
+  wholesaleName?: string;
+  wholesaleMultiplier?: number;
+  wholesaleCost?: number;
+  wholesalePrice?: number;
+  wholesaleBarcode?: string;
+  batchNumber?: string;
+  expiryDate?: string;
   isExisting: boolean;
   existingId?: string;
   status: "new" | "update" | "error";
@@ -67,6 +76,50 @@ export default function ProductExcelImportModal({ isOpen, onClose }: ProductExce
     return isNaN(num) ? defaultVal : num;
   };
 
+  // Normalisation intelligente des dates (support Excel serial date, JJ/MM/AAAA, AAAA-MM-JJ)
+  const parseSafeDate = (val: any): string | undefined => {
+    if (val === undefined || val === null || val === "") return undefined;
+    if (typeof val === "number") {
+      try {
+        const dateObj = new Date(Math.round((val - 25569) * 86400 * 1000));
+        if (!isNaN(dateObj.getTime())) {
+          return dateObj.toISOString().split("T")[0];
+        }
+      } catch (e) {}
+    }
+    const str = String(val).trim();
+    if (/^\d{4}-\d{2}-\d{2}$/.test(str)) {
+      return str;
+    }
+    const parts = str.split(/[\/\-.]/);
+    if (parts.length === 3) {
+      if (parts[2].length === 4) {
+        return parts[2] + "-" + parts[1].padStart(2, "0") + "-" + parts[0].padStart(2, "0");
+      } else if (parts[0].length === 4) {
+        return parts[0] + "-" + parts[1].padStart(2, "0") + "-" + parts[2].padStart(2, "0");
+      }
+    }
+    const dateObj = new Date(str);
+    if (!isNaN(dateObj.getTime())) {
+      return dateObj.toISOString().split("T")[0];
+    }
+    return undefined;
+  };
+
+  // Normalisation des unités courantes
+  const normalizeUnit = (val?: any): string => {
+    if (!val) return "Pièce / Unité";
+    const str = String(val).trim();
+    const low = str.toLowerCase();
+    if (low === "piece" || low === "pièce" || low === "unite" || low === "unité" || low === "u" || low === "pcs") return "Pièce / Unité";
+    if (low === "l" || low === "litre" || low === "litres") return "Litre (L)";
+    if (low === "kg" || low === "kilo" || low === "kilogramme" || low === "kilogrammes") return "Kilogramme (kg)";
+    if (low === "boite" || low === "boîte" || low === "conserve" || low === "boites" || low === "boîtes") return "Boîte / Conserve";
+    if (low === "sachet" || low === "paquet" || low === "sachets" || low === "paquets") return "Sachet / Paquet";
+    if (low === "m" || low === "metre" || low === "mètre" || low === "metres") return "Mètre (m)";
+    return str;
+  };
+
   // Assign appropriate emoji
   const getEmojiForProduct = (name: string, category: string): string => {
     const str = (name + " " + category).toLowerCase();
@@ -90,52 +143,92 @@ export default function ProductExcelImportModal({ isOpen, onClose }: ProductExce
   const handleDownloadTemplate = () => {
     const templateData = [
       {
-        "Nom du produit": "Chemise Coton Homme",
-        "Catégorie": "Vêtements",
-        "Code Barre (SKU)": "CHE-1001",
-        "Prix de vente": 12000,
-        "Prix d'achat": 7000,
-        "Quantité en stock": 25,
-        "Stock minimum": 5,
+        "Nom du produit": "Huile Végétale Pure",
+        "Catégorie": "Alimentation",
+        "Code Barre (SKU)": "HUI-1001",
+        "Unité de base": "Litre (L)",
+        "Prix de vente détail": 1000,
+        "Prix d'achat unitaire": 720,
+        "Quantité en stock": 250,
+        "Stock minimum": 25,
+        "Nom format gros": "Bidon de 25 L",
+        "Contenance (Multiplicateur)": 25,
+        "Prix d'achat gros": 18000,
+        "Prix de vente gros": 22500,
+        "Code Barre gros": "BID-HUI-25L",
+        "Numéro de lot": "LOT-HUI-2026-01",
+        "Date de péremption (DLC)": "2026-12-31",
       },
       {
-        "Nom du produit": "Chaussures Cuir Noir",
-        "Catégorie": "Chaussures",
-        "Code Barre (SKU)": "CHA-2002",
-        "Prix de vente": 25000,
-        "Prix d'achat": 15000,
-        "Quantité en stock": 12,
-        "Stock minimum": 3,
+        "Nom du produit": "Sardines à l'Huile",
+        "Catégorie": "Alimentation",
+        "Code Barre (SKU)": "SAR-2002",
+        "Unité de base": "Boîte / Conserve",
+        "Prix de vente détail": 400,
+        "Prix d'achat unitaire": 300,
+        "Quantité en stock": 100,
+        "Stock minimum": 20,
+        "Nom format gros": "Carton de 50",
+        "Contenance (Multiplicateur)": 50,
+        "Prix d'achat gros": 15000,
+        "Prix de vente gros": 16500,
+        "Code Barre gros": "CAR-SAR-50",
+        "Numéro de lot": "LOT-SAR-2026-02",
+        "Date de péremption (DLC)": "2027-06-30",
       },
       {
-        "Nom du produit": "Robe Soie Fleurie",
-        "Catégorie": "Vêtements",
-        "Code Barre (SKU)": "ROB-3003",
-        "Prix de vente": 18500,
-        "Prix d'achat": 10000,
-        "Quantité en stock": 15,
-        "Stock minimum": 4,
+        "Nom du produit": "Riz Parfumé 100%",
+        "Catégorie": "Alimentation",
+        "Code Barre (SKU)": "RIZ-3003",
+        "Unité de base": "Kilogramme (kg)",
+        "Prix de vente détail": 700,
+        "Prix d'achat unitaire": 550,
+        "Quantité en stock": 200,
+        "Stock minimum": 50,
+        "Nom format gros": "Sac de 50 kg",
+        "Contenance (Multiplicateur)": 50,
+        "Prix d'achat gros": 27500,
+        "Prix de vente gros": 32000,
+        "Code Barre gros": "SAC-RIZ-50KG",
+        "Numéro de lot": "LOT-RIZ-2026-03",
+        "Date de péremption (DLC)": "2027-12-31",
       },
       {
-        "Nom du produit": "Montre Quartz Classic",
-        "Catégorie": "Accessoires",
-        "Code Barre (SKU)": "MON-4004",
-        "Prix de vente": 15000,
-        "Prix d'achat": 8000,
-        "Quantité en stock": 8,
-        "Stock minimum": 2,
+        "Nom du produit": "Savon de Ménage",
+        "Catégorie": "Entretien",
+        "Code Barre (SKU)": "SAV-4004",
+        "Unité de base": "Pièce / Unité",
+        "Prix de vente détail": 350,
+        "Prix d'achat unitaire": 250,
+        "Quantité en stock": 80,
+        "Stock minimum": 15,
+        "Nom format gros": "Carton de 24",
+        "Contenance (Multiplicateur)": 24,
+        "Prix d'achat gros": 6000,
+        "Prix de vente gros": 7500,
+        "Code Barre gros": "CAR-SAV-24",
+        "Numéro de lot": "",
+        "Date de péremption (DLC)": "",
       },
     ];
 
     const ws = XLSX.utils.json_to_sheet(templateData);
     ws["!cols"] = [
-      { wch: 28 },
-      { wch: 18 },
-      { wch: 20 },
-      { wch: 16 },
-      { wch: 16 },
-      { wch: 18 },
-      { wch: 16 },
+      { wch: 25 }, // Nom du produit
+      { wch: 16 }, // Catégorie
+      { wch: 18 }, // Code Barre (SKU)
+      { wch: 18 }, // Unité de base
+      { wch: 20 }, // Prix de vente détail
+      { wch: 20 }, // Prix d'achat unitaire
+      { wch: 18 }, // Quantité en stock
+      { wch: 16 }, // Stock minimum
+      { wch: 18 }, // Nom format gros
+      { wch: 25 }, // Contenance (Multiplicateur)
+      { wch: 18 }, // Prix d'achat gros
+      { wch: 18 }, // Prix de vente gros
+      { wch: 18 }, // Code Barre gros
+      { wch: 18 }, // Numéro de lot
+      { wch: 22 }, // Date de péremption (DLC)
     ];
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Modèle Produits");
@@ -219,7 +312,7 @@ export default function ProductExcelImportModal({ isOpen, onClose }: ProductExce
           n.includes("name") ||
           n.includes("item")
         );
-        if (!rawName || !String(rawName).trim()) return; // Ignorer les lignes sans nom
+        if (!rawName || !String(rawName).trim()) return;
 
         const name = String(rawName).trim();
 
@@ -233,16 +326,58 @@ export default function ProductExcelImportModal({ isOpen, onClose }: ProductExce
         );
         const category = rawCategory ? String(rawCategory).trim() : (state.categories[0]?.name || "Divers");
 
-        // 3. Code-barres / SKU / Référence
+        // 3. Unité physique de base
+        const rawUnit = getValue((n) =>
+          (n.includes("unite") || n.includes("mesure") || n === "unit" || n.includes("conditionnement detail")) &&
+          !n.includes("gros") && !n.includes("carton") && !n.includes("multiplicateur")
+        );
+        const unit = normalizeUnit(rawUnit);
+
+        // 4. Code-barres / SKU de détail
         const rawSku = getValue((n) =>
           (n.includes("sku") || n.includes("barre") || n.includes("barcode") || n.includes("ref") || n.includes("code")) &&
-          !n.includes("postal") && !n.includes("client") && !n.includes("pays")
+          !n.includes("postal") && !n.includes("client") && !n.includes("pays") &&
+          !n.includes("gros") && !n.includes("carton") && !n.includes("pack")
         );
         const sku = rawSku 
           ? String(rawSku).trim() 
           : (name.substring(0, 3).toUpperCase() + "-" + Math.floor(1000 + Math.random() * 9000));
 
-        // 4. Prix d'achat / Coût de revient (Cost) - Détection infaillible avec apostrophes
+        // 5. Conditionnement Gros (Multi-unités optionnel)
+        const rawWholesaleName = getValue((n) =>
+          n.includes("format gros") ||
+          n.includes("nom gros") ||
+          n.includes("nom format gros") ||
+          n.includes("nom carton") ||
+          n.includes("conditionnement gros") ||
+          n === "carton" ||
+          n.includes("type gros") ||
+          n.includes("wholesale name")
+        );
+        const wholesaleName = rawWholesaleName ? String(rawWholesaleName).trim() : undefined;
+
+        const rawWholesaleMultiplier = getValue((n) =>
+          n.includes("contenance") ||
+          n.includes("multiplicateur") ||
+          n.includes("pieces par carton") ||
+          n.includes("unites par carton") ||
+          n.includes("capacite") ||
+          n === "multiplier" ||
+          n.includes("contenu")
+        );
+        let wholesaleMultiplier = parseSafeNumber(rawWholesaleMultiplier, 0);
+        if (wholesaleMultiplier <= 1 && wholesaleName) {
+          const matchNum = String(wholesaleName).match(/\d+/);
+          if (matchNum) wholesaleMultiplier = parseInt(matchNum[0], 10);
+        }
+
+        // 6. Tarifs d'achat (Gros vs Détail)
+        const rawWholesaleCost = getValue((n) =>
+          (n.includes("achat") || n.includes("cout") || n.includes("cost") || n.includes("pa")) &&
+          (n.includes("gros") || n.includes("carton") || n.includes("pack") || n.includes("bidon") || n.includes("sac"))
+        );
+        const wholesaleCost = rawWholesaleCost !== undefined ? parseSafeNumber(rawWholesaleCost, 0) : undefined;
+
         const rawCost = getValue((n) =>
           (n.includes("achat") ||
            n.includes("cout") ||
@@ -254,10 +389,25 @@ export default function ProductExcelImportModal({ isOpen, onClose }: ProductExce
            n === "pa" ||
            n.startsWith("pa ") ||
            n.endsWith(" pa")) &&
-          !n.includes("vente")
+          !n.includes("vente") &&
+          !n.includes("gros") &&
+          !n.includes("carton") &&
+          !n.includes("pack") &&
+          !n.includes("bidon") &&
+          !n.includes("sac")
         );
+        let cost = parseSafeNumber(rawCost, 0);
+        if (cost === 0 && wholesaleCost && wholesaleMultiplier > 1) {
+          cost = Math.round((wholesaleCost / wholesaleMultiplier) * 100) / 100;
+        }
 
-        // 5. Prix de vente (Price) - Détection sans jamais confondre avec le prix d'achat
+        // 7. Tarifs de vente (Gros vs Détail)
+        const rawWholesalePrice = getValue((n) =>
+          (n.includes("vente") || n.includes("prix") || n.includes("price") || n.includes("pv")) &&
+          (n.includes("gros") || n.includes("carton") || n.includes("pack") || n.includes("bidon") || n.includes("sac"))
+        );
+        const wholesalePrice = rawWholesalePrice !== undefined ? parseSafeNumber(rawWholesalePrice, 0) : undefined;
+
         const rawPrice = getValue((n) => {
           if (
             n.includes("achat") ||
@@ -269,6 +419,9 @@ export default function ProductExcelImportModal({ isOpen, onClose }: ProductExce
             n.startsWith("pa ") ||
             n.endsWith(" pa")
           ) {
+            return false;
+          }
+          if (n.includes("gros") || n.includes("carton") || n.includes("pack") || n.includes("bidon") || n.includes("sac")) {
             return false;
           }
           return (
@@ -285,8 +438,24 @@ export default function ProductExcelImportModal({ isOpen, onClose }: ProductExce
             n.startsWith("pv ")
           );
         });
+        const price = parseSafeNumber(rawPrice, 0);
 
-        // 6. Quantité en stock
+        // 8. Code barre gros
+        const rawWholesaleBarcode = getValue((n) =>
+          (n.includes("barre") || n.includes("barcode") || n.includes("sku") || n.includes("code")) &&
+          (n.includes("gros") || n.includes("carton") || n.includes("pack"))
+        );
+        const wholesaleBarcode = rawWholesaleBarcode ? String(rawWholesaleBarcode).trim() : undefined;
+
+        // 9. Traçabilité : Lots & Dates d'expiration
+        const rawBatchNumber = getValue((n) => (n.includes("lot") || n.includes("batch")) && !n.includes("cloture"));
+        const rawExpiryDate = getValue((n) => n.includes("dlc") || n.includes("peremption") || n.includes("expiration") || n.includes("expiry") || n.includes("dluo"));
+        const expiryDate = parseSafeDate(rawExpiryDate);
+        const batchNumber = rawBatchNumber 
+          ? String(rawBatchNumber).trim() 
+          : (expiryDate ? ("LOT-" + new Date().getFullYear() + "-" + Math.floor(100 + Math.random() * 900)) : undefined);
+
+        // 10. Quantité en stock
         const rawStock = getValue((n) =>
           (n.includes("quantite") ||
            n.includes("qte") ||
@@ -298,15 +467,12 @@ export default function ProductExcelImportModal({ isOpen, onClose }: ProductExce
            n.includes("quantity")) &&
           !n.includes("min") && !n.includes("seuil") && !n.includes("alerte") && !n.includes("max")
         );
+        const stock = parseSafeNumber(rawStock, 0);
 
-        // 7. Stock minimum / seuil alerte
+        // 11. Seuil d'alerte
         const rawMinStock = getValue((n) =>
           n.includes("min") || n.includes("seuil") || n.includes("alerte") || n.includes("reapprovisionnement")
         );
-
-        const price = parseSafeNumber(rawPrice, 0);
-        const cost = parseSafeNumber(rawCost, 0);
-        const stock = parseSafeNumber(rawStock, 0);
         const minStock = parseSafeNumber(rawMinStock, 5);
 
         // Vérification si le produit existe déjà en boutique
@@ -320,10 +486,18 @@ export default function ProductExcelImportModal({ isOpen, onClose }: ProductExce
           name,
           category,
           sku,
+          unit,
           price,
           cost,
           stock,
           minStock,
+          wholesaleName: wholesaleName || undefined,
+          wholesaleMultiplier: wholesaleMultiplier > 1 ? wholesaleMultiplier : undefined,
+          wholesaleCost: wholesaleCost && wholesaleCost > 0 ? wholesaleCost : undefined,
+          wholesalePrice: wholesalePrice && wholesalePrice > 0 ? wholesalePrice : undefined,
+          wholesaleBarcode: wholesaleBarcode || undefined,
+          batchNumber: batchNumber || undefined,
+          expiryDate: expiryDate || undefined,
           isExisting: !!existing,
           existingId: existing?.id,
           status: existing ? "update" : "new",
@@ -368,58 +542,92 @@ export default function ProductExcelImportModal({ isOpen, onClose }: ProductExce
       const newCategoriesToAdd = new Set<string>();
 
       const finalProductsToUpsert: Product[] = [];
+      const batchesToCreate: any[] = [];
       let newCount = 0;
       let updatedCount = 0;
 
       for (const row of parsedRows) {
-        // Collect new categories
         if (!existingCategories.has(row.category.toLowerCase())) {
           newCategoriesToAdd.add(row.category);
           existingCategories.add(row.category.toLowerCase());
         }
 
+        const targetProdId = (row.isExisting && row.existingId)
+          ? row.existingId
+          : ("p" + Date.now() + "_" + Math.random().toString(36).substring(2, 7));
+
+        const existingProd = row.existingId ? state.products.find((p) => p.id === row.existingId) : undefined;
+        const currentStock = existingProd ? Number(existingProd.stock) || 0 : 0;
+        const finalStock = (row.isExisting && stockMode === "add") ? currentStock + row.stock : row.stock;
+
+        const finalCost = row.cost > 0 ? row.cost : (Number(existingProd?.cost) || 0);
+        const finalPrice = row.price > 0 ? row.price : (Number(existingProd?.price) || 0);
+        const finalMinStock = row.minStock > 0 ? row.minStock : (Number(existingProd?.minStock) || 5);
+        const finalUnit = row.unit || existingProd?.unit || "Pièce / Unité";
+
+        // Conditionnement gros
+        const units: ProductUnit[] = existingProd?.units ? [...existingProd.units] : [];
+        if (row.wholesaleName && Number(row.wholesaleMultiplier) > 1) {
+          const wholesaleIdx = units.findIndex(u => u.name.toLowerCase() === row.wholesaleName!.toLowerCase() || u.multiplier === row.wholesaleMultiplier);
+          const newWholesaleUnit: ProductUnit = {
+            id: wholesaleIdx >= 0 ? units[wholesaleIdx].id : ("pu_" + Math.random().toString(36).substring(7)),
+            storeId: activeStore?.id || "",
+            productId: targetProdId,
+            name: row.wholesaleName.trim(),
+            multiplier: Number(row.wholesaleMultiplier),
+            price: row.wholesalePrice && row.wholesalePrice > 0 ? row.wholesalePrice : (wholesaleIdx >= 0 ? units[wholesaleIdx].price : null),
+            cost: row.wholesaleCost && row.wholesaleCost > 0 ? row.wholesaleCost : (wholesaleIdx >= 0 ? units[wholesaleIdx].cost : null),
+            barcode: row.wholesaleBarcode || (wholesaleIdx >= 0 ? units[wholesaleIdx].barcode : null),
+            isReference: false,
+          };
+          if (wholesaleIdx >= 0) {
+            units[wholesaleIdx] = newWholesaleUnit;
+          } else {
+            units.push(newWholesaleUnit);
+          }
+        }
+
+        const prodToSave: Product = {
+          id: targetProdId,
+          name: row.name,
+          sku: row.sku,
+          category: row.category,
+          unit: finalUnit,
+          price: finalPrice,
+          cost: finalCost,
+          stock: finalStock,
+          minStock: finalMinStock,
+          image: existingProd?.image || getEmojiForProduct(row.name, row.category),
+          createdAt: existingProd?.createdAt || new Date().toISOString().split("T")[0],
+          units: units.length > 0 ? units : undefined,
+        };
+
         if (row.isExisting && row.existingId) {
           if (!updateExisting) {
-            continue; // Ignorer les doublons si option décochée
+            continue;
           }
-          const existingProd = state.products.find((p) => p.id === row.existingId);
-          const currentStock = existingProd ? Number(existingProd.stock) || 0 : 0;
-          const finalStock = stockMode === "add" ? currentStock + row.stock : row.stock;
-
-          // Conservation intelligente : si le fichier ne fournit pas de prix d'achat (> 0), conserver l'ancien coût enregistré
-          const finalCost = row.cost > 0 ? row.cost : (Number(existingProd?.cost) || 0);
-          const finalPrice = row.price > 0 ? row.price : (Number(existingProd?.price) || 0);
-          const finalMinStock = row.minStock > 0 ? row.minStock : (Number(existingProd?.minStock) || 5);
-
-          finalProductsToUpsert.push({
-            id: row.existingId,
-            name: row.name,
-            sku: row.sku,
-            category: row.category,
-            price: finalPrice,
-            cost: finalCost,
-            stock: finalStock,
-            minStock: finalMinStock,
-            image: existingProd?.image || getEmojiForProduct(row.name, row.category),
-            createdAt: existingProd?.createdAt || new Date().toISOString().split("T")[0],
-          });
+          finalProductsToUpsert.push(prodToSave);
           updatedCount++;
         } else {
-          // Nouveau produit
-          const newId = "p" + Date.now() + "_" + Math.random().toString(36).substring(2, 7);
-          finalProductsToUpsert.push({
-            id: newId,
-            name: row.name,
-            sku: row.sku,
-            category: row.category,
-            price: row.price,
-            cost: row.cost,
-            stock: row.stock,
-            minStock: row.minStock > 0 ? row.minStock : 5,
-            image: getEmojiForProduct(row.name, row.category),
-            createdAt: new Date().toISOString().split("T")[0],
-          });
+          finalProductsToUpsert.push(prodToSave);
           newCount++;
+        }
+
+        // Lot initial si DLC ou lot fourni
+        if (row.expiryDate && row.expiryDate.trim()) {
+          const bNum = row.batchNumber && row.batchNumber.trim()
+            ? row.batchNumber.trim()
+            : ("LOT-" + new Date().getFullYear() + "-" + Math.floor(100 + Math.random() * 900));
+          batchesToCreate.push({
+            id: "b_" + Date.now() + "_" + Math.random().toString(36).substring(7),
+            storeId: activeStore?.id || "",
+            productId: targetProdId,
+            batchNumber: bNum,
+            expiryDate: row.expiryDate.trim(),
+            initialQuantity: finalStock > 0 ? finalStock : 1,
+            currentQuantity: finalStock > 0 ? finalStock : 1,
+            createdAt: new Date().toISOString(),
+          });
         }
       }
 
@@ -449,6 +657,17 @@ export default function ProductExcelImportModal({ isOpen, onClose }: ProductExce
 
       // 2. Dispatch BATCH_ADD_PRODUCTS (met à jour le state et enregistre en base via upsert)
       await dispatch({ type: "BATCH_ADD_PRODUCTS", payload: finalProductsToUpsert });
+
+      // 3. Enregistrement des lots initiaux et dates de péremption si présents
+      if (batchesToCreate.length > 0) {
+        for (const batch of batchesToCreate) {
+          try {
+            await dispatch({ type: "ADD_BATCH", payload: batch });
+          } catch (batchErr) {
+            console.warn("Erreur création lot importé:", batchErr);
+          }
+        }
+      }
 
       setImportStats({
         total: finalProductsToUpsert.length,
@@ -699,13 +918,14 @@ export default function ProductExcelImportModal({ isOpen, onClose }: ProductExce
                       <thead className="bg-secondary/50 text-muted-foreground font-semibold border-b border-border/60 sticky top-0 backdrop-blur-md">
                         <tr>
                           <th className="p-3">Statut</th>
-                          <th className="p-3">Produit</th>
-                          <th className="p-3">Catégorie</th>
-                          <th className="p-3">SKU</th>
+                          <th className="p-3">Produit & Unité</th>
+                          <th className="p-3">Catégorie / SKU</th>
+                          <th className="p-3">Format Gros</th>
                           <th className="p-3 text-right">Prix Vente</th>
                           {isAdmin && <th className="p-3 text-right">Prix Achat</th>}
                           {isAdmin && <th className="p-3 text-right">Marge</th>}
                           <th className="p-3 text-right">Stock</th>
+                          <th className="p-3">Péremption (DLC)</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-border/40">
@@ -725,15 +945,45 @@ export default function ProductExcelImportModal({ isOpen, onClose }: ProductExce
                                   </span>
                                 )}
                               </td>
-                              <td className="p-3 font-medium text-foreground">{r.name}</td>
-                              <td className="p-3 text-muted-foreground">{r.category}</td>
-                              <td className="p-3 font-mono text-[11px] text-muted-foreground">{r.sku}</td>
-                              <td className="p-3 text-right font-semibold text-foreground">
-                                {formatPrice(r.price)}
+                              <td className="p-3 font-medium text-foreground">
+                                <div className="font-semibold">{r.name}</div>
+                                <div className="text-[10px] text-muted-foreground flex items-center gap-1 mt-0.5">
+                                  <span>Unité:</span>
+                                  <span className="font-medium text-primary">{r.unit}</span>
+                                </div>
+                              </td>
+                              <td className="p-3 text-muted-foreground">
+                                <div className="text-foreground">{r.category}</div>
+                                <div className="font-mono text-[10px] text-muted-foreground/70">{r.sku}</div>
+                              </td>
+                              <td className="p-3 text-xs">
+                                {r.wholesaleName && Number(r.wholesaleMultiplier) > 1 ? (
+                                  <div className="space-y-0.5">
+                                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-amber-500/10 text-amber-700 dark:text-amber-400 font-semibold text-[10px] border border-amber-500/20">
+                                      📦 {r.wholesaleName} (x{r.wholesaleMultiplier})
+                                    </span>
+                                    {r.wholesalePrice && (
+                                      <div className="text-[10px] text-muted-foreground">
+                                        Revente: <strong className="text-foreground">{formatPrice(r.wholesalePrice)}</strong>
+                                      </div>
+                                    )}
+                                  </div>
+                                ) : (
+                                  <span className="text-muted-foreground/60 text-[11px]">—</span>
+                                )}
+                              </td>
+                              <td className="p-3 text-right">
+                                <div className="font-bold text-foreground">{formatPrice(r.price)}</div>
+                                <div className="text-[10px] text-muted-foreground">/ {r.unit ? (r.unit.split('/')[0] || r.unit).trim() : 'unité'}</div>
                               </td>
                               {isAdmin && (
-                                <td className="p-3 text-right font-medium text-amber-600 dark:text-amber-400">
-                                  {formatPrice(r.cost)}
+                                <td className="p-3 text-right">
+                                  <div className="font-medium text-amber-600 dark:text-amber-400">{formatPrice(r.cost)}</div>
+                                  {r.wholesaleCost && (
+                                    <div className="text-[10px] text-muted-foreground">
+                                      Gros: {formatPrice(r.wholesaleCost)}
+                                    </div>
+                                  )}
                                 </td>
                               )}
                               {isAdmin && (
@@ -746,7 +996,22 @@ export default function ProductExcelImportModal({ isOpen, onClose }: ProductExce
                                 </td>
                               )}
                               <td className="p-3 text-right font-bold text-foreground">
-                                {r.stock}
+                                <div>{r.stock} <span className="text-[10px] font-normal text-muted-foreground">{r.unit ? (r.unit.split('/')[0] || r.unit).trim() : ''}</span></div>
+                                {r.wholesaleMultiplier && r.wholesaleMultiplier > 1 && r.stock >= r.wholesaleMultiplier && (
+                                  <div className="text-[10px] text-muted-foreground font-normal">
+                                    ≈ {Math.floor(r.stock / r.wholesaleMultiplier)} cartons
+                                  </div>
+                                )}
+                              </td>
+                              <td className="p-3 text-xs">
+                                {r.expiryDate ? (
+                                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-blue-500/10 text-blue-600 dark:text-blue-400 text-[10px] font-medium border border-blue-500/20" title={r.batchNumber ? `Lot: ${r.batchNumber}` : undefined}>
+                                    <Clock className="h-2.5 w-2.5" />
+                                    <span>{new Date(r.expiryDate).toLocaleDateString('fr-FR')}</span>
+                                  </span>
+                                ) : (
+                                  <span className="text-muted-foreground/60 text-[11px]">—</span>
+                                )}
                               </td>
                             </tr>
                           );

@@ -9,6 +9,7 @@ import { supabase } from "@/lib/supabase";
 import SubscriptionModal from "@/components/subscription/SubscriptionModal";
 import { SubscriptionTier } from "@/lib/subscriptionPlans";
 import { ModuleKey } from "@/types/modules";
+import { WHATSAPP_COMMUNITY_URL } from "@/lib/whatsapp";
 import {
   LogOut,
   BookOpen,
@@ -30,6 +31,8 @@ import {
   HelpCircle,
   Users,
   Lock,
+  MessageCircle,
+  ExternalLink,
 } from "lucide-react";
 
 const navItems: {
@@ -272,6 +275,23 @@ export default function Sidebar({ isOpen, onClose }: { isOpen?: boolean; onClose
                   </Link>
                 );
               })}
+
+              {/* Lien Communauté WhatsApp */}
+              <a
+                href={WHATSAPP_COMMUNITY_URL}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="group relative flex flex-row items-center justify-start gap-3 rounded-xl px-3 py-2 text-xs font-semibold text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/25 transition-all mt-2"
+                title="Communauté WhatsApp & Nouveautés"
+              >
+                <MessageCircle className="h-4 w-4 shrink-0 text-emerald-600 dark:text-emerald-400" />
+                {!collapsed && (
+                  <div className="flex items-center justify-between w-full">
+                    <span className="truncate">Communauté WhatsApp</span>
+                    <ExternalLink className="h-3 w-3 opacity-70" />
+                  </div>
+                )}
+              </a>
           </div>
         </nav>
 

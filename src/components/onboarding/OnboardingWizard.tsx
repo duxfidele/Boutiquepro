@@ -3,6 +3,7 @@
 import React, { useState } from "react";
 import { useAuth } from "@/context/AuthContext";
 import { useStore } from "@/context/StoreContext";
+import { WHATSAPP_COMMUNITY_URL } from "@/lib/whatsapp";
 import {
   StoreSector,
   STORE_SECTORS,
@@ -30,6 +31,8 @@ import {
   Layers,
   ShoppingBag,
   Zap,
+  MessageCircle,
+  ExternalLink,
 } from "lucide-react";
 
 interface OnboardingWizardProps {
@@ -490,6 +493,30 @@ export default function OnboardingWizard({ onComplete, canSkip = true }: Onboard
                     <p className="text-sm font-black text-foreground">{preset.label}</p>
                     <p className="text-xs text-muted-foreground">{preset.sampleUnits.join(" • ")}</p>
                   </div>
+                </div>
+
+                {/* Encart Communauté WhatsApp */}
+                <div className="p-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/25 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 mt-3">
+                  <div className="flex items-start gap-3">
+                    <div className="h-10 w-10 rounded-xl bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shrink-0">
+                      <MessageCircle className="h-5 w-5" />
+                    </div>
+                    <div>
+                      <p className="text-xs font-bold text-foreground">Rejoignez la Communauté WhatsApp MaBoutiquePro</p>
+                      <p className="text-[11px] text-muted-foreground mt-0.5">
+                        Échangez entre commerçants et suivez toutes les mises à jour en avant-première.
+                      </p>
+                    </div>
+                  </div>
+                  <a
+                    href={WHATSAPP_COMMUNITY_URL}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-xs transition-all shrink-0"
+                  >
+                    <span>Rejoindre</span>
+                    <ExternalLink className="h-3.5 w-3.5" />
+                  </a>
                 </div>
               </div>
             </div>

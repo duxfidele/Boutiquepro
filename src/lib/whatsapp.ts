@@ -1,3 +1,6 @@
+// Lien officiel de la Communauté WhatsApp MaBoutiquePro
+export const WHATSAPP_COMMUNITY_URL = "https://chat.whatsapp.com/Iht9DmNdFIlBhV4E7Tx4Ob";
+
 import { Sale, StoreSettings, DebtPayment } from "@/context/StoreContext";
 
 /**
