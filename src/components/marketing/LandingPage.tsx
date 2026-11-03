@@ -9,32 +9,30 @@ export default function LandingPage({ onLoginClick }: LandingPageProps) {
   const [isAnnual, setIsAnnual] = useState(false);
 
   return (
-    <div className="bg-surface font-sans text-on-surface antialiased selection:bg-primary/20">
+    <div className="bg-surface font-sans text-on-surface antialiased selection:bg-primary/20 overflow-x-hidden">
       {/* ================================================================ */}
       {/* HEADER / NAVIGATION                                              */}
       {/* ================================================================ */}
       <header className="fixed top-0 left-0 right-0 z-50 bg-surface-container-lowest/95 backdrop-blur-md border-b border-surface-container">
-        <div className="h-20 max-w-7xl mx-auto px-4 md:px-8 flex items-center justify-between">
-          <div className="flex flex-col justify-center">
-            <div className="flex items-center gap-2.5">
-              <img alt="MaBoutiquePro Logo" className="h-8 w-auto object-contain" src="/logo.png" />
-              <span className="font-headline-sm text-lg sm:text-xl text-on-surface tracking-tight font-extrabold">
+        <div className="h-16 sm:h-20 max-w-7xl mx-auto px-3 sm:px-4 md:px-8 flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2 min-w-0">
+            {/* Bouton Menu Mobile placé proprement à gauche sur mobile */}
+            <button
+              onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+              className="lg:hidden flex items-center justify-center p-2 rounded-xl bg-surface-container border border-outline-variant/40 text-on-surface hover:bg-surface-container-high transition-colors shrink-0"
+              aria-label="Menu de navigation"
+            >
+              <span className="material-symbols-outlined text-xl leading-none text-primary">
+                {isMobileMenuOpen ? "close" : "menu"}
+              </span>
+            </button>
+
+            <div className="flex items-center gap-2 min-w-0">
+              <img alt="MaBoutiquePro Logo" className="h-7 sm:h-8 w-auto object-contain shrink-0" src="/logo.png" />
+              <span className="font-headline-sm text-base sm:text-xl text-on-surface tracking-tight font-extrabold truncate">
                 MaBoutiquePro
               </span>
             </div>
-            {/* Bouton Menu Mobile */}
-            <button
-              onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-              className="lg:hidden mt-1 flex items-center gap-1.5 px-2 py-0.5 rounded-lg bg-surface-container border border-outline-variant/40 text-on-surface text-xs font-semibold hover:bg-surface-container-high transition-colors w-fit"
-              aria-label="Menu de navigation"
-            >
-              <span className="material-symbols-outlined text-base leading-none text-primary">
-                {isMobileMenuOpen ? "close" : "menu"}
-              </span>
-              <span className="text-[11px] text-on-surface-variant font-bold tracking-wide">
-                {isMobileMenuOpen ? "Fermer" : "Menu"}
-              </span>
-            </button>
           </div>
 
           <nav className="hidden lg:flex items-center gap-8">
@@ -49,7 +47,7 @@ export default function LandingPage({ onLoginClick }: LandingPageProps) {
             </a>
           </nav>
 
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 sm:gap-3 shrink-0">
             <button
               onClick={() => onLoginClick(false)}
               className="text-sm font-bold text-on-surface-variant hover:text-primary transition-colors hidden sm:inline-flex px-3 py-2 cursor-pointer"
@@ -58,11 +56,12 @@ export default function LandingPage({ onLoginClick }: LandingPageProps) {
             </button>
             <button
               onClick={() => onLoginClick(true)}
-              className="group relative inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-indigo-600 via-indigo-700 to-violet-700 text-white text-xs sm:text-sm font-extrabold shadow-md shadow-indigo-600/30 hover:shadow-xl hover:shadow-indigo-600/40 hover:from-indigo-500 hover:to-violet-600 active:scale-[0.98] transition-all duration-300 whitespace-nowrap overflow-hidden cursor-pointer"
+              className="group relative inline-flex items-center justify-center gap-1.5 sm:gap-2 px-3 sm:px-5 py-2 sm:py-2.5 rounded-xl bg-gradient-to-r from-indigo-600 via-indigo-700 to-violet-700 text-white text-xs sm:text-sm font-extrabold shadow-md shadow-indigo-600/30 hover:shadow-xl hover:shadow-indigo-600/40 hover:from-indigo-500 hover:to-violet-600 active:scale-[0.98] transition-all duration-300 whitespace-nowrap overflow-hidden cursor-pointer"
             >
-              <span className="relative z-10 flex items-center gap-1.5">
-                <span>Essai gratuit 14 jours</span>
-                <span className="material-symbols-outlined text-base transition-transform duration-300 group-hover:translate-x-1">
+              <span className="relative z-10 flex items-center gap-1 sm:gap-1.5">
+                <span className="sm:hidden">Essai gratuit</span>
+                <span className="hidden sm:inline">Essai gratuit 14 jours</span>
+                <span className="material-symbols-outlined text-sm sm:text-base transition-transform duration-300 group-hover:translate-x-1">
                   arrow_forward
                 </span>
               </span>
@@ -113,23 +112,23 @@ export default function LandingPage({ onLoginClick }: LandingPageProps) {
         )}
       </header>
 
-      <main className="w-full pt-20">
+      <main className="w-full pt-16 sm:pt-20">
         {/* ================================================================ */}
         {/* 1. HERO SECTION : À LA PREMIÈRE VUE (TITRE, SOUS-TITRE, CTA)     */}
         {/* ================================================================ */}
-        <section className="relative w-full pt-12 sm:pt-16 pb-16 sm:pb-20 px-4 md:px-8 bg-gradient-to-b from-surface-container-low/50 via-surface to-surface flex flex-col items-center text-center overflow-hidden">
+        <section className="relative w-full pt-10 sm:pt-16 pb-14 sm:pb-20 px-4 md:px-8 bg-gradient-to-b from-surface-container-low/50 via-surface to-surface flex flex-col items-center text-center overflow-hidden">
           {/* Halos subtils d&apos;arrière-plan */}
           <div className="absolute top-6 left-1/2 -translate-x-1/2 w-[90%] max-w-[800px] h-[320px] bg-indigo-500/10 rounded-full blur-3xl pointer-events-none -z-10"></div>
           <div className="absolute top-28 left-1/4 w-72 h-72 bg-emerald-500/5 rounded-full blur-2xl pointer-events-none -z-10"></div>
 
           {/* Badge discret */}
-          <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-surface-container border border-outline-variant/30 text-primary text-xs sm:text-sm shadow-xs mb-5 transition-all hover:bg-surface-container-high cursor-default">
-            <span className="inline-block w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-            <span className="font-semibold text-on-surface">✨ 14 jours d&apos;essai gratuit • Sans carte bancaire</span>
+          <div className="inline-flex items-center gap-2 px-3 sm:px-3.5 py-1.5 rounded-full bg-surface-container border border-outline-variant/30 text-primary text-[11px] sm:text-sm shadow-xs mb-5 transition-all hover:bg-surface-container-high cursor-default max-w-full">
+            <span className="inline-block w-2 h-2 rounded-full bg-emerald-500 animate-pulse shrink-0"></span>
+            <span className="font-semibold text-on-surface truncate">✨ 14 jours d&apos;essai gratuit • Sans carte bancaire</span>
           </div>
 
           {/* Grand Titre (Impactant, moderne & immédiat) */}
-          <h1 className="max-w-4xl font-display-hero text-3xl sm:text-5xl lg:text-6xl font-black tracking-tight text-on-surface mb-4 sm:mb-6 leading-[1.14]">
+          <h1 className="max-w-4xl font-display-hero text-2xl sm:text-5xl lg:text-6xl font-black tracking-tight text-on-surface mb-4 sm:mb-6 leading-[1.16] sm:leading-[1.14]">
             Gérez votre boutique en toute sérénité.
             <span className="block mt-2 bg-gradient-to-r from-indigo-600 via-primary to-violet-600 bg-clip-text text-transparent">
               Ventes, stocks &amp; bénéfices en direct.
@@ -137,19 +136,19 @@ export default function LandingPage({ onLoginClick }: LandingPageProps) {
           </h1>
 
           {/* Sous-titre clair, lisible & direct */}
-          <p className="max-w-2xl text-base sm:text-lg md:text-xl text-on-surface-variant mb-8 sm:mb-10 leading-relaxed font-medium">
+          <p className="max-w-2xl text-sm sm:text-lg md:text-xl text-on-surface-variant mb-7 sm:mb-10 leading-relaxed font-medium">
             Fini les cahiers de comptes et les pertes d&apos;argent. Enregistrez vos ventes au comptoir, contrôlez vos stocks en temps réel et suivez vos créances clients en FCFA — directement depuis votre smartphone ou PC.
           </p>
 
           {/* CTA À LA PREMIÈRE VUE */}
-          <div className="flex flex-col sm:flex-row items-center justify-center gap-3.5 sm:gap-4 w-full max-w-md sm:max-w-none mb-6">
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-3 sm:gap-4 w-full max-w-md sm:max-w-none mb-6">
             <button
               onClick={() => onLoginClick(true)}
-              className="group w-full sm:w-auto inline-flex items-center justify-center gap-3 px-8 sm:px-10 py-4 sm:py-5 rounded-2xl bg-gradient-to-r from-indigo-600 via-indigo-700 to-violet-700 text-white font-title-md text-base sm:text-lg shadow-xl shadow-indigo-600/35 hover:shadow-2xl hover:shadow-indigo-600/50 hover:from-indigo-500 hover:to-violet-600 active:scale-[0.98] transition-all duration-300 font-extrabold relative overflow-hidden cursor-pointer"
+              className="group w-full sm:w-auto inline-flex items-center justify-center gap-2 sm:gap-3 px-5 sm:px-10 py-3.5 sm:py-5 rounded-2xl bg-gradient-to-r from-indigo-600 via-indigo-700 to-violet-700 text-white font-title-md text-sm sm:text-lg shadow-xl shadow-indigo-600/35 hover:shadow-2xl hover:shadow-indigo-600/50 hover:from-indigo-500 hover:to-violet-600 active:scale-[0.98] transition-all duration-300 font-extrabold relative overflow-hidden cursor-pointer"
             >
               <span className="relative z-10 flex items-center gap-2">
                 <span>Démarrer mes 14 jours gratuits</span>
-                <span className="material-symbols-outlined text-2xl transition-transform duration-300 group-hover:translate-x-1">
+                <span className="material-symbols-outlined text-xl sm:text-2xl transition-transform duration-300 group-hover:translate-x-1">
                   arrow_forward
                 </span>
               </span>
@@ -158,15 +157,15 @@ export default function LandingPage({ onLoginClick }: LandingPageProps) {
 
             <a
               href="#tarifs"
-              className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-7 py-4 sm:py-5 rounded-2xl bg-surface-container-lowest text-on-surface font-title-md text-base border-2 border-outline-variant/40 hover:bg-surface-container-low hover:border-primary/40 active:scale-[0.98] transition-all shadow-xs font-bold"
+              className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-5 sm:px-7 py-3.5 sm:py-5 rounded-2xl bg-surface-container-lowest text-on-surface font-title-md text-sm sm:text-base border-2 border-outline-variant/40 hover:bg-surface-container-low hover:border-primary/40 active:scale-[0.98] transition-all shadow-xs font-bold"
             >
-              <span className="material-symbols-outlined text-primary text-xl">payments</span>
+              <span className="material-symbols-outlined text-primary text-lg sm:text-xl">payments</span>
               <span>Voir les prix d&apos;abonnement</span>
             </a>
           </div>
 
           {/* Micro-réassurances sous le CTA */}
-          <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1.5 text-xs text-outline font-medium">
+          <div className="flex flex-wrap items-center justify-center gap-x-3 sm:gap-x-4 gap-y-1.5 text-xs text-outline font-medium">
             <span className="inline-flex items-center gap-1 text-emerald-700 font-bold">
               <span className="material-symbols-outlined text-sm">check_circle</span> 14 jours offerts
             </span>
@@ -182,52 +181,54 @@ export default function LandingPage({ onLoginClick }: LandingPageProps) {
         {/* ================================================================ */}
         {/* 2. SECTION TARIFICATION D&apos;ABONNEMENT (MISE EN PLACE EN HAUT)     */}
         {/* ================================================================ */}
-        <section className="w-full py-16 sm:py-20 px-4 md:px-8 bg-surface-container-low/40 border-t border-outline-variant/20" id="tarifs">
+        <section className="w-full py-14 sm:py-20 px-4 md:px-8 bg-surface-container-low/40 border-t border-outline-variant/20" id="tarifs">
           <div className="max-w-7xl mx-auto">
-            <div className="text-center max-w-2xl mx-auto mb-10">
-              <span className="inline-flex items-center gap-1.5 px-3.5 py-1 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200 text-xs font-black uppercase tracking-wider mb-3">
+            <div className="text-center max-w-2xl mx-auto mb-8 sm:mb-10">
+              <span className="inline-flex items-center gap-1.5 px-3 sm:px-3.5 py-1 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200 text-[11px] sm:text-xs font-black uppercase tracking-wider mb-3">
                 🎁 14 JOURS D&apos;ESSAI GRATUIT POUR TOUS
               </span>
-              <h2 className="text-3xl md:text-4xl font-extrabold text-on-surface mt-1 mb-3">
+              <h2 className="text-2xl sm:text-3xl md:text-4xl font-extrabold text-on-surface mt-1 mb-3">
                 Des formules simples, claires et accessibles
               </h2>
-              <p className="text-base text-on-surface-variant font-medium">
+              <p className="text-sm sm:text-base text-on-surface-variant font-medium">
                 Commencez par 14 jours d&apos;essai 100% gratuit sans carte bancaire, puis choisissez la formule adaptée à votre commerce.
               </p>
             </div>
 
             {/* Toggle Mensuel / Annuel */}
-            <div className="flex items-center justify-center gap-4 mb-10">
-              <span className={`text-sm font-bold transition-colors ${!isAnnual ? "text-primary" : "text-on-surface-variant"}`}>
-                Facturation Mensuelle
-              </span>
-              <button
-                type="button"
-                onClick={() => setIsAnnual(!isAnnual)}
-                className={`relative inline-flex h-8 w-15 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-hidden ${isAnnual ? "bg-primary" : "bg-surface-container-high"}`}
-                aria-label="Basculer vers la facturation annuelle"
-              >
-                <span className={`pointer-events-none inline-block h-7 w-7 transform rounded-full bg-white shadow-md ring-0 transition duration-200 ease-in-out ${isAnnual ? "translate-x-7" : "translate-x-0"}`} />
-              </button>
-              <span className={`text-sm font-bold flex items-center gap-2 transition-colors ${isAnnual ? "text-primary" : "text-on-surface-variant"}`}>
-                Facturation Annuelle
-                <span className="px-2.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-700 text-[11px] font-extrabold uppercase border border-emerald-500/20">
-                  2 mois offerts
+            <div className="flex flex-col sm:flex-row items-center justify-center gap-3 sm:gap-4 mb-8 sm:mb-10">
+              <div className="flex items-center justify-center gap-3">
+                <span className={`text-xs sm:text-sm font-bold transition-colors ${!isAnnual ? "text-primary" : "text-on-surface-variant"}`}>
+                  Facturation Mensuelle
                 </span>
+                <button
+                  type="button"
+                  onClick={() => setIsAnnual(!isAnnual)}
+                  className={`relative inline-flex h-8 w-14 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-hidden ${isAnnual ? "bg-primary" : "bg-surface-container-high"}`}
+                  aria-label="Basculer vers la facturation annuelle"
+                >
+                  <span className={`pointer-events-none inline-block h-7 w-7 transform rounded-full bg-white shadow-md ring-0 transition duration-200 ease-in-out ${isAnnual ? "translate-x-6" : "translate-x-0"}`} />
+                </button>
+                <span className={`text-xs sm:text-sm font-bold transition-colors ${isAnnual ? "text-primary" : "text-on-surface-variant"}`}>
+                  Facturation Annuelle
+                </span>
+              </div>
+              <span className="px-2.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-700 text-[11px] font-extrabold uppercase border border-emerald-500/20">
+                2 mois offerts
               </span>
             </div>
 
             {/* Bandeau d&apos;information Essai Gratuit */}
-            <div className="mb-10 p-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-800 dark:text-emerald-300 text-center max-w-2xl mx-auto flex items-center justify-center gap-2 font-bold text-sm shadow-xs">
-              <span className="text-base">🎁</span>
+            <div className="mb-10 sm:mb-12 p-3.5 sm:p-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-800 dark:text-emerald-300 text-center max-w-2xl mx-auto flex flex-col sm:flex-row items-center justify-center gap-1.5 sm:gap-2 font-bold text-xs sm:text-sm shadow-xs">
+              <span className="text-base shrink-0">🎁</span>
               <span><b>14 jours d&apos;essai gratuit</b> offerts à l&apos;inscription • Toutes les fonctionnalités PRO débloquées • Sans carte bancaire</span>
             </div>
 
             {/* Les 3 Colonnes : 1. STARTER (2 500 F) | 2. PRO (5 000 F) | 3. BUSINESS (10 000 F) */}
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 items-stretch">
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-10 lg:gap-8 items-stretch">
               
               {/* CARTE 1 : PLAN STARTER (2 500 F) */}
-              <div className="bg-surface-container-lowest p-8 rounded-3xl border-2 border-blue-500/30 shadow-md hover:shadow-xl hover:border-blue-500/60 transition-all duration-300 flex flex-col justify-between relative">
+              <div className="bg-surface-container-lowest p-6 sm:p-8 rounded-3xl border-2 border-blue-500/30 shadow-md hover:shadow-xl hover:border-blue-500/60 transition-all duration-300 flex flex-col justify-between relative">
                 <div>
                   <div className="inline-block px-3.5 py-1 rounded-full bg-blue-50 text-blue-800 border border-blue-200 text-[11px] font-black uppercase tracking-wider w-fit mb-4">
                     Solo &amp; Démarrage
@@ -236,7 +237,7 @@ export default function LandingPage({ onLoginClick }: LandingPageProps) {
                   <p className="text-xs text-on-surface-variant mb-6 font-medium">Pour commerçants indépendants souhaitant numériser leurs ventes et leurs stocks simplement.</p>
                   
                   <div className="mb-6">
-                    <div className="text-4xl font-black text-blue-600">
+                    <div className="text-3xl sm:text-4xl font-black text-blue-600">
                       {isAnnual ? "25 000" : "2 500"}{" "}
                       <span className="text-sm font-bold text-outline">FCFA / {isAnnual ? "an" : "mois"}</span>
                     </div>
@@ -247,44 +248,44 @@ export default function LandingPage({ onLoginClick }: LandingPageProps) {
                     )}
                   </div>
 
-                  <ul className="space-y-3.5 text-sm text-on-surface mb-8 font-medium">
-                    <li className="flex items-center gap-2.5 font-bold"><span className="material-symbols-outlined text-blue-600 text-lg">check_circle</span> 1 Boutique &amp; 1 Gérant (Admin)</li>
-                    <li className="flex items-center gap-2.5"><span className="material-symbols-outlined text-blue-600 text-lg">check_circle</span> Gestion des produits &amp; du stock</li>
-                    <li className="flex items-center gap-2.5"><span className="material-symbols-outlined text-blue-600 text-lg">check_circle</span> Ventes directes au comptoir illimitées</li>
-                    <li className="flex items-center gap-2.5"><span className="material-symbols-outlined text-blue-600 text-lg">check_circle</span> Calcul des marges &amp; bénéfices nets</li>
-                    <li className="flex items-center gap-2.5"><span className="material-symbols-outlined text-blue-600 text-lg">check_circle</span> <b>Mode Hors-ligne (PWA)</b> sans internet</li>
-                    <li className="flex items-center gap-2.5"><span className="material-symbols-outlined text-blue-600 text-lg">check_circle</span> Tableau de bord essentiel</li>
+                  <ul className="space-y-3 text-sm text-on-surface mb-8 font-medium">
+                    <li className="flex items-start gap-2.5 font-bold"><span className="material-symbols-outlined text-blue-600 text-lg shrink-0 mt-0.5">check_circle</span> <span>1 Boutique &amp; 1 Gérant (Admin)</span></li>
+                    <li className="flex items-start gap-2.5"><span className="material-symbols-outlined text-blue-600 text-lg shrink-0 mt-0.5">check_circle</span> <span>Gestion des produits &amp; du stock</span></li>
+                    <li className="flex items-start gap-2.5"><span className="material-symbols-outlined text-blue-600 text-lg shrink-0 mt-0.5">check_circle</span> <span>Ventes directes au comptoir illimitées</span></li>
+                    <li className="flex items-start gap-2.5"><span className="material-symbols-outlined text-blue-600 text-lg shrink-0 mt-0.5">check_circle</span> <span>Calcul des marges &amp; bénéfices nets</span></li>
+                    <li className="flex items-start gap-2.5"><span className="material-symbols-outlined text-blue-600 text-lg shrink-0 mt-0.5">check_circle</span> <span><b>Mode Hors-ligne (PWA)</b> sans internet</span></li>
+                    <li className="flex items-start gap-2.5"><span className="material-symbols-outlined text-blue-600 text-lg shrink-0 mt-0.5">check_circle</span> <span>Tableau de bord essentiel</span></li>
                   </ul>
                 </div>
 
                 <button 
                   onClick={() => onLoginClick(true)} 
-                  className="group relative w-full py-4 px-6 rounded-2xl bg-gradient-to-r from-blue-50 via-indigo-50 to-blue-100/70 border-2 border-blue-500/40 text-blue-800 font-extrabold text-base text-center hover:from-blue-600 hover:to-indigo-600 hover:text-white hover:border-blue-600 shadow-md hover:shadow-xl hover:shadow-blue-500/25 active:scale-[0.98] transition-all duration-300 flex items-center justify-center gap-2 cursor-pointer overflow-hidden"
+                  className="group relative w-full py-3.5 sm:py-4 px-4 sm:px-6 rounded-2xl bg-gradient-to-r from-blue-50 via-indigo-50 to-blue-100/70 border-2 border-blue-500/40 text-blue-800 font-extrabold text-sm sm:text-base text-center hover:from-blue-600 hover:to-indigo-600 hover:text-white hover:border-blue-600 shadow-md hover:shadow-xl hover:shadow-blue-500/25 active:scale-[0.98] transition-all duration-300 flex items-center justify-center gap-2 cursor-pointer overflow-hidden"
                 >
                   <span className="relative z-10 flex items-center justify-center gap-2">
-                    <span className="material-symbols-outlined text-blue-600 text-xl group-hover:text-white transition-colors">rocket_launch</span>
+                    <span className="material-symbols-outlined text-blue-600 text-lg sm:text-xl group-hover:text-white transition-colors shrink-0">rocket_launch</span>
                     <span>Commencer gratuitement</span>
-                    <span className="material-symbols-outlined text-xl transition-transform duration-300 group-hover:translate-x-1">arrow_forward</span>
+                    <span className="material-symbols-outlined text-lg sm:text-xl transition-transform duration-300 group-hover:translate-x-1 shrink-0">arrow_forward</span>
                   </span>
                   <span className="absolute inset-0 w-full h-full bg-gradient-to-r from-transparent via-white/30 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-700 ease-out pointer-events-none" />
                 </button>
               </div>
 
               {/* CARTE 2 : PLAN PRO (5 000 F) - LE PLUS POPULAIRE */}
-              <div className="bg-surface-container-lowest p-8 rounded-3xl border-2 border-emerald-600 shadow-2xl shadow-emerald-600/20 flex flex-col justify-between relative transform lg:-translate-y-2 hover:-translate-y-3 transition-all duration-300 ring-4 ring-emerald-600/10">
-                <div className="absolute -top-4 left-1/2 -translate-x-1/2 px-4 py-1.5 rounded-full bg-gradient-to-r from-emerald-600 to-teal-600 text-white text-[11px] font-black uppercase tracking-wider shadow-lg shadow-emerald-600/30 flex items-center gap-1.5 whitespace-nowrap">
+              <div className="bg-surface-container-lowest p-6 sm:p-8 pt-8 sm:pt-9 rounded-3xl border-2 border-emerald-600 shadow-2xl shadow-emerald-600/20 flex flex-col justify-between relative transform lg:-translate-y-2 hover:-translate-y-3 transition-all duration-300 ring-4 ring-emerald-600/10">
+                <div className="absolute -top-4 left-1/2 -translate-x-1/2 px-3.5 sm:px-4 py-1 sm:py-1.5 rounded-full bg-gradient-to-r from-emerald-600 to-teal-600 text-white text-[10px] sm:text-[11px] font-black uppercase tracking-wider shadow-lg shadow-emerald-600/30 flex items-center gap-1.5 whitespace-nowrap">
                   <span className="material-symbols-outlined text-yellow-300 text-sm" style={{ fontVariationSettings: "'FILL' 1" }}>star</span>
                   <span>⭐ RECOMMANDÉ</span>
                 </div>
                 <div>
-                  <div className="inline-block px-3.5 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 text-[11px] font-black uppercase tracking-wider w-fit mb-4 mt-2">
+                  <div className="inline-block px-3.5 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 text-[11px] font-black uppercase tracking-wider w-fit mb-4">
                     Boutique Individuelle
                   </div>
                   <h3 className="text-2xl font-extrabold text-on-surface mb-1">PRO</h3>
                   <p className="text-xs text-on-surface-variant mb-6 font-medium">Pour boutiques actives avec reçus, dettes clients et 1 caissier inclus.</p>
                   
                   <div className="mb-6">
-                    <div className="flex items-center gap-2 mb-1">
+                    <div className="flex flex-wrap items-center gap-2 mb-1">
                       <span className="text-sm sm:text-base font-bold text-outline line-through opacity-75">
                         {isAnnual ? "60 000" : "6 000"} FCFA
                       </span>
@@ -292,7 +293,7 @@ export default function LandingPage({ onLoginClick }: LandingPageProps) {
                         {isAnnual ? "-10 000 F Réduction" : "-1 000 F Réduction"}
                       </span>
                     </div>
-                    <div className="text-4xl font-black text-emerald-600">
+                    <div className="text-3xl sm:text-4xl font-black text-emerald-600">
                       {isAnnual ? "50 000" : "5 000"}{" "}
                       <span className="text-sm font-bold text-outline">FCFA / {isAnnual ? "an" : "mois"}</span>
                     </div>
@@ -303,45 +304,45 @@ export default function LandingPage({ onLoginClick }: LandingPageProps) {
                     )}
                   </div>
 
-                  <ul className="space-y-3.5 text-sm text-on-surface mb-8 font-medium">
-                    <li className="flex items-center gap-2.5 font-bold text-emerald-700"><span className="material-symbols-outlined text-emerald-600 text-lg">verified</span> Tout ce qui est inclus dans Starter</li>
-                    <li className="flex items-center gap-2.5 font-semibold"><span className="material-symbols-outlined text-emerald-600 text-lg">check_circle</span> <b>1 Caissier inclus</b> avec compte dédié</li>
-                    <li className="flex items-center gap-2.5 font-semibold"><span className="material-symbols-outlined text-emerald-600 text-lg">check_circle</span> <b>Carnet de Crédit &amp; Dettes (Relances WhatsApp)</b></li>
-                    <li className="flex items-center gap-2.5 font-semibold"><span className="material-symbols-outlined text-emerald-600 text-lg">check_circle</span> <b>Tickets thermiques 80mm &amp; Factures A4</b></li>
-                    <li className="flex items-center gap-2.5"><span className="material-symbols-outlined text-emerald-600 text-lg">check_circle</span> Inventaires physiques tournants &amp; Écarts</li>
-                    <li className="flex items-center gap-2.5"><span className="material-symbols-outlined text-emerald-600 text-lg">check_circle</span> Commandes fournisseurs &amp; Analyses complètes</li>
-                    <li className="flex items-center gap-2.5"><span className="material-symbols-outlined text-emerald-600 text-lg">check_circle</span> Support WhatsApp réactif</li>
+                  <ul className="space-y-3 text-sm text-on-surface mb-8 font-medium">
+                    <li className="flex items-start gap-2.5 font-bold text-emerald-700"><span className="material-symbols-outlined text-emerald-600 text-lg shrink-0 mt-0.5">verified</span> <span>Tout ce qui est inclus dans Starter</span></li>
+                    <li className="flex items-start gap-2.5 font-semibold"><span className="material-symbols-outlined text-emerald-600 text-lg shrink-0 mt-0.5">check_circle</span> <span><b>1 Caissier inclus</b> avec compte dédié</span></li>
+                    <li className="flex items-start gap-2.5 font-semibold"><span className="material-symbols-outlined text-emerald-600 text-lg shrink-0 mt-0.5">check_circle</span> <span><b>Carnet de Crédit &amp; Dettes (Relances WhatsApp)</b></span></li>
+                    <li className="flex items-start gap-2.5 font-semibold"><span className="material-symbols-outlined text-emerald-600 text-lg shrink-0 mt-0.5">check_circle</span> <span><b>Tickets thermiques 80mm &amp; Factures A4</b></span></li>
+                    <li className="flex items-start gap-2.5"><span className="material-symbols-outlined text-emerald-600 text-lg shrink-0 mt-0.5">check_circle</span> <span>Inventaires physiques tournants &amp; Écarts</span></li>
+                    <li className="flex items-start gap-2.5"><span className="material-symbols-outlined text-emerald-600 text-lg shrink-0 mt-0.5">check_circle</span> <span>Commandes fournisseurs &amp; Analyses complètes</span></li>
+                    <li className="flex items-start gap-2.5"><span className="material-symbols-outlined text-emerald-600 text-lg shrink-0 mt-0.5">check_circle</span> <span>Support WhatsApp réactif</span></li>
                   </ul>
                 </div>
 
                 <button 
                   onClick={() => onLoginClick(true)} 
-                  className="group relative w-full py-4 px-6 rounded-2xl bg-gradient-to-r from-emerald-600 via-teal-600 to-indigo-600 text-white font-black text-base text-center shadow-xl shadow-emerald-600/40 hover:shadow-2xl hover:shadow-emerald-600/60 hover:from-emerald-500 hover:to-indigo-500 active:scale-[0.98] transition-all duration-300 flex items-center justify-center gap-2 overflow-hidden cursor-pointer"
+                  className="group relative w-full py-3.5 sm:py-4 px-4 sm:px-6 rounded-2xl bg-gradient-to-r from-emerald-600 via-teal-600 to-indigo-600 text-white font-black text-sm sm:text-base text-center shadow-xl shadow-emerald-600/40 hover:shadow-2xl hover:shadow-emerald-600/60 hover:from-emerald-500 hover:to-indigo-500 active:scale-[0.98] transition-all duration-300 flex items-center justify-center gap-2 overflow-hidden cursor-pointer"
                 >
                   <span className="absolute inset-0 w-full h-full bg-gradient-to-r from-transparent via-white/25 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-1000 ease-out pointer-events-none" />
                   <span className="relative z-10 flex items-center justify-center gap-2">
-                    <span className="material-symbols-outlined text-yellow-300 text-xl" style={{ fontVariationSettings: "'FILL' 1" }}>bolt</span>
+                    <span className="material-symbols-outlined text-yellow-300 text-lg sm:text-xl shrink-0" style={{ fontVariationSettings: "'FILL' 1" }}>bolt</span>
                     <span>Essayer gratuitement 14 jours</span>
-                    <span className="material-symbols-outlined text-xl transition-transform duration-300 group-hover:translate-x-1">arrow_forward</span>
+                    <span className="material-symbols-outlined text-lg sm:text-xl transition-transform duration-300 group-hover:translate-x-1 shrink-0">arrow_forward</span>
                   </span>
                 </button>
               </div>
 
               {/* CARTE 3 : PLAN BUSINESS (10 000 F) */}
-              <div className="bg-surface-container-lowest p-8 rounded-3xl border-2 border-purple-500/50 shadow-xl shadow-purple-500/10 hover:border-purple-600 hover:shadow-2xl hover:shadow-purple-500/20 flex flex-col justify-between relative transition-all duration-300">
-                <div className="absolute -top-4 left-1/2 -translate-x-1/2 px-4 py-1.5 rounded-full bg-gradient-to-r from-purple-700 to-fuchsia-700 text-white text-[11px] font-black uppercase tracking-wider shadow-lg shadow-purple-700/30 flex items-center gap-1.5 whitespace-nowrap">
+              <div className="bg-surface-container-lowest p-6 sm:p-8 pt-8 sm:pt-9 rounded-3xl border-2 border-purple-500/50 shadow-xl shadow-purple-500/10 hover:border-purple-600 hover:shadow-2xl hover:shadow-purple-500/20 flex flex-col justify-between relative transition-all duration-300">
+                <div className="absolute -top-4 left-1/2 -translate-x-1/2 px-3.5 sm:px-4 py-1 sm:py-1.5 rounded-full bg-gradient-to-r from-purple-700 to-fuchsia-700 text-white text-[10px] sm:text-[11px] font-black uppercase tracking-wider shadow-lg shadow-purple-700/30 flex items-center gap-1.5 whitespace-nowrap">
                   <span className="material-symbols-outlined text-amber-300 text-sm" style={{ fontVariationSettings: "'FILL' 1" }}>workspace_premium</span>
                   <span>💎 Multi-Magasins &amp; Équipe</span>
                 </div>
                 <div>
-                  <div className="inline-block px-3.5 py-1 rounded-full bg-purple-50 text-purple-700 border border-purple-200 text-[11px] font-black uppercase tracking-wider w-fit mb-4 mt-2">
+                  <div className="inline-block px-3.5 py-1 rounded-full bg-purple-50 text-purple-700 border border-purple-200 text-[11px] font-black uppercase tracking-wider w-fit mb-4">
                     Multi-Points de Vente
                   </div>
                   <h3 className="text-2xl font-extrabold text-on-surface mb-1">BUSINESS</h3>
                   <p className="text-xs text-on-surface-variant mb-6 font-medium">Pour propriétaires gérant plusieurs points de vente avec une équipe de caissiers.</p>
                   
                   <div className="mb-6">
-                    <div className="text-4xl font-black text-purple-700">
+                    <div className="text-3xl sm:text-4xl font-black text-purple-700">
                       {isAnnual ? "100 000" : "10 000"}{" "}
                       <span className="text-sm font-bold text-outline">FCFA / {isAnnual ? "an" : "mois"}</span>
                     </div>
@@ -352,26 +353,26 @@ export default function LandingPage({ onLoginClick }: LandingPageProps) {
                     )}
                   </div>
 
-                  <ul className="space-y-3.5 text-sm text-on-surface mb-8 font-medium">
-                    <li className="flex items-center gap-2.5 font-bold text-purple-700"><span className="material-symbols-outlined text-purple-600 text-lg">verified</span> Toutes les fonctionnalités Pro incluses</li>
-                    <li className="flex items-center gap-2.5 font-bold"><span className="material-symbols-outlined text-purple-600 text-lg">check_circle</span> <b>Jusqu&apos;à 3 Boutiques actives</b></li>
-                    <li className="flex items-center gap-2.5 font-bold"><span className="material-symbols-outlined text-purple-600 text-lg">check_circle</span> <b>Jusqu&apos;à 3 Caissiers au total</b></li>
-                    <li className="flex items-center gap-2.5"><span className="material-symbols-outlined text-purple-600 text-lg">check_circle</span> Sélecteur &amp; Affectation par boutique</li>
-                    <li className="flex items-center gap-2.5"><span className="material-symbols-outlined text-purple-600 text-lg">check_circle</span> Tableau de bord consolidé multi-magasins</li>
-                    <li className="flex items-center gap-2.5"><span className="material-symbols-outlined text-purple-600 text-lg">check_circle</span> Clôtures de caisse certifiées &amp; Détection des écarts</li>
-                    <li className="flex items-center gap-2.5"><span className="material-symbols-outlined text-purple-600 text-lg">check_circle</span> Support VIP prioritaire WhatsApp 7j/7</li>
+                  <ul className="space-y-3 text-sm text-on-surface mb-8 font-medium">
+                    <li className="flex items-start gap-2.5 font-bold text-purple-700"><span className="material-symbols-outlined text-purple-600 text-lg shrink-0 mt-0.5">verified</span> <span>Toutes les fonctionnalités Pro incluses</span></li>
+                    <li className="flex items-start gap-2.5 font-bold"><span className="material-symbols-outlined text-purple-600 text-lg shrink-0 mt-0.5">check_circle</span> <span><b>Jusqu&apos;à 3 Boutiques actives</b></span></li>
+                    <li className="flex items-start gap-2.5 font-bold"><span className="material-symbols-outlined text-purple-600 text-lg shrink-0 mt-0.5">check_circle</span> <span><b>Jusqu&apos;à 3 Caissiers au total</b></span></li>
+                    <li className="flex items-start gap-2.5"><span className="material-symbols-outlined text-purple-600 text-lg shrink-0 mt-0.5">check_circle</span> <span>Sélecteur &amp; Affectation par boutique</span></li>
+                    <li className="flex items-start gap-2.5"><span className="material-symbols-outlined text-purple-600 text-lg shrink-0 mt-0.5">check_circle</span> <span>Tableau de bord consolidé multi-magasins</span></li>
+                    <li className="flex items-start gap-2.5"><span className="material-symbols-outlined text-purple-600 text-lg shrink-0 mt-0.5">check_circle</span> <span>Clôtures de caisse certifiées &amp; Détection des écarts</span></li>
+                    <li className="flex items-start gap-2.5"><span className="material-symbols-outlined text-purple-600 text-lg shrink-0 mt-0.5">check_circle</span> <span>Support VIP prioritaire WhatsApp 7j/7</span></li>
                   </ul>
                 </div>
 
                 <button 
                   onClick={() => onLoginClick(true)} 
-                  className="group relative w-full py-4 px-6 rounded-2xl bg-gradient-to-r from-purple-700 via-violet-700 to-indigo-800 text-white font-black text-base text-center shadow-xl shadow-purple-700/40 hover:shadow-2xl hover:shadow-purple-700/60 hover:from-purple-600 hover:to-indigo-700 active:scale-[0.98] transition-all duration-300 flex items-center justify-center gap-2 overflow-hidden cursor-pointer"
+                  className="group relative w-full py-3.5 sm:py-4 px-4 sm:px-6 rounded-2xl bg-gradient-to-r from-purple-700 via-violet-700 to-indigo-800 text-white font-black text-sm sm:text-base text-center shadow-xl shadow-purple-700/40 hover:shadow-2xl hover:shadow-purple-700/60 hover:from-purple-600 hover:to-indigo-700 active:scale-[0.98] transition-all duration-300 flex items-center justify-center gap-2 overflow-hidden cursor-pointer"
                 >
                   <span className="absolute inset-0 w-full h-full bg-gradient-to-r from-transparent via-white/25 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-1000 ease-out pointer-events-none" />
                   <span className="relative z-10 flex items-center justify-center gap-2">
-                    <span className="material-symbols-outlined text-amber-300 text-xl" style={{ fontVariationSettings: "'FILL' 1" }}>workspace_premium</span>
+                    <span className="material-symbols-outlined text-amber-300 text-lg sm:text-xl shrink-0" style={{ fontVariationSettings: "'FILL' 1" }}>workspace_premium</span>
                     <span>Choisir Business après l&apos;essai</span>
-                    <span className="material-symbols-outlined text-xl transition-transform duration-300 group-hover:translate-x-1">arrow_forward</span>
+                    <span className="material-symbols-outlined text-lg sm:text-xl transition-transform duration-300 group-hover:translate-x-1 shrink-0">arrow_forward</span>
                   </span>
                 </button>
               </div>
@@ -379,14 +380,14 @@ export default function LandingPage({ onLoginClick }: LandingPageProps) {
             </div>
 
             {/* Mentions de réassurance sous la tarification */}
-            <div className="mt-12 text-center text-xs text-on-surface-variant font-medium flex flex-wrap items-center justify-center gap-6 p-4 rounded-2xl bg-surface-container-low/70 border border-outline-variant/30 max-w-3xl mx-auto shadow-xs">
-              <span className="flex items-center gap-2 font-bold text-on-surface">
-                <span className="material-symbols-outlined text-indigo-600 text-lg">verified_user</span>
-                Paiement 100% sécurisé via Moneriz (T-Money, Moov Flooz, Wave, Orange Money, Carte)
+            <div className="mt-10 sm:mt-12 text-center text-xs text-on-surface-variant font-medium flex flex-col sm:flex-row flex-wrap items-center justify-center gap-3 sm:gap-6 p-4 rounded-2xl bg-surface-container-low/70 border border-outline-variant/30 max-w-3xl mx-auto shadow-xs">
+              <span className="flex items-center justify-center gap-2 font-bold text-on-surface">
+                <span className="material-symbols-outlined text-indigo-600 text-lg shrink-0">verified_user</span>
+                <span>Paiement 100% sécurisé via Moneriz (T-Money, Moov Flooz, Wave, Orange Money, Carte)</span>
               </span>
-              <span className="flex items-center gap-1.5 font-bold text-emerald-700">
-                <span className="material-symbols-outlined text-emerald-600 text-lg">lock</span>
-                Sans engagement • Annulation libre en 1 clic
+              <span className="flex items-center justify-center gap-1.5 font-bold text-emerald-700">
+                <span className="material-symbols-outlined text-emerald-600 text-lg shrink-0">lock</span>
+                <span>Sans engagement • Annulation libre en 1 clic</span>
               </span>
             </div>
           </div>
@@ -539,23 +540,23 @@ export default function LandingPage({ onLoginClick }: LandingPageProps) {
         {/* ================================================================ */}
         {/* 5. GRAND CTA FINAL                                               */}
         {/* ================================================================ */}
-        <section className="w-full py-16 sm:py-20 px-4 md:px-8 bg-gradient-to-br from-indigo-700 via-primary to-violet-800 text-white text-center">
+        <section className="w-full py-14 sm:py-20 px-4 md:px-8 bg-gradient-to-br from-indigo-700 via-primary to-violet-800 text-white text-center">
           <div className="max-w-4xl mx-auto flex flex-col items-center">
-            <span className="inline-block px-4 py-1.5 rounded-full bg-white/10 text-white border border-white/20 text-xs font-black uppercase tracking-wider mb-4">
+            <span className="inline-block px-3.5 sm:px-4 py-1.5 rounded-full bg-white/10 text-white border border-white/20 text-[11px] sm:text-xs font-black uppercase tracking-wider mb-4">
               Modernisez votre gestion dès aujourd&apos;hui
             </span>
-            <h2 className="text-3xl sm:text-5xl font-black mb-4 tracking-tight leading-tight">
+            <h2 className="text-2xl sm:text-5xl font-black mb-4 tracking-tight leading-tight">
               Prenez le contrôle de votre boutique maintenant
             </h2>
-            <p className="max-w-xl text-base sm:text-lg text-white/90 mb-8 font-medium leading-relaxed">
+            <p className="max-w-xl text-sm sm:text-lg text-white/90 mb-8 font-medium leading-relaxed">
               Rejoignez les commerçants qui gagnent du temps, sécurisent leurs encaissements et éliminent les pertes de caisse.
             </p>
             <button
               onClick={() => onLoginClick(true)}
-              className="group inline-flex items-center justify-center gap-3 px-8 sm:px-10 py-4 sm:py-5 rounded-2xl bg-white text-indigo-700 font-black text-base sm:text-lg hover:bg-white/95 active:scale-[0.98] transition-all duration-300 shadow-2xl shadow-black/25 cursor-pointer"
+              className="group w-full sm:w-auto inline-flex items-center justify-center gap-2 sm:gap-3 px-6 sm:px-10 py-4 sm:py-5 rounded-2xl bg-white text-indigo-700 font-black text-sm sm:text-lg hover:bg-white/95 active:scale-[0.98] transition-all duration-300 shadow-2xl shadow-black/25 cursor-pointer"
             >
               <span>Démarrer vos 14 jours gratuits</span>
-              <span className="material-symbols-outlined text-2xl transition-transform duration-300 group-hover:translate-x-1.5">
+              <span className="material-symbols-outlined text-xl sm:text-2xl transition-transform duration-300 group-hover:translate-x-1.5 shrink-0">
                 arrow_forward
               </span>
             </button>
@@ -570,9 +571,9 @@ export default function LandingPage({ onLoginClick }: LandingPageProps) {
       {/* FOOTER                                                           */}
       {/* ================================================================ */}
       <footer className="w-full bg-inverse-surface text-inverse-on-surface">
-        <div className="max-w-7xl mx-auto px-4 md:px-8 pt-10 pb-20 sm:pb-8">
-          <div className="flex flex-col sm:flex-row items-center justify-between gap-6 pb-6 border-b border-on-surface-variant/20">
-            <div className="flex items-center gap-2.5">
+        <div className="max-w-7xl mx-auto px-4 md:px-8 pt-10 pb-24 sm:pb-8">
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-4 sm:gap-6 pb-6 border-b border-on-surface-variant/20 text-center sm:text-left">
+            <div className="flex flex-col sm:flex-row items-center gap-1 sm:gap-2.5">
               <span className="text-lg font-bold text-inverse-on-surface">MaBoutiquePro</span>
               <span className="text-xs text-inverse-on-surface/60">
                 — Caisse, stocks &amp; gestion commerciale pour l&apos;Afrique
