@@ -4,6 +4,17 @@ import { checkRateLimit, getClientIp, rateLimitExceededResponse } from '@/lib/se
 
 export const runtime = 'nodejs';
 
+const ALLOWED_PLAN_KEYS: PlanKey[] = [
+  'starter_monthly',
+  'starter_annual',
+  'pro_monthly',
+  'pro_annual',
+  'business_monthly',
+  'business_annual',
+];
+
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
 export async function POST(request: Request) {
   // Rate limiting : max 10 commandes par minute par adresse IP
   const clientIp = getClientIp(request);
@@ -17,10 +28,14 @@ export async function POST(request: Request) {
 
   try {
     const body = await request.json();
-    const { planKey, storeId, customerEmail } = body;
+    const { planKey, storeId, customerEmail } = body || {};
 
-    if (!planKey) {
-      return Response.json({ error: 'planKey est requis' }, { status: 400 });
+    if (!planKey || typeof planKey !== 'string' || !ALLOWED_PLAN_KEYS.includes(planKey as PlanKey)) {
+      return Response.json({ error: 'planKey invalide ou non reconnu' }, { status: 400 });
+    }
+
+    if (storeId && (typeof storeId !== 'string' || !UUID_REGEX.test(storeId))) {
+      return Response.json({ error: 'Format storeId invalide' }, { status: 400 });
     }
 
     // Contrôle strict d'authentification et d'autorisation côté serveur

@@ -2,6 +2,7 @@
 
 import React, { useEffect, useRef, useState } from 'react';
 import { X, ShieldCheck, CheckCircle2, Loader2, Smartphone, CreditCard } from 'lucide-react';
+import { supabase } from '@/lib/supabase';
 
 interface BrowserCheckout {
   id: string;
@@ -52,12 +53,20 @@ export default function MonerizCheckoutModal({
         async (message) => {
           if (message.status === 'paid' && message.confirmation === 'confirmed') {
             setIsVerifying(true);
-            // Polling de vérification serveur
+            // Polling de vérification serveur authentifié
             let attempts = 0;
             const interval = setInterval(async () => {
               attempts++;
               try {
-                const res = await fetch(`/api/subscription/status?orderId=${encodeURIComponent(orderId)}`);
+                const { data: sessionData } = await supabase.auth.getSession();
+                const accessToken = sessionData?.session?.access_token;
+                const headers: Record<string, string> = {};
+                if (accessToken) {
+                  headers['Authorization'] = `Bearer ${accessToken}`;
+                }
+                const res = await fetch(`/api/subscription/status?orderId=${encodeURIComponent(orderId)}`, {
+                  headers,
+                });
                 const data = await res.json();
                 if (data?.order?.status === 'paid' || attempts >= 6) {
                   clearInterval(interval);
