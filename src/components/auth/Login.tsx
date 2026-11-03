@@ -99,19 +99,39 @@ export default function Login({
         console.warn("Erreur vérification anti-bot:", err);
       }
 
+      const origin = typeof window !== "undefined" ? window.location.origin : "https://maboutiquepro.app";
+      if (typeof window !== "undefined") {
+        sessionStorage.setItem("pending_signup_confirmation", "true");
+      }
+
       const { error, data } = await supabase.auth.signUp({
-        email,
+        email: email.trim(),
         password,
+        options: {
+          emailRedirectTo: origin,
+        },
       });
 
       if (error) {
+        if (typeof window !== "undefined") {
+          sessionStorage.removeItem("pending_signup_confirmation");
+        }
         setMessage({ type: "error", text: error.message });
       } else if (data.user && data.user.identities && data.user.identities.length === 0) {
+        if (typeof window !== "undefined") {
+          sessionStorage.removeItem("pending_signup_confirmation");
+        }
         setMessage({ type: "error", text: "Cet email est déjà utilisé." });
       } else {
+        // Si Supabase a ouvert une session automatiquement sans confirmation d'email, on la coupe pour obliger la validation
+        if (data.session) {
+          await supabase.auth.signOut();
+        }
+        setPassword("");
+        setConfirmPassword("");
         setMessage({
           type: "success",
-          text: "Compte créé ! Veuillez vérifier votre boîte mail pour confirmer votre inscription.",
+          text: "Compte créé avec succès ! Un e-mail de confirmation vient de vous être envoyé. Veuillez cliquer sur le lien dans votre boîte mail (ou spams) avant de vous connecter.",
         });
       }
     } else {
@@ -144,6 +164,7 @@ export default function Login({
         : `${cleanInput}@caisse.maboutique.app`;
 
       if (typeof window !== "undefined") {
+        sessionStorage.removeItem("pending_signup_confirmation");
         sessionStorage.setItem("auth_portal_mode", portalMode);
       }
 

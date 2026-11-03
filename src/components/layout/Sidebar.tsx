@@ -275,25 +275,27 @@ export default function Sidebar({ isOpen, onClose }: { isOpen?: boolean; onClose
                   </Link>
                 );
               })}
-
-              {/* Lien Communauté WhatsApp */}
-              <a
-                href={WHATSAPP_COMMUNITY_URL}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="group relative flex flex-row items-center justify-start gap-3 rounded-xl px-3 py-2 text-xs font-semibold text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/25 transition-all mt-2"
-                title="Communauté WhatsApp & Nouveautés"
-              >
-                <MessageCircle className="h-4 w-4 shrink-0 text-emerald-600 dark:text-emerald-400" />
-                {!collapsed && (
-                  <div className="flex items-center justify-between w-full">
-                    <span className="truncate">Communauté WhatsApp</span>
-                    <ExternalLink className="h-3 w-3 opacity-70" />
-                  </div>
-                )}
-              </a>
           </div>
         </nav>
+
+        {/* Lien Communauté WhatsApp épinglé hors du scroll (toujours visible) */}
+        <div className="px-3 pb-2 pt-1">
+          <a
+            href={WHATSAPP_COMMUNITY_URL}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="group relative flex flex-row items-center justify-center lg:justify-start gap-2.5 rounded-xl px-3 py-2 text-xs font-bold text-emerald-700 dark:text-emerald-300 bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/30 transition-all shadow-xs"
+            title="Communauté WhatsApp & Nouveautés"
+          >
+            <MessageCircle className="h-4 w-4 shrink-0 text-emerald-600 dark:text-emerald-400" />
+            {!collapsed && (
+              <div className="flex items-center justify-between w-full min-w-0">
+                <span className="truncate">Communauté WhatsApp</span>
+                <ExternalLink className="h-3 w-3 shrink-0 opacity-75" />
+              </div>
+            )}
+          </a>
+        </div>
 
         {/* Store display / selector */}
         {!collapsed && (

@@ -603,6 +603,16 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         setStores([]);
         setLoading(false);
       } else if (session?.user) {
+        // Si l'utilisateur vient de soumettre le formulaire d'inscription, ne pas le connecter automatiquement avant qu'il ne voie l'écran de confirmation email
+        const isPendingSignup =
+          typeof window !== "undefined" &&
+          sessionStorage.getItem("pending_signup_confirmation") === "true";
+
+        if (isPendingSignup) {
+          setLoading(false);
+          return;
+        }
+
         setUser(session.user);
         if (typeof navigator === "undefined" || navigator.onLine) {
           fetchStores(session.user.id).catch(() => {});
