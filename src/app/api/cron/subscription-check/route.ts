@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { verifyCronSecret } from "@/lib/server/cron-auth";
 import { supabaseServer } from "@/lib/server/supabase-server";
 import { queueEmail } from "@/lib/server/email-outbox";
+import { buildSubscriptionExpiringEmail } from "@/lib/server/email-templates";
 
 export const dynamic = "force-dynamic";
 
@@ -50,35 +51,74 @@ export async function GET(request: Request) {
       expiredCount += expiredActive.length;
     }
 
-    // 3. Détection des essais finissant dans 3 jours (Avertissement par email)
+    // 3. Détection des abonnements et essais finissant dans les 3 prochains jours (Alerte d'échéance)
     const in3Days = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString();
+    
+    // A. Essais gratuits se terminant dans 3 jours
     const { data: warningTrials } = await supabaseServer
       .from("admin_subscriptions")
-      .select("user_id, trial_ends_at")
+      .select("user_id, plan_tier, trial_ends_at")
       .eq("status", "trialing")
       .gte("trial_ends_at", nowIso)
       .lte("trial_ends_at", in3Days);
 
-    if (warningTrials && warningTrials.length > 0) {
-      for (const trial of warningTrials) {
-        // Récupérer l'email de l'admin
+    // B. Abonnements payants se terminant dans 3 jours
+    const { data: warningActives } = await supabaseServer
+      .from("admin_subscriptions")
+      .select("user_id, plan_tier, current_period_ends_at")
+      .eq("status", "active")
+      .gte("current_period_ends_at", nowIso)
+      .lte("current_period_ends_at", in3Days);
+
+    const allExpiring = [
+      ...(warningTrials || []).map((t) => ({
+        userId: t.user_id,
+        tier: t.plan_tier || "PRO",
+        expiryDate: t.trial_ends_at,
+        isTrial: true,
+      })),
+      ...(warningActives || []).map((a) => ({
+        userId: a.user_id,
+        tier: a.plan_tier || "PRO",
+        expiryDate: a.current_period_ends_at,
+        isTrial: false,
+      })),
+    ];
+
+    if (allExpiring.length > 0) {
+      for (const item of allExpiring) {
         const { data: profile } = await supabaseServer
           .from("profiles")
           .select("email, full_name")
-          .eq("id", trial.user_id)
+          .eq("id", item.userId)
           .maybeSingle();
 
-        if (profile?.email) {
+        const { data: store } = await supabaseServer
+          .from("stores")
+          .select("id, name")
+          .eq("owner_id", item.userId)
+          .limit(1)
+          .maybeSingle();
+
+        if (profile?.email && item.expiryDate) {
+          const diffMs = new Date(item.expiryDate).getTime() - Date.now();
+          const daysRemaining = Math.max(1, Math.ceil(diffMs / (1000 * 60 * 60 * 24)));
+
+          const emailData = buildSubscriptionExpiringEmail({
+            recipientName: profile.full_name || "Commerçant",
+            storeName: store?.name || "Votre Boutique",
+            planTier: item.tier,
+            daysRemaining,
+            expirationDate: item.expiryDate,
+          });
+
           await queueEmail({
+            storeId: store?.id,
             to: profile.email,
-            subject: "Votre période d'essai BoutiquePro expire dans 3 jours",
-            html: `
-              <h2>Bonjour ${profile.full_name || "Commerçant"},</h2>
-              <p>Votre période d'essai gratuit sur <strong>BoutiquePro</strong> prendra fin le <strong>${new Date(trial.trial_ends_at).toLocaleDateString("fr-FR")}</strong>.</p>
-              <p>Pour continuer à gérer vos ventes, vos stocks et vos caissiers sans interruption, activez votre abonnement en toute simplicité depuis votre espace boutique.</p>
-            `,
-            templateName: "trial_expiring_warning",
-            metadata: { user_id: trial.user_id },
+            subject: emailData.subject,
+            html: emailData.html,
+            templateName: "subscription_expiring_warning",
+            metadata: { user_id: item.userId, days_remaining: daysRemaining, tier: item.tier },
           });
           warningsCount++;
         }

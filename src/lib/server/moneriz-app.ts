@@ -2,6 +2,8 @@ import { supabaseServer as supabase } from './supabase-server';
 import type { BrowserCheckout, CheckoutAttempt } from './moneriz-checkout';
 import fs from 'node:fs';
 import path from 'node:path';
+import { queueEmail } from './email-outbox';
+import { buildSubscriptionSuccessEmail } from './email-templates';
 
 import { 
   SUBSCRIPTION_PLANS, 
@@ -482,6 +484,51 @@ export async function commitMonerizInbox(event: MonerizEvent): Promise<void> {
                     subscription_ends_at: endsAt.toISOString(),
                   })
                   .eq('owner_id', ownerId);
+
+                // D. Envoi immédiat de l'email officiel de confirmation d'abonnement
+                try {
+                  const { data: ownerProfile } = await supabase
+                    .from('profiles')
+                    .select('email, full_name')
+                    .eq('id', ownerId)
+                    .maybeSingle();
+
+                  const { data: storeInfo } = await supabase
+                    .from('stores')
+                    .select('name')
+                    .eq('id', targetOrder.storeId)
+                    .maybeSingle();
+
+                  if (ownerProfile?.email) {
+                    const emailData = buildSubscriptionSuccessEmail({
+                      recipientName: ownerProfile.full_name || 'Commerçant',
+                      storeName: storeInfo?.name || 'Ma Boutique',
+                      planTier: plan.tier,
+                      billingCycle: plan.cycle,
+                      amount: payment.amount,
+                      currency: payment.currency || 'FCFA',
+                      reference: payment.reference || targetOrder.reference,
+                      startDate: now.toISOString(),
+                      endDate: endsAt.toISOString(),
+                    });
+
+                    await queueEmail({
+                      storeId: targetOrder.storeId,
+                      to: ownerProfile.email,
+                      subject: emailData.subject,
+                      html: emailData.html,
+                      templateName: 'subscription_confirmed',
+                      metadata: {
+                        user_id: ownerId,
+                        order_id: targetOrder.orderId,
+                        amount: payment.amount,
+                        tier: plan.tier,
+                      },
+                    });
+                  }
+                } catch (emailErr) {
+                  console.warn("[Moneriz] Erreur lors de l'envoi de l'email de confirmation:", emailErr);
+                }
               } else {
                 // Repli direct par boutique si owner non encore renseigné
                 await supabase
