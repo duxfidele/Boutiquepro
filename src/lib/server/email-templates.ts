@@ -303,3 +303,4 @@ export function buildAppUpdateEmail(params: AppUpdateEmailParams): { subject: st
 
   return { subject, html };
 }
+

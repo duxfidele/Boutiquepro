@@ -10,6 +10,13 @@ Elle permet à de multiples commerçants de gérer leurs boutiques, leurs stocks
 ## 🛠️ Stack Technique
 - **Frontend :** Next.js 14 (App Router), React 18, Tailwind CSS, Lucide React (Icônes), `@base-ui/react`.
 - **Backend & Base de données :** Supabase (PostgreSQL, Authentification, Row Level Security, Triggers & Fonctions RPC en PL/pgSQL).
+- **Authentification & Fournisseurs :** Supabase Auth (Email / Mot de passe avec flux PKCE sécurisé) + **Google OAuth 2.0** en 1 clic (écran de consentement configuré sur Google Cloud Console et redirect URLs `maboutiquepro.app`).
+- **Protection Anti-CSRF & Middleware Edge :** `src/middleware.ts` avec vérification stricte des requêtes mutantes (`POST`, `PUT`, `DELETE`, `PATCH`), en-tête `Origin` / `Host` validés et exemption HMAC-SHA256 pour les webhooks Moneriz.
+- **Stockage Objets & Médias :** Cloudflare R2 (compatible S3) avec client pur Node.js AWS SigV4 (`src/lib/server/r2-storage.ts`), isolation des dossiers par boutique (`stores/[storeId]/...`), quota de 5 Mo et **validation binaire Magic Bytes** (détection réelle des entêtes JPEG, PNG, WEBP, GIF, PDF et rejet strict des fichiers exécutables masqués).
+- **Moteur Transactionnel d'Emails & Outbox :** API Resend + **Transactional Outbox Pattern** dans Supabase (`email_outbox`). Déclenchement asynchrone instantané dès la mise en file d'attente avec reprise automatique en cas d'échec réseau.
+- **Tâches Planifiées (Crons) :** Vercel Cron Jobs sécurisés par jeton d'authentification `CRON_SECRET` (`/api/cron/...`), configurés pour la compatibilité avec le plan Vercel Hobby (exécution quotidienne nocturne).
+- **Audit & Traçabilité Immuable :** Table PostgreSQL `audit_logs` sanctuarisée (révocation des privilèges `UPDATE` et `DELETE` pour garantir l'intégrité légale et comptable).
+- **Observabilité & Suivi des Erreurs :** Sentry Store API v7 haute performance intégrée nativement dans les composants d'erreur React (`global-error.tsx`, `error.tsx`) sans impact sur le chargement.
 - **Format monétaire :** Franc CFA (XOF/XAF - FCFA) avec gestion anti-NaN garantie sur tous les calculs.
 - **Domaine officiel :** `https://maboutiquepro.app` (associé à Vercel & Supabase Auth).
 - **Passerelle de Paiement SaaS :** Moneriz (Spécification v1 Liveframe & Webhooks sécurisés HMAC-SHA256).
@@ -45,6 +52,9 @@ Les données sont strictement cloisonnées grâce aux **Row Level Security (RLS)
 - `inventory_sessions` & `inventory_items` : Sessions d'inventaire physique filtrées par boutique et régularisation des écarts.
 - `settings` : Paramètres personnalisés de chaque boutique (nom, logo, devise, TVA, ville, pays, téléphone, email).
 - `subscription_orders` & `moneriz_events` : Traçabilité des abonnements SaaS et événements de paiement Moneriz.
+- `email_outbox` : File d'attente d'envoi d'emails transactionnels (`recipient`, `subject`, `html`, `status`: pending/sent/failed, `attempts`, `error_message`, `created_at`, `processed_at`).
+- `audit_logs` : Journal d'audit inviolable des actions administrateur critiques (`store_id`, `actor_id`, `actor_email`, `action`, `resource_type`, `resource_id`, `details`, `created_at`). Révocation absolue des droits d'altération et de suppression (`REVOKE UPDATE, DELETE`).
+- `daily_metrics` : Consolidation nocturne quotidienne des agrégats d'activité par boutique (`store_id`, `metric_date`, `total_sales_count`, `gross_revenue`, `cash_collected`, `total_expenses`, `net_profit`, `credit_issued`, `credit_recovered`).
 
 ---
 
@@ -218,6 +228,60 @@ Un audit complet et rigoureux a été exécuté sur l'ensemble de l'application 
 - **Fonction PostgreSQL universelle (`is_store_subscription_active`) :** Contrôle dynamique en temps réel évitant tout blocage intempestif des ventes pour les commerçants abonnés et leurs caissiers.
 - **Intercepteur d'erreurs sécurisé (`isSubscriptionExpiredError`) :** Suppression du faux positif sur le code PostgreSQL générique `P0001` ; seuls les véritables blocages de souscription affichent le message d'abonnement expiré.
 
+### 16. Piliers SaaS Avancés & Infrastructure de Production
+
+#### 1. Authentification Google OAuth & Protection Anti-CSRF
+- **Bouton officiel Google en 1 clic :** Intégré dans `src/components/auth/Login.tsx` via l'appel `supabase.auth.signInWithOAuth({ provider: 'google', options: { redirectTo: ... } })`.
+- **Écran de consentement Google Cloud Platform :** Configuré sous l'ID client officiel avec les URI de redirection autorisées pour `https://maboutiquepro.app` et le callback d'authentification Supabase.
+- **Middleware Anti-CSRF (`src/middleware.ts`) :**
+  - Inspection automatique des méthodes mutantes (`POST`, `PUT`, `DELETE`, `PATCH`).
+  - Validation croisée des en-têtes `Origin` et `Host` pour bloquer toute falsification de requête inter-sites.
+  - **Exemption sécurisée :** Les webhooks externes Moneriz (`/api/webhooks/moneriz`) sont explicitement exemptés du contrôle d'origine car ils sont authentifiés par signature cryptographique HMAC-SHA256.
+  - Injection automatique des en-têtes de durcissement HTTP (`X-Frame-Options`, `X-Content-Type-Options: nosniff`, `Referrer-Policy`).
+
+#### 2. Stockage Cloudflare R2 & Validation Binaire Magic Bytes
+- **Client pur Node.js SigV4 (`src/lib/server/r2-storage.ts`) :** Implémentation native de la signature AWS SigV4 sans dépendance vers le SDK AWS lourd, réduisant considérablement la taille du bundle Vercel Serverless.
+- **Isolation stricte par boutique :** Tous les médias (logos, images de produits) sont stockés sous la clé `stores/[storeId]/[timestamp]-[filename]`.
+- **Validation Binaire Magic Bytes (`validateMagicBytes`) :** Contrôle rigoureux des premiers octets du flux binaire pour valider l'intégrité réelle du fichier avant tout enregistrement :
+  - **JPEG :** `FF D8 FF`
+  - **PNG :** `89 50 4E 47`
+  - **WEBP :** `52 49 46 46` ... `57 45 42 50`
+  - **GIF :** `47 49 46 38`
+  - **PDF :** `25 50 44 46`
+  - *Tout fichier exécutable (`.exe`, `.sh`, `.php`, `.js`) camouflé avec une fausse extension est immédiatement rejeté avec une erreur HTTP 400.*
+- **Endpoint Sécurisé (`/api/upload`) :** Limité à 5 Mo par téléversement, réservé aux utilisateurs authentifiés.
+
+#### 3. Moteur d'Emails Transactionnels Resend & Modèle Outbox
+- **Patron de Conception Transactional Outbox (`email_outbox`) :**
+  - Chaque notification par e-mail est d'abord insérée dans la table `email_outbox` de PostgreSQL avec le statut `pending`. Cela garantit le principe **Zero Data Loss** : aucun email ne peut être perdu en cas de panne temporaire du réseau ou du fournisseur de messagerie.
+  - **Expédition asynchrone instantanée (`dispatchOutboxImmediate`) :** Dès l'insertion en base, une tentative d'expédition HTTP vers l'API Resend est déclenchée sans bloquer le thread principal utilisateur. En cas de succès, la ligne passe en `sent` avec son `resend_id`. En cas d'indisponibilité, elle reste en `pending` pour reprise automatique.
+- **Templates d'Emails HTML Professionnels (`src/lib/server/email-templates.ts`) :**
+  - **Confirmation d'Abonnement (`buildSubscriptionSuccessEmail`) :** Reçu officiel avec badge de paiement vert, intitulé de la formule (Pro / Business), durée, montant en FCFA, date d'échéance et bouton d'accès au tableau de bord.
+  - **Alerte d'Échéance J-3 (`buildSubscriptionExpiringEmail`) :** Email préventif envoyé 3 jours avant la fin d'un abonnement ou de la période d'essai, valorisant la continuité de service des caisses et fournissant un lien direct de renouvellement.
+  - **Annonce de Mise à Jour de l'Application (`buildAppUpdateEmail`) :** Template de diffusion collective aux commerçants pour présenter les nouveautés, améliorations de performances et fonctionnalités ajoutées.
+
+#### 4. Tâches Planifiées (Vercel Crons) & Protection par CRON_SECRET
+- **Contrôle d'accès strict (`src/lib/server/cron-auth.ts`) :** Tous les endpoints `/api/cron/*` vérifient la présence de l'en-tête `Authorization: Bearer <CRON_SECRET>` et rejettent immédiatement les appels non autorisés (`HTTP 401`).
+- **5 Tâches d'Arrière-Plan Prêtes à l'Emploi :**
+  - `/api/cron/process-outbox` : Dépile et réémet les emails en attente ou échoués avec incrément des tentatives.
+  - `/api/cron/subscription-check` : Détecte automatiquement les abonnements et périodes d'essai arrivant à expiration dans 3 jours et planifie l'email d'alerte.
+  - `/api/cron/expiry-alerts` : Détecte les stocks de produits approchant de leur date limite d'utilisation optimale (FEFO < 30 jours).
+  - `/api/cron/debt-reminders` : Établit la liste hebdomadaire des créances clients en souffrance.
+  - `/api/cron/daily-metrics` : Calcule et consolide nocturnement les chiffres d'affaires, marges et dépenses par boutique.
+- **Optimisation pour le Plan Vercel Hobby :** Le forfait gratuit Vercel n'autorisant qu'un seul déclenchement de cron par jour au maximum (`0 3 * * *`), le fichier `vercel.json` a été paramétré sur une exécution nocturne quotidienne à 03h00 UTC, tandis que l'envoi des emails transactionnels s'effectue en temps réel dès leur mise en boîte outbox.
+
+#### 5. Journal d'Audit Immuable (`audit_logs`)
+- Module serveur `src/lib/server/audit-logger.ts` traçant l'ensemble des opérations d'administration sensibles (création de boutique, attribution de rôles, remboursements, résiliations, mises à jour critiques).
+- **Immuabilité garantie par la base de données :** Les permissions `UPDATE` et `DELETE` sur `audit_logs` sont révoquées pour les rôles `authenticated` et `anon`. L'historique d'audit est ainsi inaltérable et constitue une preuve légale et comptable infalsifiable.
+
+#### 6. Observabilité Native Sentry
+- Client Sentry léger `src/lib/sentry.ts` utilisant directement l'API Store v7 sans dépendances npm volumineuses.
+- Câblé dans `src/app/global-error.tsx` et `src/app/error.tsx` pour capturer et transmettre immédiatement les erreurs d'exécution inattendues avec contexte d'environnement.
+
+#### 7. Système de Diffusion Collective des Mises à Jour (`/api/admin/broadcast-update`)
+- Route d'administration sécurisée permettant d'envoyer un email d'annonce officiel à tous les propriétaires de boutiques enregistrés dans l'application.
+- Extraction des gérants uniques depuis `stores` et `profiles`, personnalisation de l'email et mise en outbox automatique.
+
 ---
 
 ## 💼 Modèles d'Exploitation Commerciale
@@ -237,28 +301,45 @@ Un audit complet et rigoureux a été exécuté sur l'ensemble de l'application 
 
 | Fichier / Dossier | Rôle principal |
 |---|---|
+| `src/middleware.ts` | Protection Anti-CSRF sur les routes mutantes, exclusion HMAC Moneriz et headers de sécurité |
+| `src/components/auth/Login.tsx` | Connexion classique, bouton officiel Google OAuth 2.0 et réinitialisation de mot de passe |
 | `src/app/products/page.tsx` | Gestion du catalogue, filtres, stock bas, bouton « Importer Excel » et export |
 | `src/components/products/ProductExcelImportModal.tsx` | Modal d'importation Excel/CSV durcie (5 Mo, 5 000 lignes max, extensions validées) |
 | `src/components/layout/Sidebar.tsx` | Barre latérale avec sélecteur multi-boutiques synchrone et affichage dynamique du logo |
 | `src/context/AuthContext.tsx` | Authentification Supabase, sessions, profils et gestion du rôle multi-tenancy |
 | `src/context/StoreContext.tsx` | État réactif par boutique (`boutiquepro-state-[id]`), calculs anti-NaN et requêtes RLS |
 | `src/app/reset-password/page.tsx` | Page de réinitialisation sécurisée du mot de passe |
-| `src/components/auth/Login.tsx` | Connexion, inscription et demande de réinitialisation par e-mail |
 | `src/app/debts/page.tsx` | Carnet de crédits, historique des versements, quittances PDF et relances WhatsApp Togo |
 | `src/components/pos/CashRegisterSessionModal.tsx` | Gestion des ouvertures et clôtures de caisse (Rapports X et Z) |
 | `src/components/ui/DatePeriodFilter.tsx` | Sélecteur temporel intelligent (presets, raccourcis jour précis & plage calendrier) |
 | `src/components/layout/AppWrapper.tsx` | Routage, protection d'accès selon les rôles et exception pour `/reset-password` |
 | `src/lib/pdf.ts` | Moteur d'export PDF haute fidélité pour factures et quittances avec nom complet de l'opérateur |
 | `src/lib/accountingExport.ts` | Générateur universel des exports comptables Excel et CSV |
+| `src/lib/sentry.ts` | Client Sentry natif Store API v7 pour la capture des exceptions et observabilité |
+| `src/lib/server/r2-storage.ts` | Client Cloudflare R2 pur Node.js SigV4 et validation binaire des Magic Bytes |
+| `src/app/api/upload/route.ts` | Route de téléversement sécurisée (5 Mo max, Magic Bytes, isolation par boutique) |
+| `src/lib/server/email-outbox.ts` | Moteur transactionnel outbox pour l'envoi fiable d'emails via Resend |
+| `src/lib/server/email-templates.ts` | Modèles HTML responsives (Reçu d'abonnement, Alerte échéance J-3, Annonce de mise à jour) |
+| `src/lib/server/audit-logger.ts` | Journalisation des actions d'administration dans la table immuable `audit_logs` |
+| `src/lib/server/cron-auth.ts` | Vérificateur d'autorisation `CRON_SECRET` pour les tâches planifiées |
+| `src/app/api/cron/process-outbox/route.ts` | Cron de dépilage et réémission des emails transactionnels |
+| `src/app/api/cron/subscription-check/route.ts` | Cron de détection des abonnements expirant dans 3 jours et alerte email |
+| `src/app/api/cron/expiry-alerts/route.ts` | Cron de détection des dates de péremption des produits (FEFO < 30 jours) |
+| `src/app/api/cron/debt-reminders/route.ts` | Cron de récapitulatif des créances et impayés clients |
+| `src/app/api/cron/daily-metrics/route.ts` | Cron nocturne de consolidation quotidienne des métriques SaaS |
+| `src/app/api/admin/broadcast-update/route.ts` | Route d'administration pour diffuser une annonce de mise à jour par email à tous les gérants |
 | `src/lib/server/moneriz-signature.ts` | Vérificateur HMAC-SHA256 temps constant des signatures webhook Moneriz |
 | `src/lib/server/moneriz-checkout.ts` | Client serveur pour l'API Checkout Sessions de Moneriz (v1) |
-| `src/lib/server/moneriz-app.ts` | Gestion des commandes d'abonnement, idempotence et inbox dédoublonnée |
+| `src/lib/server/moneriz-app.ts` | Gestion des commandes d'abonnement, idempotence, inbox dédoublonnée et envoi d'email de confirmation |
 | `src/app/api/checkout/route.ts` | Route API POST pour initier une session de paiement Moneriz |
 | `src/app/api/webhooks/moneriz/route.ts` | Route API POST publique pour la réception des webhooks signés |
 | `src/app/api/subscription/order/route.ts` | Route API POST protégée (vérification JWT + RBAC admin) pour créer une commande d'abonnement |
 | `src/app/api/subscription/status/route.ts` | Route API GET de vérification du statut d'abonnement d'une boutique |
 | `src/components/subscription/MonerizCheckoutModal.tsx` | Composant React Liveframe (iframe) avec gestion du protocole postMessage v1 |
 | `src/components/subscription/SubscriptionModal.tsx` | Modal de sélection d'abonnement (Pro, Business, Mensuel, Annuel) |
-| saas_moneriz_integration.sql | Migration SQL Supabase pour les commandes et événements Moneriz |
-| saas_subscription_permanent_fix.sql | Migration SQL universelle de synchronisation des abonnements et héritage des boutiques |
-| fix_create_sale_unit_name.sql | Mise à jour de la RPC create_sale pour la résolution tolérante des formats gros/détail |
+| `migration_email_outbox.sql` | Migration SQL Supabase pour la table transactionnelle `email_outbox` |
+| `migration_audit_logs.sql` | Migration SQL Supabase pour `audit_logs` (immuable) et `daily_metrics` |
+| `saas_moneriz_integration.sql` | Migration SQL Supabase pour les commandes et événements Moneriz |
+| `saas_subscription_permanent_fix.sql` | Migration SQL universelle de synchronisation des abonnements et héritage des boutiques |
+| `fix_create_sale_unit_name.sql` | Mise à jour de la RPC create_sale pour la résolution tolérante des formats gros/détail |
+| `vercel.json` | Configuration Vercel avec cron journalier compatible avec le forfait Hobby |
