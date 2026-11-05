@@ -36,6 +36,29 @@ export async function queueEmail(payload: OutboxEmailPayload): Promise<{ success
       return { success: false, error: error.message };
     }
 
+    // Tentative d'envoi immédiat en direct (sans attendre le cron)
+    sendEmailViaResend(payload.to, payload.subject, payload.html).then(async (sendRes) => {
+      if (sendRes.success) {
+        await supabaseServer
+          .from("email_outbox")
+          .update({
+            status: "sent",
+            sent_at: new Date().toISOString(),
+            attempts: 1,
+          })
+          .eq("id", data.id);
+      } else {
+        await supabaseServer
+          .from("email_outbox")
+          .update({
+            last_error: sendRes.error,
+          })
+          .eq("id", data.id);
+      }
+    }).catch((err) => {
+      console.warn("[EmailOutbox] Échec tentative envoi direct:", err);
+    });
+
     return { success: true, id: data.id };
   } catch (err: any) {
     console.error("[EmailOutbox] Exception queue:", err);

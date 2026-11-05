@@ -2,25 +2,8 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "crons": [
     {
-      "path": "/api/cron/process-outbox",
-      "schedule": "*/2 * * * *"
-    },
-    {
-      "path": "/api/cron/subscription-check",
-      "schedule": "0 1 * * *"
-    },
-    {
-      "path": "/api/cron/expiry-alerts",
-      "schedule": "0 6 * * *"
-    },
-    {
-      "path": "/api/cron/debt-reminders",
-      "schedule": "0 8 * * 1"
-    },
-    {
       "path": "/api/cron/daily-metrics",
-      "schedule": "55 23 * * *"
+      "schedule": "0 3 * * *"
     }
   ]
 }
-
