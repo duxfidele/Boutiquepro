@@ -2,6 +2,7 @@
 
 import React, { useEffect } from "react";
 import { AlertTriangle, RefreshCw, Trash2 } from "lucide-react";
+import { captureException } from "@/lib/sentry";
 
 export default function Error({
   error,
@@ -12,6 +13,7 @@ export default function Error({
 }) {
   useEffect(() => {
     console.error("Next.js Error caught:", error);
+    captureException(error, { tags: { boundary: "app-error" } });
   }, [error]);
 
   const handleResetData = () => {

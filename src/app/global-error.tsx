@@ -1,6 +1,7 @@
 "use client";
 
-import React from "react";
+import React, { useEffect } from "react";
+import { captureException } from "@/lib/sentry";
 
 export default function GlobalError({
   error,
@@ -9,6 +10,9 @@ export default function GlobalError({
   error: Error & { digest?: string };
   reset: () => void;
 }) {
+  useEffect(() => {
+    captureException(error, { tags: { boundary: "global-error" } });
+  }, [error]);
   return (
     <html lang="fr">
       <body className="min-h-screen flex items-center justify-center p-4 bg-slate-950 text-white font-sans">
