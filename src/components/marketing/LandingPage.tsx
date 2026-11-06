@@ -1,4 +1,26 @@
 import React, { useState } from "react";
+import {
+  ArrowRight,
+  CheckCircle2,
+  Rocket,
+  Zap,
+  Crown,
+  Star,
+  ShieldCheck,
+  Lock,
+  Store,
+  Package,
+  BookOpen,
+  Receipt,
+  TrendingUp,
+  CreditCard,
+  Sparkles,
+  HelpCircle,
+  LogIn,
+  Menu,
+  X,
+  Heart,
+} from "lucide-react";
 
 interface LandingPageProps {
   onLoginClick: (isSignUp: boolean) => void;
@@ -22,9 +44,11 @@ export default function LandingPage({ onLoginClick }: LandingPageProps) {
               className="lg:hidden flex items-center justify-center p-2 rounded-xl bg-surface-container border border-outline-variant/40 text-on-surface hover:bg-surface-container-high transition-colors shrink-0"
               aria-label="Menu de navigation"
             >
-              <span className="material-symbols-outlined text-xl leading-none text-primary">
-                {isMobileMenuOpen ? "close" : "menu"}
-              </span>
+              {isMobileMenuOpen ? (
+                <X className="w-5 h-5 text-primary" />
+              ) : (
+                <Menu className="w-5 h-5 text-primary" />
+              )}
             </button>
 
             <div className="flex items-center gap-2 min-w-0">
@@ -61,9 +85,7 @@ export default function LandingPage({ onLoginClick }: LandingPageProps) {
               <span className="relative z-10 flex items-center gap-1 sm:gap-1.5">
                 <span className="sm:hidden">Essai gratuit</span>
                 <span className="hidden sm:inline">Essai gratuit 14 jours</span>
-                <span className="material-symbols-outlined text-sm sm:text-base transition-transform duration-300 group-hover:translate-x-1">
-                  arrow_forward
-                </span>
+                <ArrowRight className="w-4 h-4 transition-transform duration-300 group-hover:translate-x-1 shrink-0" />
               </span>
               <span className="absolute inset-0 w-full h-full bg-gradient-to-r from-transparent via-white/20 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-700 ease-out pointer-events-none" />
             </button>
@@ -78,7 +100,7 @@ export default function LandingPage({ onLoginClick }: LandingPageProps) {
               className="text-base text-on-surface-variant hover:text-primary transition-colors font-semibold flex items-center gap-3"
               href="#tarifs"
             >
-              <span className="material-symbols-outlined text-primary/70">payments</span>
+              <CreditCard className="w-5 h-5 text-primary/70 shrink-0" />
               Tarifs d&apos;abonnement
             </a>
             <a
@@ -86,7 +108,7 @@ export default function LandingPage({ onLoginClick }: LandingPageProps) {
               className="text-base text-on-surface-variant hover:text-primary transition-colors font-semibold flex items-center gap-3"
               href="#features"
             >
-              <span className="material-symbols-outlined text-primary/70">auto_awesome</span>
+              <Sparkles className="w-5 h-5 text-primary/70 shrink-0" />
               Fonctionnalités
             </a>
             <a
@@ -94,7 +116,7 @@ export default function LandingPage({ onLoginClick }: LandingPageProps) {
               className="text-base text-on-surface-variant hover:text-primary transition-colors font-semibold flex items-center gap-3"
               href="#faq"
             >
-              <span className="material-symbols-outlined text-primary/70">help</span>
+              <HelpCircle className="w-5 h-5 text-primary/70 shrink-0" />
               Questions fréquentes
             </a>
             <div className="w-full h-px bg-surface-container my-1"></div>
@@ -105,7 +127,7 @@ export default function LandingPage({ onLoginClick }: LandingPageProps) {
               }}
               className="text-base text-on-surface-variant hover:text-on-surface transition-colors font-bold text-left flex items-center gap-3 py-1"
             >
-              <span className="material-symbols-outlined text-outline">login</span>
+              <LogIn className="w-5 h-5 text-outline shrink-0" />
               Se connecter
             </button>
           </div>
@@ -117,7 +139,7 @@ export default function LandingPage({ onLoginClick }: LandingPageProps) {
         {/* 1. HERO SECTION : À LA PREMIÈRE VUE (TITRE, SOUS-TITRE, CTA)     */}
         {/* ================================================================ */}
         <section className="relative w-full pt-10 sm:pt-16 pb-14 sm:pb-20 px-4 md:px-8 bg-gradient-to-b from-surface-container-low/50 via-surface to-surface flex flex-col items-center text-center overflow-hidden">
-          {/* Halos subtils d&apos;arrière-plan */}
+          {/* Halos subtils d'arrière-plan */}
           <div className="absolute top-6 left-1/2 -translate-x-1/2 w-[90%] max-w-[800px] h-[320px] bg-indigo-500/10 rounded-full blur-3xl pointer-events-none -z-10"></div>
           <div className="absolute top-28 left-1/4 w-72 h-72 bg-emerald-500/5 rounded-full blur-2xl pointer-events-none -z-10"></div>
 
@@ -148,9 +170,7 @@ export default function LandingPage({ onLoginClick }: LandingPageProps) {
             >
               <span className="relative z-10 flex items-center gap-2">
                 <span>Démarrer mes 14 jours gratuits</span>
-                <span className="material-symbols-outlined text-xl sm:text-2xl transition-transform duration-300 group-hover:translate-x-1">
-                  arrow_forward
-                </span>
+                <ArrowRight className="w-5 h-5 sm:w-6 sm:h-6 transition-transform duration-300 group-hover:translate-x-1 shrink-0" />
               </span>
               <span className="absolute inset-0 w-full h-full bg-gradient-to-r from-transparent via-white/20 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-1000 ease-out pointer-events-none" />
             </button>
@@ -159,7 +179,7 @@ export default function LandingPage({ onLoginClick }: LandingPageProps) {
               href="#tarifs"
               className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-5 sm:px-7 py-3.5 sm:py-5 rounded-2xl bg-surface-container-lowest text-on-surface font-title-md text-sm sm:text-base border-2 border-outline-variant/40 hover:bg-surface-container-low hover:border-primary/40 active:scale-[0.98] transition-all shadow-xs font-bold"
             >
-              <span className="material-symbols-outlined text-primary text-lg sm:text-xl">payments</span>
+              <CreditCard className="w-5 h-5 text-primary shrink-0" />
               <span>Voir les prix d&apos;abonnement</span>
             </a>
           </div>
@@ -167,7 +187,7 @@ export default function LandingPage({ onLoginClick }: LandingPageProps) {
           {/* Micro-réassurances sous le CTA */}
           <div className="flex flex-wrap items-center justify-center gap-x-3 sm:gap-x-4 gap-y-1.5 text-xs text-outline font-medium">
             <span className="inline-flex items-center gap-1 text-emerald-700 font-bold">
-              <span className="material-symbols-outlined text-sm">check_circle</span> 14 jours offerts
+              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" /> 14 jours offerts
             </span>
             <span className="text-outline/40">•</span>
             <span>Sans engagement</span>
@@ -179,7 +199,7 @@ export default function LandingPage({ onLoginClick }: LandingPageProps) {
         </section>
 
         {/* ================================================================ */}
-        {/* 2. SECTION TARIFICATION D&apos;ABONNEMENT (MISE EN PLACE EN HAUT)     */}
+        {/* 2. SECTION TARIFICATION D'ABONNEMENT                             */}
         {/* ================================================================ */}
         <section className="w-full py-14 sm:py-20 px-4 md:px-8 bg-surface-container-low/40 border-t border-outline-variant/20" id="tarifs">
           <div className="max-w-7xl mx-auto">
@@ -218,7 +238,7 @@ export default function LandingPage({ onLoginClick }: LandingPageProps) {
               </span>
             </div>
 
-            {/* Bandeau d&apos;information Essai Gratuit */}
+            {/* Bandeau d'information Essai Gratuit */}
             <div className="mb-10 sm:mb-12 p-3.5 sm:p-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-800 dark:text-emerald-300 text-center max-w-2xl mx-auto flex flex-col sm:flex-row items-center justify-center gap-1.5 sm:gap-2 font-bold text-xs sm:text-sm shadow-xs">
               <span className="text-base shrink-0">🎁</span>
               <span><b>14 jours d&apos;essai gratuit</b> offerts à l&apos;inscription • Toutes les fonctionnalités PRO débloquées • Sans carte bancaire</span>
@@ -249,12 +269,30 @@ export default function LandingPage({ onLoginClick }: LandingPageProps) {
                   </div>
 
                   <ul className="space-y-3 text-sm text-on-surface mb-8 font-medium">
-                    <li className="flex items-start gap-2.5 font-bold"><span className="material-symbols-outlined text-blue-600 text-lg shrink-0 mt-0.5">check_circle</span> <span>1 Boutique &amp; 1 Gérant (Admin)</span></li>
-                    <li className="flex items-start gap-2.5"><span className="material-symbols-outlined text-blue-600 text-lg shrink-0 mt-0.5">check_circle</span> <span>Gestion des produits &amp; du stock</span></li>
-                    <li className="flex items-start gap-2.5"><span className="material-symbols-outlined text-blue-600 text-lg shrink-0 mt-0.5">check_circle</span> <span>Ventes directes au comptoir illimitées</span></li>
-                    <li className="flex items-start gap-2.5"><span className="material-symbols-outlined text-blue-600 text-lg shrink-0 mt-0.5">check_circle</span> <span>Calcul des marges &amp; bénéfices nets</span></li>
-                    <li className="flex items-start gap-2.5"><span className="material-symbols-outlined text-blue-600 text-lg shrink-0 mt-0.5">check_circle</span> <span><b>Mode Hors-ligne (PWA)</b> sans internet</span></li>
-                    <li className="flex items-start gap-2.5"><span className="material-symbols-outlined text-blue-600 text-lg shrink-0 mt-0.5">check_circle</span> <span>Tableau de bord essentiel</span></li>
+                    <li className="flex items-start gap-2.5 font-bold">
+                      <CheckCircle2 className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" />
+                      <span>1 Boutique &amp; 1 Gérant (Admin)</span>
+                    </li>
+                    <li className="flex items-start gap-2.5">
+                      <CheckCircle2 className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" />
+                      <span>Gestion des produits &amp; du stock</span>
+                    </li>
+                    <li className="flex items-start gap-2.5">
+                      <CheckCircle2 className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" />
+                      <span>Ventes directes au comptoir illimitées</span>
+                    </li>
+                    <li className="flex items-start gap-2.5">
+                      <CheckCircle2 className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" />
+                      <span>Calcul des marges &amp; bénéfices nets</span>
+                    </li>
+                    <li className="flex items-start gap-2.5">
+                      <CheckCircle2 className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" />
+                      <span><b>Mode Hors-ligne (PWA)</b> sans internet</span>
+                    </li>
+                    <li className="flex items-start gap-2.5">
+                      <CheckCircle2 className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" />
+                      <span>Tableau de bord essentiel</span>
+                    </li>
                   </ul>
                 </div>
 
@@ -263,9 +301,9 @@ export default function LandingPage({ onLoginClick }: LandingPageProps) {
                   className="group relative w-full py-3.5 sm:py-4 px-4 sm:px-6 rounded-2xl bg-gradient-to-r from-blue-50 via-indigo-50 to-blue-100/70 border-2 border-blue-500/40 text-blue-800 font-extrabold text-sm sm:text-base text-center hover:from-blue-600 hover:to-indigo-600 hover:text-white hover:border-blue-600 shadow-md hover:shadow-xl hover:shadow-blue-500/25 active:scale-[0.98] transition-all duration-300 flex items-center justify-center gap-2 cursor-pointer overflow-hidden"
                 >
                   <span className="relative z-10 flex items-center justify-center gap-2">
-                    <span className="material-symbols-outlined text-blue-600 text-lg sm:text-xl group-hover:text-white transition-colors shrink-0">rocket_launch</span>
+                    <Rocket className="w-4 h-4 sm:w-5 sm:h-5 text-blue-600 group-hover:text-white transition-colors shrink-0" />
                     <span>Commencer gratuitement</span>
-                    <span className="material-symbols-outlined text-lg sm:text-xl transition-transform duration-300 group-hover:translate-x-1 shrink-0">arrow_forward</span>
+                    <ArrowRight className="w-4 h-4 sm:w-5 sm:h-5 transition-transform duration-300 group-hover:translate-x-1 shrink-0" />
                   </span>
                   <span className="absolute inset-0 w-full h-full bg-gradient-to-r from-transparent via-white/30 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-700 ease-out pointer-events-none" />
                 </button>
@@ -274,7 +312,7 @@ export default function LandingPage({ onLoginClick }: LandingPageProps) {
               {/* CARTE 2 : PLAN PRO (5 000 F) - LE PLUS POPULAIRE */}
               <div className="bg-surface-container-lowest p-6 sm:p-8 pt-8 sm:pt-9 rounded-3xl border-2 border-emerald-600 shadow-2xl shadow-emerald-600/20 flex flex-col justify-between relative transform lg:-translate-y-2 hover:-translate-y-3 transition-all duration-300 ring-4 ring-emerald-600/10">
                 <div className="absolute -top-4 left-1/2 -translate-x-1/2 px-3.5 sm:px-4 py-1 sm:py-1.5 rounded-full bg-gradient-to-r from-emerald-600 to-teal-600 text-white text-[10px] sm:text-[11px] font-black uppercase tracking-wider shadow-lg shadow-emerald-600/30 flex items-center gap-1.5 whitespace-nowrap">
-                  <span className="material-symbols-outlined text-yellow-300 text-sm" style={{ fontVariationSettings: "'FILL' 1" }}>star</span>
+                  <Star className="w-3.5 h-3.5 fill-yellow-300 text-yellow-300 shrink-0" />
                   <span>⭐ RECOMMANDÉ</span>
                 </div>
                 <div>
@@ -305,13 +343,34 @@ export default function LandingPage({ onLoginClick }: LandingPageProps) {
                   </div>
 
                   <ul className="space-y-3 text-sm text-on-surface mb-8 font-medium">
-                    <li className="flex items-start gap-2.5 font-bold text-emerald-700"><span className="material-symbols-outlined text-emerald-600 text-lg shrink-0 mt-0.5">verified</span> <span>Tout ce qui est inclus dans Starter</span></li>
-                    <li className="flex items-start gap-2.5 font-semibold"><span className="material-symbols-outlined text-emerald-600 text-lg shrink-0 mt-0.5">check_circle</span> <span><b>1 Caissier inclus</b> avec compte dédié</span></li>
-                    <li className="flex items-start gap-2.5 font-semibold"><span className="material-symbols-outlined text-emerald-600 text-lg shrink-0 mt-0.5">check_circle</span> <span><b>Carnet de Crédit &amp; Dettes (Relances WhatsApp)</b></span></li>
-                    <li className="flex items-start gap-2.5 font-semibold"><span className="material-symbols-outlined text-emerald-600 text-lg shrink-0 mt-0.5">check_circle</span> <span><b>Tickets thermiques 80mm &amp; Factures A4</b></span></li>
-                    <li className="flex items-start gap-2.5"><span className="material-symbols-outlined text-emerald-600 text-lg shrink-0 mt-0.5">check_circle</span> <span>Inventaires physiques tournants &amp; Écarts</span></li>
-                    <li className="flex items-start gap-2.5"><span className="material-symbols-outlined text-emerald-600 text-lg shrink-0 mt-0.5">check_circle</span> <span>Commandes fournisseurs &amp; Analyses complètes</span></li>
-                    <li className="flex items-start gap-2.5"><span className="material-symbols-outlined text-emerald-600 text-lg shrink-0 mt-0.5">check_circle</span> <span>Support WhatsApp réactif</span></li>
+                    <li className="flex items-start gap-2.5 font-bold text-emerald-700">
+                      <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+                      <span>Tout ce qui est inclus dans Starter</span>
+                    </li>
+                    <li className="flex items-start gap-2.5 font-semibold">
+                      <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+                      <span><b>1 Caissier inclus</b> avec compte dédié</span>
+                    </li>
+                    <li className="flex items-start gap-2.5 font-semibold">
+                      <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+                      <span><b>Carnet de Crédit &amp; Dettes (Relances WhatsApp)</b></span>
+                    </li>
+                    <li className="flex items-start gap-2.5 font-semibold">
+                      <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+                      <span><b>Tickets thermiques 80mm &amp; Factures A4</b></span>
+                    </li>
+                    <li className="flex items-start gap-2.5">
+                      <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+                      <span>Inventaires physiques tournants &amp; Écarts</span>
+                    </li>
+                    <li className="flex items-start gap-2.5">
+                      <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+                      <span>Commandes fournisseurs &amp; Analyses complètes</span>
+                    </li>
+                    <li className="flex items-start gap-2.5">
+                      <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+                      <span>Support WhatsApp réactif</span>
+                    </li>
                   </ul>
                 </div>
 
@@ -321,9 +380,9 @@ export default function LandingPage({ onLoginClick }: LandingPageProps) {
                 >
                   <span className="absolute inset-0 w-full h-full bg-gradient-to-r from-transparent via-white/25 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-1000 ease-out pointer-events-none" />
                   <span className="relative z-10 flex items-center justify-center gap-2">
-                    <span className="material-symbols-outlined text-yellow-300 text-lg sm:text-xl shrink-0" style={{ fontVariationSettings: "'FILL' 1" }}>bolt</span>
+                    <Zap className="w-4 h-4 sm:w-5 sm:h-5 fill-yellow-300 text-yellow-300 shrink-0" />
                     <span>Essayer gratuitement 14 jours</span>
-                    <span className="material-symbols-outlined text-lg sm:text-xl transition-transform duration-300 group-hover:translate-x-1 shrink-0">arrow_forward</span>
+                    <ArrowRight className="w-4 h-4 sm:w-5 sm:h-5 transition-transform duration-300 group-hover:translate-x-1 shrink-0" />
                   </span>
                 </button>
               </div>
@@ -331,7 +390,7 @@ export default function LandingPage({ onLoginClick }: LandingPageProps) {
               {/* CARTE 3 : PLAN BUSINESS (10 000 F) */}
               <div className="bg-surface-container-lowest p-6 sm:p-8 pt-8 sm:pt-9 rounded-3xl border-2 border-purple-500/50 shadow-xl shadow-purple-500/10 hover:border-purple-600 hover:shadow-2xl hover:shadow-purple-500/20 flex flex-col justify-between relative transition-all duration-300">
                 <div className="absolute -top-4 left-1/2 -translate-x-1/2 px-3.5 sm:px-4 py-1 sm:py-1.5 rounded-full bg-gradient-to-r from-purple-700 to-fuchsia-700 text-white text-[10px] sm:text-[11px] font-black uppercase tracking-wider shadow-lg shadow-purple-700/30 flex items-center gap-1.5 whitespace-nowrap">
-                  <span className="material-symbols-outlined text-amber-300 text-sm" style={{ fontVariationSettings: "'FILL' 1" }}>workspace_premium</span>
+                  <Crown className="w-3.5 h-3.5 text-amber-300 shrink-0" />
                   <span>💎 Multi-Magasins &amp; Équipe</span>
                 </div>
                 <div>
@@ -354,13 +413,34 @@ export default function LandingPage({ onLoginClick }: LandingPageProps) {
                   </div>
 
                   <ul className="space-y-3 text-sm text-on-surface mb-8 font-medium">
-                    <li className="flex items-start gap-2.5 font-bold text-purple-700"><span className="material-symbols-outlined text-purple-600 text-lg shrink-0 mt-0.5">verified</span> <span>Toutes les fonctionnalités Pro incluses</span></li>
-                    <li className="flex items-start gap-2.5 font-bold"><span className="material-symbols-outlined text-purple-600 text-lg shrink-0 mt-0.5">check_circle</span> <span><b>Jusqu&apos;à 3 Boutiques actives</b></span></li>
-                    <li className="flex items-start gap-2.5 font-bold"><span className="material-symbols-outlined text-purple-600 text-lg shrink-0 mt-0.5">check_circle</span> <span><b>Jusqu&apos;à 3 Caissiers au total</b></span></li>
-                    <li className="flex items-start gap-2.5"><span className="material-symbols-outlined text-purple-600 text-lg shrink-0 mt-0.5">check_circle</span> <span>Sélecteur &amp; Affectation par boutique</span></li>
-                    <li className="flex items-start gap-2.5"><span className="material-symbols-outlined text-purple-600 text-lg shrink-0 mt-0.5">check_circle</span> <span>Tableau de bord consolidé multi-magasins</span></li>
-                    <li className="flex items-start gap-2.5"><span className="material-symbols-outlined text-purple-600 text-lg shrink-0 mt-0.5">check_circle</span> <span>Clôtures de caisse certifiées &amp; Détection des écarts</span></li>
-                    <li className="flex items-start gap-2.5"><span className="material-symbols-outlined text-purple-600 text-lg shrink-0 mt-0.5">check_circle</span> <span>Support VIP prioritaire WhatsApp 7j/7</span></li>
+                    <li className="flex items-start gap-2.5 font-bold text-purple-700">
+                      <CheckCircle2 className="w-4 h-4 text-purple-600 shrink-0 mt-0.5" />
+                      <span>Toutes les fonctionnalités Pro incluses</span>
+                    </li>
+                    <li className="flex items-start gap-2.5 font-bold">
+                      <CheckCircle2 className="w-4 h-4 text-purple-600 shrink-0 mt-0.5" />
+                      <span><b>Jusqu&apos;à 3 Boutiques actives</b></span>
+                    </li>
+                    <li className="flex items-start gap-2.5 font-bold">
+                      <CheckCircle2 className="w-4 h-4 text-purple-600 shrink-0 mt-0.5" />
+                      <span><b>Jusqu&apos;à 3 Caissiers au total</b></span>
+                    </li>
+                    <li className="flex items-start gap-2.5">
+                      <CheckCircle2 className="w-4 h-4 text-purple-600 shrink-0 mt-0.5" />
+                      <span>Sélecteur &amp; Affectation par boutique</span>
+                    </li>
+                    <li className="flex items-start gap-2.5">
+                      <CheckCircle2 className="w-4 h-4 text-purple-600 shrink-0 mt-0.5" />
+                      <span>Tableau de bord consolidé multi-magasins</span>
+                    </li>
+                    <li className="flex items-start gap-2.5">
+                      <CheckCircle2 className="w-4 h-4 text-purple-600 shrink-0 mt-0.5" />
+                      <span>Clôtures de caisse certifiées &amp; Détection des écarts</span>
+                    </li>
+                    <li className="flex items-start gap-2.5">
+                      <CheckCircle2 className="w-4 h-4 text-purple-600 shrink-0 mt-0.5" />
+                      <span>Support VIP prioritaire WhatsApp 7j/7</span>
+                    </li>
                   </ul>
                 </div>
 
@@ -370,9 +450,9 @@ export default function LandingPage({ onLoginClick }: LandingPageProps) {
                 >
                   <span className="absolute inset-0 w-full h-full bg-gradient-to-r from-transparent via-white/25 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-1000 ease-out pointer-events-none" />
                   <span className="relative z-10 flex items-center justify-center gap-2">
-                    <span className="material-symbols-outlined text-amber-300 text-lg sm:text-xl shrink-0" style={{ fontVariationSettings: "'FILL' 1" }}>workspace_premium</span>
+                    <Crown className="w-4 h-4 sm:w-5 sm:h-5 text-amber-300 shrink-0" />
                     <span>Choisir Business après l&apos;essai</span>
-                    <span className="material-symbols-outlined text-lg sm:text-xl transition-transform duration-300 group-hover:translate-x-1 shrink-0">arrow_forward</span>
+                    <ArrowRight className="w-4 h-4 sm:w-5 sm:h-5 transition-transform duration-300 group-hover:translate-x-1 shrink-0" />
                   </span>
                 </button>
               </div>
@@ -382,11 +462,11 @@ export default function LandingPage({ onLoginClick }: LandingPageProps) {
             {/* Mentions de réassurance sous la tarification */}
             <div className="mt-10 sm:mt-12 text-center text-xs text-on-surface-variant font-medium flex flex-col sm:flex-row flex-wrap items-center justify-center gap-3 sm:gap-6 p-4 rounded-2xl bg-surface-container-low/70 border border-outline-variant/30 max-w-3xl mx-auto shadow-xs">
               <span className="flex items-center justify-center gap-2 font-bold text-on-surface">
-                <span className="material-symbols-outlined text-indigo-600 text-lg shrink-0">verified_user</span>
+                <ShieldCheck className="w-5 h-5 text-indigo-600 shrink-0" />
                 <span>Paiement 100% sécurisé via Moneriz (T-Money, Moov Flooz, Wave, Orange Money, Carte)</span>
               </span>
               <span className="flex items-center justify-center gap-1.5 font-bold text-emerald-700">
-                <span className="material-symbols-outlined text-emerald-600 text-lg shrink-0">lock</span>
+                <Lock className="w-4 h-4 text-emerald-600 shrink-0" />
                 <span>Sans engagement • Annulation libre en 1 clic</span>
               </span>
             </div>
@@ -414,7 +494,7 @@ export default function LandingPage({ onLoginClick }: LandingPageProps) {
               {/* Carte 1 */}
               <div className="p-6 rounded-2xl bg-surface-container-lowest border border-outline-variant/30 shadow-xs hover:shadow-md transition-all">
                 <div className="w-12 h-12 rounded-xl bg-primary/10 text-primary flex items-center justify-center mb-4">
-                  <span className="material-symbols-outlined text-2xl">point_of_sale</span>
+                  <Store className="w-6 h-6 text-primary" />
                 </div>
                 <h3 className="text-lg font-bold text-on-surface mb-2">Caisse Tactile &amp; Mode Hors-ligne</h3>
                 <p className="text-sm text-on-surface-variant font-medium leading-relaxed">
@@ -425,7 +505,7 @@ export default function LandingPage({ onLoginClick }: LandingPageProps) {
               {/* Carte 2 */}
               <div className="p-6 rounded-2xl bg-surface-container-lowest border border-outline-variant/30 shadow-xs hover:shadow-md transition-all">
                 <div className="w-12 h-12 rounded-xl bg-emerald-500/10 text-emerald-600 flex items-center justify-center mb-4">
-                  <span className="material-symbols-outlined text-2xl">inventory_2</span>
+                  <Package className="w-6 h-6 text-emerald-600" />
                 </div>
                 <h3 className="text-lg font-bold text-on-surface mb-2">Gestion des Stocks &amp; Alertes</h3>
                 <p className="text-sm text-on-surface-variant font-medium leading-relaxed">
@@ -436,7 +516,7 @@ export default function LandingPage({ onLoginClick }: LandingPageProps) {
               {/* Carte 3 */}
               <div className="p-6 rounded-2xl bg-surface-container-lowest border border-outline-variant/30 shadow-xs hover:shadow-md transition-all">
                 <div className="w-12 h-12 rounded-xl bg-amber-500/10 text-amber-600 flex items-center justify-center mb-4">
-                  <span className="material-symbols-outlined text-2xl">menu_book</span>
+                  <BookOpen className="w-6 h-6 text-amber-600" />
                 </div>
                 <h3 className="text-lg font-bold text-on-surface mb-2">Carnet de Dettes &amp; WhatsApp</h3>
                 <p className="text-sm text-on-surface-variant font-medium leading-relaxed">
@@ -447,7 +527,7 @@ export default function LandingPage({ onLoginClick }: LandingPageProps) {
               {/* Carte 4 */}
               <div className="p-6 rounded-2xl bg-surface-container-lowest border border-outline-variant/30 shadow-xs hover:shadow-md transition-all">
                 <div className="w-12 h-12 rounded-xl bg-indigo-500/10 text-indigo-600 flex items-center justify-center mb-4">
-                  <span className="material-symbols-outlined text-2xl">receipt_long</span>
+                  <Receipt className="w-6 h-6 text-indigo-600" />
                 </div>
                 <h3 className="text-lg font-bold text-on-surface mb-2">Reçus Thermiques &amp; Factures A4</h3>
                 <p className="text-sm text-on-surface-variant font-medium leading-relaxed">
@@ -458,7 +538,7 @@ export default function LandingPage({ onLoginClick }: LandingPageProps) {
               {/* Carte 5 */}
               <div className="p-6 rounded-2xl bg-surface-container-lowest border border-outline-variant/30 shadow-xs hover:shadow-md transition-all">
                 <div className="w-12 h-12 rounded-xl bg-teal-500/10 text-teal-600 flex items-center justify-center mb-4">
-                  <span className="material-symbols-outlined text-2xl">trending_up</span>
+                  <TrendingUp className="w-6 h-6 text-teal-600" />
                 </div>
                 <h3 className="text-lg font-bold text-on-surface mb-2">Bénéfice Net Réel en FCFA</h3>
                 <p className="text-sm text-on-surface-variant font-medium leading-relaxed">
@@ -469,7 +549,7 @@ export default function LandingPage({ onLoginClick }: LandingPageProps) {
               {/* Carte 6 */}
               <div className="p-6 rounded-2xl bg-surface-container-lowest border border-outline-variant/30 shadow-xs hover:shadow-md transition-all">
                 <div className="w-12 h-12 rounded-xl bg-purple-500/10 text-purple-600 flex items-center justify-center mb-4">
-                  <span className="material-symbols-outlined text-2xl">store</span>
+                  <Store className="w-6 h-6 text-purple-600" />
                 </div>
                 <h3 className="text-lg font-bold text-on-surface mb-2">Multi-Boutiques &amp; Équipe</h3>
                 <p className="text-sm text-on-surface-variant font-medium leading-relaxed">
@@ -556,9 +636,7 @@ export default function LandingPage({ onLoginClick }: LandingPageProps) {
               className="group w-full sm:w-auto inline-flex items-center justify-center gap-2 sm:gap-3 px-6 sm:px-10 py-4 sm:py-5 rounded-2xl bg-white text-indigo-700 font-black text-sm sm:text-lg hover:bg-white/95 active:scale-[0.98] transition-all duration-300 shadow-2xl shadow-black/25 cursor-pointer"
             >
               <span>Démarrer vos 14 jours gratuits</span>
-              <span className="material-symbols-outlined text-xl sm:text-2xl transition-transform duration-300 group-hover:translate-x-1.5 shrink-0">
-                arrow_forward
-              </span>
+              <ArrowRight className="w-5 h-5 sm:w-6 sm:h-6 transition-transform duration-300 group-hover:translate-x-1.5 shrink-0" />
             </button>
             <p className="text-xs text-white/70 mt-4 font-semibold">
               Sans carte bancaire • Prêt en 2 minutes • 100% en FCFA
@@ -588,7 +666,7 @@ export default function LandingPage({ onLoginClick }: LandingPageProps) {
           <div className="pt-6 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-inverse-on-surface/60 font-medium text-center sm:text-left">
             <p>© 2026 MaBoutiquePro. Tous droits réservés.</p>
             <p className="flex items-center gap-1 justify-center">
-              <span className="material-symbols-outlined text-[16px] text-rose-400">favorite</span>
+              <Heart className="w-4 h-4 text-rose-400 fill-rose-400 shrink-0" />
               <span>Développé avec fierté pour les entrepreneurs africains.</span>
             </p>
           </div>
