@@ -36,3 +36,11 @@ yarn-error.log*
 next-env.d.ts
 configure_moneriz.js
 .moneriz_local_store.json
+
+# PWA / Workbox generated build artifacts
+**/public/sw.js
+**/public/sw.js.map
+**/public/workbox-*.js
+**/public/workbox-*.js.map
+**/public/swe-worker-*.js
+**/public/swe-worker-*.js.map
