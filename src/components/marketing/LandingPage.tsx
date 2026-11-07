@@ -29,7 +29,10 @@ import {
   Settings,
   Wallet,
   ArrowUpRight,
+  Download,
 } from "lucide-react";
+import { usePwaInstall } from "@/hooks/usePwaInstall";
+import PwaInstallModal from "@/components/pwa/PwaInstallModal";
 
 interface LandingPageProps {
   onLoginClick: (isSignUp: boolean) => void;
@@ -38,6 +41,13 @@ interface LandingPageProps {
 export default function LandingPage({ onLoginClick }: LandingPageProps) {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isAnnual, setIsAnnual] = useState(false);
+  const {
+    canShowInstall,
+    platform,
+    showGuideModal,
+    setShowGuideModal,
+    handleInstallClick,
+  } = usePwaInstall();
 
   return (
     <div className="min-h-screen bg-[#060517] font-sans text-white antialiased selection:bg-purple-500/30 selection:text-purple-200 overflow-x-hidden relative">
@@ -116,7 +126,19 @@ export default function LandingPage({ onLoginClick }: LandingPageProps) {
           </nav>
 
           {/* Actions à droite */}
-          <div className="flex items-center gap-3 sm:gap-5 shrink-0">
+          <div className="flex items-center gap-2 sm:gap-3.5 shrink-0">
+            {canShowInstall && (
+              <button
+                type="button"
+                onClick={handleInstallClick}
+                className="inline-flex items-center justify-center gap-1.5 px-3 sm:px-4 py-2 rounded-full bg-white/[0.08] hover:bg-white/[0.15] border border-purple-400/35 text-white text-xs sm:text-sm font-bold transition-all duration-200 cursor-pointer shadow-sm"
+                title="Installer l'application MaBoutiquePro"
+              >
+                <Download className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-purple-300 shrink-0" />
+                <span className="hidden md:inline">Télécharger l&apos;App</span>
+                <span className="md:hidden">Installer</span>
+              </button>
+            )}
             <button
               onClick={() => onLoginClick(false)}
               className="text-sm font-semibold text-slate-200 hover:text-white transition-colors hidden sm:inline-flex px-2 py-1.5 cursor-pointer"
@@ -159,6 +181,19 @@ export default function LandingPage({ onLoginClick }: LandingPageProps) {
               <HelpCircle className="w-5 h-5 text-purple-400 shrink-0" />
               Questions fréquentes
             </a>
+            {canShowInstall && (
+              <button
+                type="button"
+                onClick={() => {
+                  setIsMobileMenuOpen(false);
+                  handleInstallClick();
+                }}
+                className="text-base text-emerald-300 hover:text-emerald-200 transition-colors font-bold text-left flex items-center gap-3 py-1"
+              >
+                <Download className="w-5 h-5 text-emerald-400 shrink-0" />
+                Télécharger l&apos;Application (PWA)
+              </button>
+            )}
             <div className="w-full h-px bg-white/10 my-1" />
             <button
               onClick={() => {
@@ -201,8 +236,8 @@ export default function LandingPage({ onLoginClick }: LandingPageProps) {
             MaBoutiquePro aide les commerçants à automatiser la caisse, contrôler les stocks en temps réel, suivre les créances clients et piloter leurs bénéfices en FCFA sur une seule plateforme intelligente.
           </p>
 
-          {/* Boutons CTA (Style exact Nexora : Pilule dégradée avec rond blanc + bouton secondaire) */}
-          <div className="flex flex-col sm:flex-row items-center justify-center gap-4 sm:gap-6 w-full max-w-md sm:max-w-none mb-12 sm:mb-16">
+          {/* Boutons CTA (Style exact Nexora : Pilule dégradée avec rond blanc + Téléchargement PWA + Tarifs) */}
+          <div className="flex flex-col sm:flex-row flex-wrap items-center justify-center gap-3.5 sm:gap-5 w-full max-w-md sm:max-w-none mb-12 sm:mb-16">
             <button
               onClick={() => onLoginClick(true)}
               className="group w-full sm:w-auto inline-flex items-center justify-center gap-3 pl-6 pr-3 py-3 sm:py-3.5 rounded-full bg-gradient-to-r from-indigo-500 via-purple-500 to-fuchsia-500 text-white text-sm sm:text-base font-bold shadow-[0_0_35px_rgba(139,92,246,0.55)] hover:shadow-[0_0_50px_rgba(168,85,247,0.8)] hover:brightness-110 active:scale-[0.98] transition-all duration-300 cursor-pointer"
@@ -213,9 +248,20 @@ export default function LandingPage({ onLoginClick }: LandingPageProps) {
               </span>
             </button>
 
+            {canShowInstall && (
+              <button
+                type="button"
+                onClick={handleInstallClick}
+                className="w-full sm:w-auto inline-flex items-center justify-center gap-2.5 px-6 py-3 sm:py-3.5 rounded-full bg-white/[0.08] hover:bg-white/[0.15] border border-white/20 text-white text-sm sm:text-base font-bold backdrop-blur-md shadow-[0_0_25px_rgba(59,130,246,0.25)] transition-all duration-300 active:scale-[0.98] cursor-pointer"
+              >
+                <Download className="w-4 h-4 text-sky-400 shrink-0" />
+                <span>Télécharger l&apos;App</span>
+              </button>
+            )}
+
             <a
               href="#tarifs"
-              className="inline-flex items-center justify-center gap-1.5 px-5 py-3 text-sm sm:text-base font-semibold text-slate-200 hover:text-white transition-colors group"
+              className="inline-flex items-center justify-center gap-1.5 px-4 py-3 text-sm sm:text-base font-semibold text-slate-200 hover:text-white transition-colors group"
             >
               <span>Voir les Tarifs</span>
               <ChevronRight className="w-4 h-4 text-slate-400 group-hover:translate-x-1 transition-transform" />
@@ -976,6 +1022,13 @@ export default function LandingPage({ onLoginClick }: LandingPageProps) {
         </svg>
         <span>Discuter sur WhatsApp</span>
       </a>
+
+      {/* Modal d'aide à l'installation PWA */}
+      <PwaInstallModal
+        isOpen={showGuideModal}
+        onClose={() => setShowGuideModal(false)}
+        platform={platform}
+      />
     </div>
   );
 }

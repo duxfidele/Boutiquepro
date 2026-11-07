@@ -6,6 +6,8 @@ import { usePathname } from "next/navigation";
 import { useStore } from "@/context/StoreContext";
 import { useAuth } from "@/context/AuthContext";
 import SubscriptionModal from "@/components/subscription/SubscriptionModal";
+import { usePwaInstall } from "@/hooks/usePwaInstall";
+import PwaInstallModal from "@/components/pwa/PwaInstallModal";
 import {
   Search,
   Bell,
@@ -21,20 +23,13 @@ import {
 } from "lucide-react";
 
 export default function Header({ onMenuClick }: { onMenuClick?: () => void }) {
-  const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
-  useEffect(() => {
-    window.addEventListener('beforeinstallprompt', (e) => {
-      e.preventDefault();
-      setDeferredPrompt(e);
-    });
-  }, []);
-
-  const handleInstall = () => {
-    if (deferredPrompt) {
-      deferredPrompt.prompt();
-      deferredPrompt.userChoice.then(() => setDeferredPrompt(null));
-    }
-  };
+  const {
+    canShowInstall,
+    platform,
+    showGuideModal,
+    setShowGuideModal,
+    handleInstallClick,
+  } = usePwaInstall();
 
   const { user, role, signOut, subscription, tier } = useAuth();
   const [showSubModal, setShowSubModal] = useState(false);
@@ -65,9 +60,14 @@ export default function Header({ onMenuClick }: { onMenuClick?: () => void }) {
         <button onClick={onMenuClick} className="lg:hidden p-2 -ml-2 rounded-xl hover:bg-secondary">
           <Menu className="h-5 w-5" />
         </button>
-        {deferredPrompt && (
-          <button onClick={handleInstall} className="flex items-center gap-2 rounded-xl bg-primary px-4 py-2 text-sm font-bold text-white hover:opacity-90 transition-opacity shadow-lg glow-primary animate-fade-in">
-            <Download className="h-4 w-4" />
+        {canShowInstall && (
+          <button
+            type="button"
+            onClick={handleInstallClick}
+            className="flex items-center gap-2 rounded-xl bg-primary px-3.5 py-2 text-xs sm:text-sm font-bold text-white hover:opacity-90 transition-opacity shadow-lg glow-primary cursor-pointer shrink-0"
+            title="Télécharger l'application MaBoutiquePro sur cet appareil"
+          >
+            <Download className="h-4 w-4 shrink-0" />
             <span className="hidden sm:inline">Installer l&apos;App</span>
           </button>
         )}
@@ -316,6 +316,11 @@ export default function Header({ onMenuClick }: { onMenuClick?: () => void }) {
         isOpen={showSubModal}
         onClose={() => setShowSubModal(false)}
         defaultPlan={subscription?.isTrial ? "PRO" : tier}
+      />
+      <PwaInstallModal
+        isOpen={showGuideModal}
+        onClose={() => setShowGuideModal(false)}
+        platform={platform}
       />
     </header>
   );
