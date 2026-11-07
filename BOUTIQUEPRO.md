@@ -282,6 +282,26 @@ Un audit complet et rigoureux a été exécuté sur l'ensemble de l'application 
 - Route d'administration sécurisée permettant d'envoyer un email d'annonce officiel à tous les propriétaires de boutiques enregistrés dans l'application.
 - Extraction des gérants uniques depuis `stores` et `profiles`, personnalisation de l'email et mise en outbox automatique.
 
+### 17. Refonte Visuelle « Dark Cosmic » (Style Nexora), Identité & Conformité Google
+
+#### 1. Nouvelle Landing Page Sombre « Dark Cosmic » (`src/components/marketing/LandingPage.tsx`)
+- **Esthétique Nexora adaptée au commerce africain :** Fond profond `#060517` traversé par des faisceaux lumineux néon (bleu électrique, indigo, violet et magenta) et cartes en verre dépoli (*glassmorphism*).
+- **Maquette visuelle interactive du Tableau de Bord + 3 Cartes Flottantes :**
+  - **Au centre :** Aperçu sombre du tableau de bord MaBoutiquePro avec barre latérale complète, message d'accueil *« Bonjour, Gérant 👋 »*, graphique en barres verticales dégradées des ventes de la semaine (Lun à Dim) et 3 cartes KPI (*Chiffre d'Affaires*, *Ventes Encaissées*, *Bénéfice Net Réel*).
+  - **Autour du dashboard :** 3 cartes flottantes inclinées avec mini-courbes SVG (*CA du Jour en FCFA*, *Articles en Stock*, *Recouvrement Dettes via WhatsApp*).
+- **Migration 100 % SVG (`lucide-react`) :** Élimination intégrale des polices d'icônes externes Google Material Symbols pour empêcher tout affichage de texte brut parasite (`arrow_forward`) sur les boutons CTA.
+
+#### 2. Nouveau Logo Officiel MaBoutiquePro (`public/logo.png`)
+- Intégration du nouveau logo officiel **Maboutiquepro** (*« Gérez votre boutique. Gagnez plus. »*) sur l'ensemble de l'application (Landing Page, Dashboard, Connexion, Favicon, PWA `manifest.json`).
+
+#### 3. Authentification Directe Google Identity Services & Publication Google Cloud
+- **SDK Google Identity Services (`signInWithIdToken`) :** Intégration directe du script `https://accounts.google.com/gsi/client` et de la clé publique `NEXT_PUBLIC_GOOGLE_CLIENT_ID` dans `Login.tsx` pour authentifier les commerçants directement sous l'identité de **`maboutiquepro.app`**.
+- **Propriété du domaine certifiée (Google Search Console) :** Balise `google-site-verification` intégrée dans `src/app/layout.tsx` et validée sur Google Search Console.
+- **Pages Juridiques Officielles & Publication OAuth :**
+  - **`https://maboutiquepro.app/privacy` (`src/app/privacy/page.tsx`) :** Règles de confidentialité complètes conformes à la *Google API Services User Data Policy* (clause *Limited Use* et droit à l'effacement).
+  - **`https://maboutiquepro.app/terms` (`src/app/terms/page.tsx`) :** Conditions Générales d'Utilisation (CGU) du SaaS.
+  - Écran de consentement Google OAuth officiellement publié et validé en production.
+
 ---
 
 ## 💼 Modèles d'Exploitation Commerciale
@@ -302,7 +322,11 @@ Un audit complet et rigoureux a été exécuté sur l'ensemble de l'application 
 | Fichier / Dossier | Rôle principal |
 |---|---|
 | `src/middleware.ts` | Protection Anti-CSRF sur les routes mutantes, exclusion HMAC Moneriz et headers de sécurité |
-| `src/components/auth/Login.tsx` | Connexion classique, bouton officiel Google OAuth 2.0 et réinitialisation de mot de passe |
+| `src/components/marketing/LandingPage.tsx` | Landing Page « Dark Cosmic » style Nexora avec maquette Dashboard, cartes flottantes et icônes SVG |
+| `src/components/auth/Login.tsx` | Connexion classique, Google Identity Services (`signInWithIdToken`), OAuth 2.0 et mot de passe oublié |
+| `src/app/privacy/page.tsx` | Page publique des Règles de Confidentialité conforme à la politique Google User Data |
+| `src/app/terms/page.tsx` | Page publique des Conditions Générales d'Utilisation (CGU) |
+| `public/logo.png` | Nouveau logo officiel Maboutiquepro (« Gérez votre boutique. Gagnez plus. ») |
 | `src/app/products/page.tsx` | Gestion du catalogue, filtres, stock bas, bouton « Importer Excel » et export |
 | `src/components/products/ProductExcelImportModal.tsx` | Modal d'importation Excel/CSV durcie (5 Mo, 5 000 lignes max, extensions validées) |
 | `src/components/layout/Sidebar.tsx` | Barre latérale avec sélecteur multi-boutiques synchrone et affichage dynamique du logo |
