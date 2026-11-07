@@ -74,8 +74,8 @@ export default function AppWrapper({ children }: { children: React.ReactNode }) 
     }
   }, [role, pathname, router, getModuleStatus]);
 
-  // 1. Route publique : Réinitialisation de mot de passe (sans contrôle d'accès)
-  if (pathname === "/reset-password") {
+  // 1. Routes publiques : Réinitialisation de mot de passe, Confidentialité et CGU (sans contrôle d'accès)
+  if (pathname === "/reset-password" || pathname === "/privacy" || pathname === "/terms") {
     return <ErrorBoundary>{children}</ErrorBoundary>;
   }
 

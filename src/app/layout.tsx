@@ -51,6 +51,9 @@ export const metadata: Metadata = {
     description: "Gérez votre boutique, vos stocks et vos ventes au comptoir en toute simplicité sur maboutiquepro.app.",
     images: ["/logo.png"],
   },
+  verification: {
+    google: process.env.NEXT_PUBLIC_GOOGLE_SITE_VERIFICATION || undefined,
+  },
 };
 
 export default function RootLayout({

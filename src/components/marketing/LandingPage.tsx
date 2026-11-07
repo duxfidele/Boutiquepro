@@ -657,10 +657,12 @@ export default function LandingPage({ onLoginClick }: LandingPageProps) {
                 — Caisse, stocks &amp; gestion commerciale pour l&apos;Afrique
               </span>
             </div>
-            <div className="flex items-center gap-6 text-xs text-inverse-on-surface/75 font-medium">
+            <div className="flex items-center gap-4 sm:gap-6 text-xs text-inverse-on-surface/75 font-medium flex-wrap justify-center sm:justify-end">
               <a href="#tarifs" className="hover:text-inverse-primary transition-colors">Tarifs</a>
               <a href="#features" className="hover:text-inverse-primary transition-colors">Fonctionnalités</a>
               <a href="#faq" className="hover:text-inverse-primary transition-colors">FAQ</a>
+              <a href="/privacy" className="hover:text-inverse-primary transition-colors">Règles de confidentialité</a>
+              <a href="/terms" className="hover:text-inverse-primary transition-colors">Conditions d&apos;utilisation</a>
             </div>
           </div>
           <div className="pt-6 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-inverse-on-surface/60 font-medium text-center sm:text-left">
