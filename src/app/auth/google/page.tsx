@@ -45,13 +45,22 @@ export default function GoogleAuthCallbackPage() {
           return;
         }
 
+        const cookieMatch = document.cookie
+          .split("; ")
+          .find((row) => row.startsWith("google_oauth_nonce="));
+        const cookieNonce = cookieMatch ? cookieMatch.split("=")[1] : undefined;
+
         const rawNonce =
           sessionStorage.getItem("google_oauth_nonce") ||
           localStorage.getItem("google_oauth_nonce") ||
+          cookieNonce ||
           undefined;
 
         sessionStorage.removeItem("google_oauth_nonce");
         localStorage.removeItem("google_oauth_nonce");
+        document.cookie =
+          "google_oauth_nonce=; Domain=.maboutiquepro.app; Path=/; Max-Age=0; SameSite=Lax; Secure";
+        document.cookie = "google_oauth_nonce=; Path=/; Max-Age=0; SameSite=Lax";
         sessionStorage.removeItem("pending_signup_confirmation");
         sessionStorage.setItem("auth_portal_mode", "manager");
 

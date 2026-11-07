@@ -61,11 +61,14 @@ export default function Login({
         process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID ||
         "667335117568-kuqmmr2o3qbfg7h0up8rl7t8jtnu45sj.apps.googleusercontent.com";
 
-      const origin =
-        typeof window !== "undefined"
-          ? window.location.origin
-          : "https://maboutiquepro.app";
-      const redirectUri = `${origin}/auth/google`;
+      const hostname =
+        typeof window !== "undefined" ? window.location.hostname : "maboutiquepro.app";
+      const isLocal =
+        hostname === "localhost" || hostname === "127.0.0.1";
+      const canonicalOrigin = isLocal
+        ? window.location.origin
+        : "https://maboutiquepro.app";
+      const redirectUri = `${canonicalOrigin}/auth/google`;
 
       // Génération cryptographique du nonce OpenID Connect (vérifié par Supabase signInWithIdToken)
       const bytes = new Uint8Array(24);
@@ -80,6 +83,11 @@ export default function Login({
 
       sessionStorage.setItem("google_oauth_nonce", rawNonce);
       localStorage.setItem("google_oauth_nonce", rawNonce);
+      if (hostname.endsWith("maboutiquepro.app")) {
+        document.cookie = `google_oauth_nonce=${rawNonce}; Domain=.maboutiquepro.app; Path=/; Max-Age=600; SameSite=Lax; Secure`;
+      } else {
+        document.cookie = `google_oauth_nonce=${rawNonce}; Path=/; Max-Age=600; SameSite=Lax`;
+      }
 
       const params = new URLSearchParams({
         client_id: clientId,
