@@ -75,10 +75,8 @@ export default function LandingPage({ onLoginClick }: LandingPageProps) {
             </button>
 
             <a href="#" className="flex items-center gap-2.5 min-w-0 group">
-              <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500 p-[1px] shadow-lg shadow-purple-500/25 shrink-0">
-                <div className="w-full h-full bg-[#0b0924] rounded-[11px] flex items-center justify-center overflow-hidden">
-                  <img alt="MaBoutiquePro Logo" className="h-6 sm:h-7 w-auto object-contain" src="/logo.png" />
-                </div>
+              <div className="w-9 h-9 sm:w-11 sm:h-11 rounded-xl bg-white p-0.5 shadow-lg shadow-blue-500/20 border border-white/20 flex items-center justify-center overflow-hidden shrink-0">
+                <img alt="MaBoutiquePro Logo" className="w-full h-full object-contain rounded-lg" src="/logo.png" />
               </div>
               <span className="text-base sm:text-xl font-extrabold tracking-tight text-white truncate">
                 MaBoutiquePro
@@ -316,8 +314,8 @@ export default function LandingPage({ onLoginClick }: LandingPageProps) {
                 <div className="hidden md:flex md:col-span-3 bg-[#09071a] border-r border-white/[0.07] p-5 flex-col justify-between">
                   <div>
                     <div className="flex items-center gap-2.5 mb-7 px-2">
-                      <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center p-1">
-                        <img src="/logo.png" alt="Logo" className="w-full h-full object-contain" />
+                      <div className="w-8 h-8 rounded-lg bg-white flex items-center justify-center p-0.5 shadow-sm overflow-hidden shrink-0">
+                        <img src="/logo.png" alt="Logo" className="w-full h-full object-contain rounded-md" />
                       </div>
                       <span className="font-bold text-sm text-white tracking-tight">MaBoutiquePro</span>
                     </div>
