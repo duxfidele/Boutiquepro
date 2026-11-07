@@ -52,7 +52,9 @@ export const metadata: Metadata = {
     images: ["/logo.png"],
   },
   verification: {
-    google: process.env.NEXT_PUBLIC_GOOGLE_SITE_VERIFICATION || undefined,
+    google:
+      process.env.NEXT_PUBLIC_GOOGLE_SITE_VERIFICATION ||
+      "t517tRk5Z76SPvrAq1ZgYW-71TJg9WDFEeZU_rG-3bA",
   },
 };
 
