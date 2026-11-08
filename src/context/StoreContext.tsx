@@ -1,7 +1,25 @@
 "use client";
-import { saveOfflineSale, getOfflineSales, removeOfflineSale, getOfflineSalesCount, clearOfflineQueue, updateOfflineSale, getFailedOfflineSales, retryOfflineSale, OfflineSaleItem } from "@/lib/offlineQueue";
+import {
+  saveOfflineSale,
+  getOfflineSales,
+  removeOfflineSale,
+  getOfflineSalesCount,
+  clearOfflineQueue,
+  updateOfflineSale,
+  getFailedOfflineSales,
+  retryOfflineSale,
+  OfflineSaleItem,
+  withNetworkTimeout,
+  isNetworkLikeError,
+  savePendingDebtPayment,
+  getPendingDebtPayments,
+  removePendingDebtPayment,
+  savePendingCashSession,
+  getPendingCashSessions,
+  removePendingCashSession,
+} from "@/lib/offlineQueue";
 
-import React, { createContext, useContext, useReducer, useEffect, useState, useMemo, ReactNode } from "react";
+import React, { createContext, useContext, useReducer, useEffect, useState, useMemo, useRef, ReactNode } from "react";
 import { useAuth } from '@/context/AuthContext';
 import { supabase } from "@/lib/supabase";
 
@@ -1243,6 +1261,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     return syncOfflineSales();
   };
   const [isSyncing, setIsSyncing] = useState<boolean>(false);
+  const syncInProgressRef = useRef<boolean>(false);
 
   // Synchronisation des ventes hors-ligne
   const unpaidDebts = useMemo(() => {
@@ -1317,55 +1336,120 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       }
     }
 
-    if (typeof window !== "undefined" && navigator.onLine && activeStore?.id) {
-      try {
-        const { error: rpcErr } = await supabase.rpc("record_debt_payment", {
-          p_store_id: activeStore.id,
-          p_sale_id: saleId,
-          p_payment_amount: paymentAmount,
-          p_payment_method: method,
-          p_note: note || null,
-          p_cashier_name: cashierName || user?.email?.split("@")[0] || "Caissier"
+    const resolvedCashierName =
+      cashierName ||
+      user?.user_metadata?.full_name ||
+      state.settings?.managerName ||
+      (role === "admin" ? "Gérant" : "Caissier");
+
+    if (typeof window !== "undefined" && activeStore?.id) {
+      if (!navigator.onLine) {
+        savePendingDebtPayment({
+          id: paymentRecord.id,
+          storeId: activeStore.id,
+          saleId,
+          paymentAmount,
+          newPaid,
+          newRemaining,
+          newStatus,
+          method,
+          note: note || undefined,
+          cashierName: resolvedCashierName,
+          createdAt: now,
         });
-
-        if (rpcErr) {
-          await supabase
-            .from("sales")
-            .update({
-              amount_paid: newPaid,
-              remaining_amount: newRemaining,
-              payment_status: newStatus,
-            })
-            .eq("id", saleId)
-            .eq("store_id", activeStore.id);
-        }
-      } catch (err) {
-        console.warn("Erreur mise à jour Supabase dette:", err);
-      }
-
-      if (state.activeCashSession?.id) {
+        const cnt = await getOfflineSalesCount(activeStore.id);
+        setPendingSyncCount(cnt);
+      } else {
+        let debtSynced = false;
         try {
-          const updatedSalesForStats = state.sales.map((s) => s.id === saleId ? {
-            ...s,
-            amountPaid: newPaid,
-            remainingAmount: newRemaining,
-            paymentStatus: newStatus,
-            payments: [paymentRecord, ...(s.payments || [])]
-          } : s);
-          const stats = getSessionStats(state.activeCashSession, updatedSalesForStats, state.cashSessions);
-          await supabase
-            .from("cash_sessions")
-            .update({
-              total_cash_sales: stats.cash,
-              total_mobile_money_sales: stats.mm,
-              total_card_sales: stats.card,
-              total_sales_count: stats.count,
-              total_sales_amount: stats.total,
-              expected_amount: stats.expectedCashInDrawer,
-            })
-            .eq("id", state.activeCashSession.id);
+          const { error: rpcErr } = await withNetworkTimeout(
+            supabase.rpc("record_debt_payment", {
+              p_store_id: activeStore.id,
+              p_sale_id: saleId,
+              p_payment_amount: paymentAmount,
+              p_payment_method: method,
+              p_note: note || null,
+              p_cashier_name: resolvedCashierName,
+            }),
+            5000
+          );
+
+          if (!rpcErr) {
+            debtSynced = true;
+          } else if (!isNetworkLikeError(rpcErr)) {
+            const { error: updErr } = await withNetworkTimeout(
+              supabase
+                .from("sales")
+                .update({
+                  amount_paid: newPaid,
+                  remaining_amount: newRemaining,
+                  payment_status: newStatus,
+                })
+                .eq("id", saleId)
+                .eq("store_id", activeStore.id),
+              5000
+            );
+            if (!updErr) {
+              debtSynced = true;
+            }
+          }
         } catch (err) {
-          console.warn("Erreur crédit session caisse dette:", err);
+          console.warn("Réseau instable sur remboursement dette, mise en file locale:", err);
+        }
+
+        if (!debtSynced) {
+          savePendingDebtPayment({
+            id: paymentRecord.id,
+            storeId: activeStore.id,
+            saleId,
+            paymentAmount,
+            newPaid,
+            newRemaining,
+            newStatus,
+            method,
+            note: note || undefined,
+            cashierName: resolvedCashierName,
+            createdAt: now,
+          });
+          const cnt = await getOfflineSalesCount(activeStore.id);
+          setPendingSyncCount(cnt);
+        }
+
+        if (debtSynced && state.activeCashSession?.id) {
+          try {
+            const updatedSalesForStats = state.sales.map((s) =>
+              s.id === saleId
+                ? {
+                    ...s,
+                    amountPaid: newPaid,
+                    remainingAmount: newRemaining,
+                    paymentStatus: newStatus,
+                    payments: [paymentRecord, ...(s.payments || [])],
+                  }
+                : s
+            );
+            const stats = getSessionStats(
+              state.activeCashSession,
+              updatedSalesForStats,
+              state.cashSessions
+            );
+            await withNetworkTimeout(
+              supabase
+                .from("cash_sessions")
+                .update({
+                  total_cash_sales: stats.cash,
+                  total_mobile_money_sales: stats.mm,
+                  total_card_sales: stats.card,
+                  total_sales_count: stats.count,
+                  total_sales_amount: stats.total,
+                  expected_amount: stats.expectedCashInDrawer,
+                })
+                .eq("id", state.activeCashSession.id),
+              4000
+            );
+          } catch (err) {
+            console.warn("Erreur crédit session caisse dette:", err);
+          }
         }
       }
     }
@@ -1466,58 +1550,80 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       }
     }
 
-    if (typeof window !== "undefined" && !navigator.onLine && activeStore?.id) {
+    if (activeStore?.id) {
+      // Sauvegarde préventive immédiate (Write-Ahead) avant tout appel réseau
       await saveOfflineSale(activeStore.id, sale);
-      setPendingSyncCount((prev) => prev + 1);
-    } else if (activeStore?.id) {
-      try {
-        const { error: saleError } = await supabase.rpc("create_sale", {
-          p_store_id: activeStore.id,
-          p_sale_id: sale.id,
-          p_subtotal: sale.subtotal,
-          p_tax: sale.tax,
-          p_discount: sale.discount,
-          p_total: sale.total,
-          p_payment_method: sale.paymentMethod,
-          p_customer_name: sale.customerName || null,
-          p_created_at: sale.createdAt,
-          p_items: sale.items,
-          p_customer_phone: sale.customerPhone || null,
-          p_amount_paid: sale.amountPaid,
-          p_remaining_amount: sale.remainingAmount,
-          p_payment_status: sale.paymentStatus,
-          p_due_date: sale.dueDate || null,
-        });
 
-        if (saleError) {
-          const isNet = !navigator.onLine ||
-            saleError.message?.toLowerCase().includes("failed to fetch") ||
-            saleError.message?.toLowerCase().includes("network") ||
-            saleError.message?.toLowerCase().includes("timeout");
-          if (isNet) {
-            console.warn("Réseau indisponible, basculement en file d'attente hors-ligne:", saleError);
-            await saveOfflineSale(activeStore.id, sale);
-            setPendingSyncCount((prev) => prev + 1);
+      if (typeof window !== "undefined" && !navigator.onLine) {
+        const cnt = await getOfflineSalesCount(activeStore.id);
+        setPendingSyncCount(cnt);
+      } else {
+        try {
+          const { error: saleError } = await withNetworkTimeout(
+            supabase.rpc("create_sale", {
+              p_store_id: activeStore.id,
+              p_sale_id: sale.id,
+              p_subtotal: sale.subtotal,
+              p_tax: sale.tax,
+              p_discount: sale.discount,
+              p_total: sale.total,
+              p_payment_method: sale.paymentMethod,
+              p_customer_name: sale.customerName || null,
+              p_created_at: sale.createdAt,
+              p_items: sale.items,
+              p_customer_phone: sale.customerPhone || null,
+              p_amount_paid: sale.amountPaid,
+              p_remaining_amount: sale.remainingAmount,
+              p_payment_status: sale.paymentStatus,
+              p_due_date: sale.dueDate || null,
+            }),
+            6000
+          );
+
+          const isDuplicate = Boolean(
+            saleError &&
+              (saleError.code === "23505" ||
+                saleError.message?.toLowerCase().includes("duplicate key") ||
+                saleError.message?.toLowerCase().includes("sales_pkey"))
+          );
+
+          if (!saleError || isDuplicate) {
+            try {
+              await withNetworkTimeout(
+                supabase
+                  .from("sales")
+                  .update({
+                    customer_phone: sale.customerPhone,
+                    amount_paid: sale.amountPaid,
+                    remaining_amount: sale.remainingAmount,
+                    payment_status: sale.paymentStatus,
+                    due_date: sale.dueDate,
+                  })
+                  .eq("id", sale.id)
+                  .eq("store_id", activeStore.id),
+                4000
+              );
+            } catch {}
+            await removeOfflineSale(sale.id);
+            const cnt = await getOfflineSalesCount(activeStore.id);
+            setPendingSyncCount(cnt);
+          } else if (isNetworkLikeError(saleError)) {
+            console.warn("Réseau instable, créance conservée dans la file hors-ligne:", saleError);
+            const cnt = await getOfflineSalesCount(activeStore.id);
+            setPendingSyncCount(cnt);
           } else {
             console.error("Erreur RPC create_sale pour dette:", saleError);
-            alert();
+            await removeOfflineSale(sale.id);
+            const cnt = await getOfflineSalesCount(activeStore.id);
+            setPendingSyncCount(cnt);
+            alert(`Erreur d'enregistrement de la créance : ${saleError.message || "Erreur base de données"}`);
             return sale;
           }
-        } else {
-          try {
-            await supabase.from("sales").update({
-              customer_phone: sale.customerPhone,
-              amount_paid: sale.amountPaid,
-              remaining_amount: sale.remainingAmount,
-              payment_status: sale.paymentStatus,
-              due_date: sale.dueDate
-            }).eq("id", sale.id).eq("store_id", activeStore.id);
-          } catch (e) {}
+        } catch (err) {
+          console.warn("Basculement offline pour créance (timeout / coupure):", err);
+          const cnt = await getOfflineSalesCount(activeStore.id);
+          setPendingSyncCount(cnt);
         }
-      } catch (err) {
-        console.warn("Basculement offline pour créance:", err);
-        await saveOfflineSale(activeStore.id, sale);
-        setPendingSyncCount((prev) => prev + 1);
       }
     }
 
@@ -1525,13 +1631,62 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   };
 
   const syncOfflineSales = async (): Promise<{ success: number; failed: number }> => {
-    if (!activeStore?.id || !navigator.onLine || isSyncing) return { success: 0, failed: 0 };
+    if (!activeStore?.id || !navigator.onLine || syncInProgressRef.current) {
+      return { success: 0, failed: 0 };
+    }
+    syncInProgressRef.current = true;
     setIsSyncing(true);
     let success = 0;
     let failed = 0;
 
     try {
-      // Récupérer les ventes hors-ligne
+      // 1. Synchroniser d'abord les ouvertures / clôtures de caisse en attente
+      const pendingSessions = getPendingCashSessions(activeStore.id);
+      for (const csItem of pendingSessions) {
+        const cs = csItem.session;
+        try {
+          const { error: csErr } = await withNetworkTimeout(
+            supabase.from("cash_sessions").upsert(
+              [
+                {
+                  id: cs.id,
+                  store_id: cs.storeId || activeStore.id,
+                  user_id: cs.userId || null,
+                  cashier_name: cs.cashierName,
+                  opening_amount: cs.openingAmount,
+                  closing_amount: cs.closingAmount ?? null,
+                  expected_amount: cs.expectedAmount ?? cs.openingAmount,
+                  difference: cs.difference ?? null,
+                  total_cash_sales: cs.totalCashSales || 0,
+                  total_mobile_money_sales: cs.totalMobileMoneySales || 0,
+                  total_card_sales: cs.totalCardSales || 0,
+                  total_sales_count: cs.totalSalesCount || 0,
+                  total_sales_amount: cs.totalSalesAmount || 0,
+                  status: cs.status || "open",
+                  opened_at: cs.openedAt,
+                  closed_at: cs.closedAt || null,
+                  notes: cs.notes || null,
+                },
+              ],
+              { onConflict: "id" }
+            ),
+            6000
+          );
+          if (!csErr) {
+            removePendingCashSession(csItem.id);
+            success++;
+          } else if (isNetworkLikeError(csErr)) {
+            failed++;
+          } else {
+            console.warn("Erreur sync session caisse:", csErr);
+            failed++;
+          }
+        } catch {
+          failed++;
+        }
+      }
+
+      // 2. Récupérer et synchroniser les ventes hors-ligne
       let pendingItems = await getOfflineSales(activeStore.id);
       if (pendingItems.length === 0) {
         const allPending = await getOfflineSales();
@@ -1543,100 +1698,155 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         const s = item.sale;
         const targetStoreId = activeStore.id || item.storeId;
         try {
-          // ÉTAPE ANTI-DOUBLON 1 : Vérifier si la vente existe DÉJÀ dans Supabase ou dans le catalogue local
-          const existsInLocalState = (state.sales || []).some((ls) => ls.id === s.id);
-          const { data: existingSale } = await supabase
-            .from("sales")
-            .select("id")
-            .eq("id", s.id)
-            .maybeSingle();
+          // ÉTAPE ANTI-DOUBLON 1 : Vérifier UNIQUEMENT dans Supabase (jamais sur state.sales local !)
+          const { data: existingSale, error: checkErr } = await withNetworkTimeout(
+            supabase.from("sales").select("id").eq("id", s.id).maybeSingle(),
+            6000
+          );
 
-          if (existingSale || existsInLocalState) {
-            // Vente déjà enregistrée : retirer directement de la file d'attente locale sans réinsérer
+          if (checkErr && isNetworkLikeError(checkErr)) {
+            failed++;
+            continue;
+          }
+
+          if (!checkErr && existingSale?.id) {
             await removeOfflineSale(s.id);
             success++;
             continue;
           }
 
-          // ÉTAPE ANTI-DOUBLON 2 : Appel atomique RPC create_sale
-          const { error: saleError } = await supabase.rpc("create_sale", {
-            p_store_id: targetStoreId,
-            p_sale_id: s.id,
-            p_subtotal: s.subtotal,
-            p_tax: s.tax,
-            p_discount: s.discount,
-            p_total: s.total,
-            p_payment_method: s.paymentMethod,
-            p_customer_name: s.customerName || null,
-            p_created_at: s.createdAt,
-            p_items: s.items,
-            p_customer_phone: s.customerPhone || null,
-            p_amount_paid: s.amountPaid ?? (s.paymentMethod === 'credit' ? 0 : s.total),
-            p_remaining_amount: s.remainingAmount ?? (s.paymentMethod === 'credit' ? s.total : 0),
-            p_payment_status: s.paymentStatus || (s.paymentMethod === 'credit' ? 'unpaid' : 'paid'),
-            p_due_date: s.dueDate || null,
-          });
+          // ÉTAPE ANTI-DOUBLON 2 : Appel atomique RPC create_sale avec timeout 8s
+          const { error: saleError } = await withNetworkTimeout(
+            supabase.rpc("create_sale", {
+              p_store_id: targetStoreId,
+              p_sale_id: s.id,
+              p_subtotal: s.subtotal,
+              p_tax: s.tax,
+              p_discount: s.discount,
+              p_total: s.total,
+              p_payment_method: s.paymentMethod,
+              p_customer_name: s.customerName || null,
+              p_created_at: s.createdAt,
+              p_items: s.items,
+              p_customer_phone: s.customerPhone || null,
+              p_amount_paid: s.amountPaid ?? (s.paymentMethod === "credit" ? 0 : s.total),
+              p_remaining_amount: s.remainingAmount ?? (s.paymentMethod === "credit" ? s.total : 0),
+              p_payment_status: s.paymentStatus || (s.paymentMethod === "credit" ? "unpaid" : "paid"),
+              p_due_date: s.dueDate || null,
+            }),
+            8000
+          );
 
           const isDuplicate = Boolean(
-            saleError && (
-              saleError.code === "23505" ||
-              saleError.message?.toLowerCase().includes("duplicate key") ||
-              saleError.message?.toLowerCase().includes("sales_pkey") ||
-              saleError.details?.toLowerCase().includes("already exists")
-            )
+            saleError &&
+              (saleError.code === "23505" ||
+                saleError.message?.toLowerCase().includes("duplicate key") ||
+                saleError.message?.toLowerCase().includes("sales_pkey") ||
+                saleError.details?.toLowerCase().includes("already exists"))
           );
 
           if (!saleError || isDuplicate) {
             if (s.paymentMethod === "credit") {
               try {
-                await supabase.from("sales").update({
-                  customer_phone: s.customerPhone || null,
-                  amount_paid: s.amountPaid ?? 0,
-                  remaining_amount: s.remainingAmount ?? s.total,
-                  payment_status: s.paymentStatus || 'unpaid',
-                  due_date: s.dueDate || null,
-                }).eq("id", s.id).eq("store_id", targetStoreId);
-              } catch (e) {}
+                await withNetworkTimeout(
+                  supabase
+                    .from("sales")
+                    .update({
+                      customer_phone: s.customerPhone || null,
+                      amount_paid: s.amountPaid ?? 0,
+                      remaining_amount: s.remainingAmount ?? s.total,
+                      payment_status: s.paymentStatus || "unpaid",
+                      due_date: s.dueDate || null,
+                    })
+                    .eq("id", s.id)
+                    .eq("store_id", targetStoreId),
+                  5000
+                );
+              } catch {}
             }
             await removeOfflineSale(s.id);
             success++;
+          } else if (isNetworkLikeError(saleError)) {
+            // Coupure ou lenteur réseau temporaire : conserver intacte dans la file pour le prochain cycle
+            failed++;
           } else {
-            console.error(`Erreur sync vente offline ${s.id}:`, saleError);
-            const isNet = !navigator.onLine ||
-              saleError.message?.toLowerCase().includes("failed to fetch") ||
-              saleError.message?.toLowerCase().includes("network") ||
-              saleError.message?.toLowerCase().includes("timeout");
-
-            if (isNet) {
-              // Coupure réseau temporaire, laisser dans la file pour le prochain cycle
-              failed++;
+            // Erreur SQL réelle : incrémenter retryCount sans jamais supprimer la vente
+            const currentRetries = (item.retryCount || 0) + 1;
+            const errorMsg = saleError.message || "Erreur SQL";
+            if (currentRetries >= 3) {
+              console.error(`Vente ${s.id} marquée en échec après 3 tentatives: ${errorMsg}`);
+              await updateOfflineSale({
+                ...item,
+                retryCount: currentRetries,
+                lastError: errorMsg,
+                status: "failed",
+                lastAttemptAt: new Date().toISOString(),
+              });
             } else {
-              // Erreur SQL réelle : incrémenter retryCount pour éviter rejouer à l'infini
-              const currentRetries = (item.retryCount || 0) + 1;
-              const errorMsg = saleError.message || "Erreur SQL";
-              if (currentRetries >= 3) {
-                console.error(`Vente ${s.id} marquée en échec après 3 tentatives: ${errorMsg}`);
-                // RÈGLE CRITIQUE : NE JAMAIS SUPPRIMER LA VENTE ! La garder dans la file avec statut "failed"
-                await updateOfflineSale({
-                  ...item,
-                  retryCount: currentRetries,
-                  lastError: errorMsg,
-                  status: "failed",
-                  lastAttemptAt: new Date().toISOString()
-                });
-              } else {
-                await updateOfflineSale({
-                  ...item,
-                  retryCount: currentRetries,
-                  lastError: errorMsg,
-                  status: "pending"
-                });
-              }
-              failed++;
+              await updateOfflineSale({
+                ...item,
+                retryCount: currentRetries,
+                lastError: errorMsg,
+                status: "pending",
+              });
             }
+            failed++;
           }
         } catch (err) {
-          console.error("Exception sync vente:", err);
+          console.warn("Interruption réseau sync vente:", err);
+          failed++;
+        }
+      }
+
+      // 3. Synchroniser les remboursements de dettes en attente (une fois leurs ventes créées)
+      const remainingSales = await getOfflineSales(activeStore.id);
+      const unsyncedSaleIds = new Set(remainingSales.map((rs) => rs.id));
+      const pendingDebtOps = getPendingDebtPayments(activeStore.id);
+
+      for (const dp of pendingDebtOps) {
+        if (unsyncedSaleIds.has(dp.saleId)) {
+          // Attendre que la vente à crédit parente soit synchronisée d'abord
+          continue;
+        }
+        try {
+          const { error: rpcErr } = await withNetworkTimeout(
+            supabase.rpc("record_debt_payment", {
+              p_store_id: dp.storeId || activeStore.id,
+              p_sale_id: dp.saleId,
+              p_payment_amount: dp.paymentAmount,
+              p_payment_method: dp.method,
+              p_note: dp.note || null,
+              p_cashier_name: dp.cashierName || "Caissier",
+            }),
+            6000
+          );
+
+          if (!rpcErr) {
+            removePendingDebtPayment(dp.id);
+            success++;
+          } else if (!isNetworkLikeError(rpcErr)) {
+            const { error: updErr } = await withNetworkTimeout(
+              supabase
+                .from("sales")
+                .update({
+                  amount_paid: dp.newPaid,
+                  remaining_amount: dp.newRemaining,
+                  payment_status: dp.newStatus,
+                })
+                .eq("id", dp.saleId)
+                .eq("store_id", dp.storeId || activeStore.id),
+              5000
+            );
+            if (!updErr) {
+              removePendingDebtPayment(dp.id);
+              success++;
+            } else {
+              failed++;
+            }
+          } else {
+            failed++;
+          }
+        } catch {
           failed++;
         }
       }
@@ -1644,6 +1854,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       const remaining = await getOfflineSalesCount(activeStore.id);
       setPendingSyncCount(remaining);
       await refreshFailedOfflineSales();
+      syncInProgressRef.current = false;
       setIsSyncing(false);
     }
 
@@ -2293,6 +2504,68 @@ export function StoreProvider({ children }: { children: ReactNode }) {
               }) : []
             };
           });
+
+          // Fusion sans perte : réinjecter les ventes hors-ligne non encore synchronisées et les paiements de dettes en attente
+          if (typeof window !== "undefined" && activeStore?.id) {
+            try {
+              const pendingOfflineItems = await getOfflineSales(activeStore.id);
+              const existingIds = new Set((payload.sales || []).map((ps: Sale) => ps.id));
+              const unsyncedSales = pendingOfflineItems
+                .filter((item) => item?.sale?.id && !existingIds.has(item.sale.id))
+                .map((item) => item.sale);
+
+              if (unsyncedSales.length > 0) {
+                payload.sales = [...unsyncedSales, ...(payload.sales || [])].sort(
+                  (a: Sale, b: Sale) =>
+                    new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+                );
+
+                // Ajuster le stock affiché pour refléter les ventes hors-ligne pas encore décomptées dans Supabase
+                if (Array.isArray(payload.products)) {
+                  const stockDeductions = new Map<string, number>();
+                  unsyncedSales.forEach((us) => {
+                    (us.items || []).forEach((it) => {
+                      const refQty =
+                        it.quantityReference !== undefined &&
+                        it.quantityReference !== null &&
+                        Number(it.quantityReference) > 0
+                          ? Number(it.quantityReference)
+                          : Number(it.quantity) * (Number(it.unitMultiplier) || 1);
+                      stockDeductions.set(
+                        it.productId,
+                        (stockDeductions.get(it.productId) || 0) + refQty
+                      );
+                    });
+                  });
+                  payload.products = payload.products.map((prod: Product) => {
+                    const deduct = stockDeductions.get(prod.id);
+                    if (!deduct) return prod;
+                    return { ...prod, stock: Math.max(0, prod.stock - deduct) };
+                  });
+                }
+              }
+
+              const pendingDebts = getPendingDebtPayments(activeStore.id);
+              if (pendingDebts.length > 0 && Array.isArray(payload.sales)) {
+                payload.sales = payload.sales.map((ps: Sale) => {
+                  const matchingOps = pendingDebts.filter((op) => op.saleId === ps.id);
+                  if (matchingOps.length === 0) return ps;
+                  const latestOp = matchingOps[matchingOps.length - 1];
+                  if (latestOp.newPaid > (ps.amountPaid || 0)) {
+                    return {
+                      ...ps,
+                      amountPaid: latestOp.newPaid,
+                      remainingAmount: latestOp.newRemaining,
+                      paymentStatus: latestOp.newStatus,
+                    };
+                  }
+                  return ps;
+                });
+              }
+            } catch (mergeErr) {
+              console.warn("Avertissement fusion file hors-ligne dans loadData:", mergeErr);
+            }
+          }
         }
         if (customers) {
           payload.customers = customers.map((c: any) => ({
@@ -2667,6 +2940,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       else if (action.type === "COMPLETE_SALE") {
         const s = action.payload;
 
+        // 0. Mise à jour instantanée de l'interface (panier vidé & ticket prêt en < 10 ms même sur réseau instable)
+        dispatchBase(action);
+
         // Sauvegarder l'acompte initial de la vente à crédit dans le registre local des remboursements
         if (s.paymentMethod === "credit" && s.payments && s.payments.length > 0 && typeof window !== "undefined" && activeStore?.id) {
           try {
@@ -2681,15 +2957,23 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           }
         }
 
-        // 1. Si le navigateur est hors-ligne, basculer directement dans la file d'attente locale
+        if (!activeStore?.id) return;
+
+        // 1. Sauvegarde préventive immédiate (Write-Ahead Log) dans IndexedDB + localStorage avant tout appel réseau
+        await saveOfflineSale(activeStore.id, s);
+
         if (typeof window !== "undefined" && !navigator.onLine) {
-          await saveOfflineSale(activeStore.id, s);
-          setPendingSyncCount((prev) => prev + 1);
+          const cnt = await getOfflineSalesCount(activeStore.id);
+          setPendingSyncCount(cnt);
           console.info("Vente enregistrée en file d'attente hors-ligne (mode sans connexion):", s.id);
-        } else {
-          try {
-            // 2. Tentative en ligne via RPC atomique
-            const { error: saleError } = await supabase.rpc('create_sale', {
+          return;
+        }
+
+        let syncedNow = false;
+        try {
+          // 2. Tentative en ligne via RPC atomique avec timeout court (6s) anti-blocage
+          const { error: saleError } = await withNetworkTimeout(
+            supabase.rpc("create_sale", {
               p_store_id: activeStore.id,
               p_sale_id: s.id,
               p_subtotal: s.subtotal,
@@ -2701,61 +2985,84 @@ export function StoreProvider({ children }: { children: ReactNode }) {
               p_created_at: s.createdAt,
               p_items: s.items,
               p_customer_phone: s.customerPhone || null,
-              p_amount_paid: s.amountPaid ?? (s.paymentMethod === 'credit' ? 0 : s.total),
-              p_remaining_amount: s.remainingAmount ?? (s.paymentMethod === 'credit' ? s.total : 0),
-              p_payment_status: s.paymentStatus || (s.paymentMethod === 'credit' ? 'unpaid' : 'paid'),
+              p_amount_paid: s.amountPaid ?? (s.paymentMethod === "credit" ? 0 : s.total),
+              p_remaining_amount: s.remainingAmount ?? (s.paymentMethod === "credit" ? s.total : 0),
+              p_payment_status: s.paymentStatus || (s.paymentMethod === "credit" ? "unpaid" : "paid"),
               p_due_date: s.dueDate || null,
-            });
+            }),
+            6000
+          );
 
-            if (saleError) {
-              if (isSubscriptionExpiredError(saleError)) {
-                alert("Abonnement expiré : impossible d'enregistrer la vente. Veuillez renouveler votre formule Moneriz.");
-                return;
-              }
-              const isNet = !navigator.onLine ||
-                saleError.message?.toLowerCase().includes("failed to fetch") ||
-                saleError.message?.toLowerCase().includes("network") ||
-                saleError.message?.toLowerCase().includes("timeout");
-              if (isNet) {
-                console.warn("Réseau indisponible, basculement en sauvegarde hors-ligne sécurisée:", saleError);
-                await saveOfflineSale(activeStore.id, s);
-                setPendingSyncCount((prev) => prev + 1);
-              } else {
-                console.error("Erreur serveur SQL create_sale:", saleError);
-                alert(`Erreur d'enregistrement : ${saleError.message || "Erreur base de données"}`);
-                return;
-              }
-            } else {
-              // Si la vente comporte des métadonnées de crédit, garantir la mise à jour
+          const isDuplicate = Boolean(
+            saleError &&
+              (saleError.code === "23505" ||
+                saleError.message?.toLowerCase().includes("duplicate key") ||
+                saleError.message?.toLowerCase().includes("sales_pkey"))
+          );
+
+          if (!saleError || isDuplicate) {
+            syncedNow = true;
+            await removeOfflineSale(s.id);
+            const cnt = await getOfflineSalesCount(activeStore.id);
+            setPendingSyncCount(cnt);
+
+            if (s.paymentMethod === "credit") {
               try {
-                await supabase
-                  .from("sales")
-                  .update({
-                    customer_phone: s.customerPhone || null,
-                    amount_paid: s.amountPaid ?? (s.paymentMethod === 'credit' ? 0 : s.total),
-                    remaining_amount: s.remainingAmount ?? (s.paymentMethod === 'credit' ? s.total : 0),
-                    payment_status: s.paymentStatus || (s.paymentMethod === 'credit' ? 'unpaid' : 'paid'),
-                    due_date: s.dueDate || null,
-                  })
-                  .eq("id", s.id)
-                  .eq("store_id", activeStore.id);
+                await withNetworkTimeout(
+                  supabase
+                    .from("sales")
+                    .update({
+                      customer_phone: s.customerPhone || null,
+                      amount_paid: s.amountPaid ?? 0,
+                      remaining_amount: s.remainingAmount ?? s.total,
+                      payment_status: s.paymentStatus || "unpaid",
+                      due_date: s.dueDate || null,
+                    })
+                    .eq("id", s.id)
+                    .eq("store_id", activeStore.id),
+                  4000
+                );
               } catch (upErr) {
                 console.warn("Erreur mise à jour métadonnées crédit vente:", upErr);
               }
             }
-          } catch (netErr: any) {
-            if (isSubscriptionExpiredError(netErr)) {
-              alert("Abonnement expiré : impossible d'enregistrer la vente.");
-              return;
-            }
-            console.warn("Réseau indisponible, basculement en file d'attente hors-ligne:", netErr);
-            await saveOfflineSale(activeStore.id, s);
-            setPendingSyncCount((prev) => prev + 1);
+          } else if (isSubscriptionExpiredError(saleError)) {
+            await removeOfflineSale(s.id);
+            const cnt = await getOfflineSalesCount(activeStore.id);
+            setPendingSyncCount(cnt);
+            alert("Abonnement expiré : impossible d'enregistrer la vente. Veuillez renouveler votre formule Moneriz.");
+            return;
+          } else if (isNetworkLikeError(saleError)) {
+            console.warn("Réseau instable, vente conservée en sécurité dans la file hors-ligne:", saleError);
+            const cnt = await getOfflineSalesCount(activeStore.id);
+            setPendingSyncCount(cnt);
+          } else {
+            console.error("Erreur serveur SQL create_sale:", saleError);
+            await updateOfflineSale({
+              id: s.id,
+              storeId: activeStore.id,
+              sale: s,
+              createdAt: s.createdAt,
+              retryCount: 1,
+              lastError: saleError.message || "Erreur base de données",
+              status: "pending",
+            });
+            const cnt = await getOfflineSalesCount(activeStore.id);
+            setPendingSyncCount(cnt);
           }
+        } catch (netErr: any) {
+          if (isSubscriptionExpiredError(netErr)) {
+            await removeOfflineSale(s.id);
+            alert("Abonnement expiré : impossible d'enregistrer la vente.");
+            return;
+          }
+          console.warn("Timeout / coupure réseau, vente conservée en file d'attente hors-ligne:", netErr);
+          const cnt = await getOfflineSalesCount(activeStore.id);
+          setPendingSyncCount(cnt);
         }
 
-        // Mettre à jour en continu les totaux dans Supabase si connecté et session active
-        if (typeof window !== "undefined" && navigator.onLine && state.activeCashSession?.id) {
+        // Mettre à jour en continu les totaux dans Supabase si synchronisé et session active
+        if (syncedNow && typeof window !== "undefined" && navigator.onLine && state.activeCashSession?.id) {
           try {
             const isCash = s.paymentMethod === "cash";
             const isMM = s.paymentMethod === "mobile_money";
@@ -2772,18 +3079,26 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             const newTotal = state.activeCashSession.totalSalesAmount + effectiveAmount;
             const newExpected = state.activeCashSession.openingAmount + newCash;
 
-            await supabase.from("cash_sessions").update({
-              total_cash_sales: newCash,
-              total_mobile_money_sales: newMM,
-              total_card_sales: newCard,
-              total_sales_count: newCount,
-              total_sales_amount: newTotal,
-              expected_amount: newExpected
-            }).eq("id", state.activeCashSession.id);
+            await withNetworkTimeout(
+              supabase
+                .from("cash_sessions")
+                .update({
+                  total_cash_sales: newCash,
+                  total_mobile_money_sales: newMM,
+                  total_card_sales: newCard,
+                  total_sales_count: newCount,
+                  total_sales_amount: newTotal,
+                  expected_amount: newExpected,
+                })
+                .eq("id", state.activeCashSession.id),
+              4000
+            );
           } catch (e) {
             console.warn("Notice mise à jour session caisse:", e);
           }
         }
+
+        return;
       }
       else if (action.type === "ADD_CUSTOMER") {
         const c = action.payload;
@@ -3240,30 +3555,20 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const openCashSession = async (openingAmount: number, cashierName?: string): Promise<CashSession> => {
     const openedAt = new Date().toISOString();
 
-    // S'assurer qu'aucune ancienne session ne reste "open" par accident
-    if (activeStore?.id) {
-      try {
-        let orphanQuery = supabase
-          .from("cash_sessions")
-          .update({ status: "closed", closed_at: openedAt })
-          .eq("store_id", activeStore.id)
-          .eq("status", "open");
-        if (user?.id && role !== "admin") {
-          orphanQuery = orphanQuery.eq("user_id", user.id);
-        }
-        await orphanQuery;
-      } catch (e) {
-        console.warn("Fermeture sessions orphelines:", e);
-      }
-    }
-
     // Le shift de caisse démarre TOUJOURS avec un vrai UUID valide pour Postgres et compteurs à 0
     const sessionId = generateUUID();
     const session: CashSession = {
       id: sessionId,
       storeId: activeStore?.id || "",
       userId: user?.id || "",
-      cashierName: (cashierName && !cashierName.includes("@") && cashierName !== user?.email?.split("@")[0]) ? cashierName : (user?.user_metadata?.full_name || state.settings?.managerName || (role === "admin" ? "Gérant" : "Caissier")),
+      cashierName:
+        cashierName &&
+        !cashierName.includes("@") &&
+        cashierName !== user?.email?.split("@")[0]
+          ? cashierName
+          : user?.user_metadata?.full_name ||
+            state.settings?.managerName ||
+            (role === "admin" ? "Gérant" : "Caissier"),
       openingAmount: openingAmount,
       expectedAmount: openingAmount,
       totalCashSales: 0,
@@ -3275,42 +3580,78 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       status: "open",
     };
 
-    // Sauvegarde locale instantanée garantie par boutique
+    // 1. Sauvegarde locale instantanée & mise à jour immédiate de l'écran (zéro blocage réseau)
     if (activeStore?.id) {
       try {
         const storeKey = `boutiquepro_cash_sessions_${activeStore.id}`;
         const existing: CashSession[] = JSON.parse(localStorage.getItem(storeKey) || "[]");
-        const updated = [session, ...existing.filter((s) => s.id !== session.id)];
+        const closedOrphans = existing.map((s) =>
+          s.status === "open" ? { ...s, status: "closed" as const, closedAt: openedAt } : s
+        );
+        const updated = [session, ...closedOrphans.filter((s) => s.id !== session.id)];
         localStorage.setItem(storeKey, JSON.stringify(updated));
       } catch (e) {
         console.warn("Notice stockage local ouverture caisse:", e);
       }
     }
 
+    dispatchBase({ type: "OPEN_CASH_SESSION", payload: session });
+
+    // 2. Synchronisation Supabase avec timeout court (5s) et repli file hors-ligne
     if (activeStore?.id) {
-      try {
-        const { error } = await supabase.from("cash_sessions").insert([{
-          id: session.id,
-          store_id: activeStore.id,
-          user_id: user?.id || null,
-          cashier_name: session.cashierName,
-          opening_amount: session.openingAmount,
-          expected_amount: session.expectedAmount,
-          total_cash_sales: 0,
-          total_mobile_money_sales: 0,
-          total_card_sales: 0,
-          total_sales_count: 0,
-          total_sales_amount: 0,
-          status: "open",
-          opened_at: session.openedAt
-        }]);
-        if (error) console.error("Erreur insertion Supabase cash_sessions:", error);
-      } catch (e) {
-        console.warn("Supabase cash_sessions insert notice:", e);
+      if (typeof window !== "undefined" && !navigator.onLine) {
+        savePendingCashSession(activeStore.id, session);
+        const cnt = await getOfflineSalesCount(activeStore.id);
+        setPendingSyncCount(cnt);
+      } else {
+        try {
+          let orphanQuery = supabase
+            .from("cash_sessions")
+            .update({ status: "closed", closed_at: openedAt })
+            .eq("store_id", activeStore.id)
+            .eq("status", "open");
+          if (user?.id && role !== "admin") {
+            orphanQuery = orphanQuery.eq("user_id", user.id);
+          }
+          await withNetworkTimeout(orphanQuery, 4000).catch(() => {});
+
+          const { error } = await withNetworkTimeout(
+            supabase.from("cash_sessions").upsert(
+              [
+                {
+                  id: session.id,
+                  store_id: activeStore.id,
+                  user_id: user?.id || null,
+                  cashier_name: session.cashierName,
+                  opening_amount: session.openingAmount,
+                  expected_amount: session.expectedAmount,
+                  total_cash_sales: 0,
+                  total_mobile_money_sales: 0,
+                  total_card_sales: 0,
+                  total_sales_count: 0,
+                  total_sales_amount: 0,
+                  status: "open",
+                  opened_at: session.openedAt,
+                },
+              ],
+              { onConflict: "id" }
+            ),
+            5000
+          );
+          if (error) {
+            savePendingCashSession(activeStore.id, session);
+            const cnt = await getOfflineSalesCount(activeStore.id);
+            setPendingSyncCount(cnt);
+          }
+        } catch (e) {
+          console.warn("Ouverture caisse mise en file hors-ligne (réseau instable):", e);
+          savePendingCashSession(activeStore.id, session);
+          const cnt = await getOfflineSalesCount(activeStore.id);
+          setPendingSyncCount(cnt);
+        }
       }
     }
 
-    dispatchBase({ type: "OPEN_CASH_SESSION", payload: session });
     return session;
   };
 
@@ -3336,15 +3677,15 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       totalSalesAmount: stats.total,
       status: "closed",
       closedAt,
-      notes: notes || undefined
+      notes: notes || undefined,
     };
 
-    // Sauvegarde locale instantanée garantie par boutique
+    // 1. Sauvegarde locale instantanée & fermeture immédiate de l'écran (zéro blocage)
     if (activeStore?.id) {
       try {
         const storeKey = `boutiquepro_cash_sessions_${activeStore.id}`;
         const existing: CashSession[] = JSON.parse(localStorage.getItem(storeKey) || "[]");
-        const updated = existing.map((s) => s.id === cur.id ? closedSession : s);
+        const updated = existing.map((s) => (s.id === cur.id ? closedSession : s));
         if (!updated.some((s) => s.id === cur.id)) {
           updated.unshift(closedSession);
         }
@@ -3354,28 +3695,59 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       }
     }
 
+    dispatchBase({ type: "CLOSE_CASH_SESSION", payload: closedSession });
+
+    // 2. Synchronisation Supabase par upsert avec timeout court (5s) et repli file hors-ligne
     if (activeStore?.id) {
-      try {
-        const { error } = await supabase.from("cash_sessions").update({
-          closing_amount: closingAmount,
-          expected_amount: expected,
-          difference: diff,
-          total_cash_sales: stats.cash,
-          total_mobile_money_sales: stats.mm,
-          total_card_sales: stats.card,
-          total_sales_count: stats.count,
-          total_sales_amount: stats.total,
-          status: "closed",
-          closed_at: closedAt,
-          notes: notes || null
-        }).eq("id", cur.id);
-        if (error) console.error("Erreur mise à jour Supabase cash_sessions:", error);
-      } catch (e) {
-        console.warn("Supabase cash_sessions update notice:", e);
+      if (typeof window !== "undefined" && !navigator.onLine) {
+        savePendingCashSession(activeStore.id, closedSession);
+        const cnt = await getOfflineSalesCount(activeStore.id);
+        setPendingSyncCount(cnt);
+      } else {
+        try {
+          const { error } = await withNetworkTimeout(
+            supabase.from("cash_sessions").upsert(
+              [
+                {
+                  id: closedSession.id,
+                  store_id: activeStore.id,
+                  user_id: closedSession.userId || user?.id || null,
+                  cashier_name: closedSession.cashierName,
+                  opening_amount: closedSession.openingAmount,
+                  closing_amount: closingAmount,
+                  expected_amount: expected,
+                  difference: diff,
+                  total_cash_sales: stats.cash,
+                  total_mobile_money_sales: stats.mm,
+                  total_card_sales: stats.card,
+                  total_sales_count: stats.count,
+                  total_sales_amount: stats.total,
+                  status: "closed",
+                  opened_at: closedSession.openedAt,
+                  closed_at: closedAt,
+                  notes: notes || null,
+                },
+              ],
+              { onConflict: "id" }
+            ),
+            5000
+          );
+          if (error) {
+            savePendingCashSession(activeStore.id, closedSession);
+            const cnt = await getOfflineSalesCount(activeStore.id);
+            setPendingSyncCount(cnt);
+          } else {
+            removePendingCashSession(closedSession.id);
+          }
+        } catch (e) {
+          console.warn("Clôture caisse mise en file hors-ligne (réseau instable):", e);
+          savePendingCashSession(activeStore.id, closedSession);
+          const cnt = await getOfflineSalesCount(activeStore.id);
+          setPendingSyncCount(cnt);
+        }
       }
     }
 
-    dispatchBase({ type: "CLOSE_CASH_SESSION", payload: closedSession });
     return closedSession;
   };
 

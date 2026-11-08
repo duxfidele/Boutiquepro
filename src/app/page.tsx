@@ -31,11 +31,8 @@ import {
   ShieldAlert,
   ShieldCheck,
   Calendar,
-  Download,
 } from "lucide-react";
 import { ProductAvatar } from "@/components/ui/ProductAvatar";
-import { usePwaInstall } from "@/hooks/usePwaInstall";
-import PwaInstallModal from "@/components/pwa/PwaInstallModal";
 import {
   DatePeriodFilter,
   PeriodType,
@@ -61,13 +58,6 @@ const paymentLabels: Record<string, string> = {
 export default function Dashboard() {
   const { role, activeStore, isModuleActive } = useAuth();
   const router = useRouter();
-  const {
-    canShowInstall,
-    platform,
-    showGuideModal,
-    setShowGuideModal,
-    handleInstallClick,
-  } = usePwaInstall();
 
   const {
     state,
@@ -496,33 +486,6 @@ export default function Dashboard() {
 
   return (
     <div className="space-y-6 animate-fade-in">
-      {/* Bannière permanente d'installation PWA sur la page d'accueil si non installée */}
-      {canShowInstall && (
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3.5 rounded-2xl border border-primary/30 bg-gradient-to-r from-primary/10 via-indigo-500/10 to-purple-500/10 p-4 shadow-sm">
-          <div className="flex items-center gap-3.5 min-w-0">
-            <div className="w-11 h-11 rounded-xl bg-white p-1 border border-border/50 shadow-sm flex items-center justify-center shrink-0">
-              <img src="/logo.png" alt="MaBoutiquePro" className="w-full h-full object-contain rounded-lg" />
-            </div>
-            <div className="min-w-0">
-              <p className="text-sm font-bold text-foreground">
-                Installez l&apos;application MaBoutiquePro sur cet appareil
-              </p>
-              <p className="text-xs text-muted-foreground mt-0.5">
-                Accès rapide en plein écran depuis votre écran d&apos;accueil et encaissement continu même sans Internet.
-              </p>
-            </div>
-          </div>
-          <button
-            type="button"
-            onClick={handleInstallClick}
-            className="inline-flex items-center justify-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-xs sm:text-sm font-bold text-primary-foreground hover:opacity-90 transition-all shadow-md shrink-0 cursor-pointer active:scale-[0.98]"
-          >
-            <Download className="h-4 w-4 shrink-0" />
-            <span>Télécharger l&apos;App</span>
-          </button>
-        </div>
-      )}
-
       {/* Header avec Sélecteur de Période en 1 clic */}
       <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
         <div>
@@ -1083,13 +1046,6 @@ export default function Dashboard() {
           )}
         </div>
       </div>
-
-      {/* Modal d'aide à l'installation PWA */}
-      <PwaInstallModal
-        isOpen={showGuideModal}
-        onClose={() => setShowGuideModal(false)}
-        platform={platform}
-      />
     </div>
   );
 }
