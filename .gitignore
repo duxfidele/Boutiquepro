@@ -44,3 +44,5 @@ configure_moneriz.js
 **/public/workbox-*.js.map
 **/public/swe-worker-*.js
 **/public/swe-worker-*.js.map
+**/public/fallback-*.js
+**/public/fallback-*.js.map

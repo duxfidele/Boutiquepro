@@ -45,6 +45,8 @@ import { exportElementToPdf } from "@/lib/pdf";
 import { supabase } from "@/lib/supabase";
 import { WhatsAppModal } from "@/components/ui/WhatsAppModal";
 import { buildWhatsAppReceiptText, buildWhatsAppDebtReminderText, getWhatsAppUrl, formatWhatsAppNumber } from "@/lib/whatsapp";
+import SyncCenterModal, { NetworkStatusPill } from "@/components/offline/SyncCenterModal";
+import { generateClientUUID } from "@/lib/offlineQueue";
 
 const paymentMethods = [
   { id: "cash" as const, label: "Espèces", icon: Banknote, color: "bg-green-500/10 text-green-600 border-green-500/30" },
@@ -54,24 +56,26 @@ const paymentMethods = [
 ];
 
 export default function POSPage() {
-  const { 
-    state, 
-    dispatch, 
-    formatPrice, 
-    activeCashSession, 
-    cashSessions, 
-    openCashSession, 
+  const {
+    state,
+    dispatch,
+    formatPrice,
+    activeCashSession,
+    cashSessions,
+    openCashSession,
     closeCashSession,
-    isOnline,
-    pendingSyncCount,
-    isSyncing,
-    syncOfflineSales,
-    clearOfflineSalesQueue,
-    isRealtimeActive
   } = useStore();
   const { user, role, subscription, canOfferCredit, canPrintReceipts, signOut, isModuleActive, getModuleStatus, activeStore } = useAuth();
   const isMultiUnits = isModuleActive('multi_units');
   const [subModalOpen, setSubModalOpen] = useState(false);
+  const [showSyncCenter, setShowSyncCenter] = useState(false);
+  const [posNotice, setPosNotice] = useState<{ type: "error" | "success" | "info"; text: string } | null>(null);
+  const notifyPos = (type: "error" | "success" | "info", text: string) => {
+    setPosNotice({ type, text });
+    window.setTimeout(() => {
+      setPosNotice((prev) => (prev?.text === text ? null : prev));
+    }, 5500);
+  };
   // Profil du caissier chargé depuis la base de données
   const [cashierProfile, setCashierProfile] = useState<{ full_name?: string; phone?: string } | null>(null);
 
@@ -288,10 +292,9 @@ export default function POSPage() {
         const mult = item.selectedUnit?.multiplier ?? 1;
         const refNeeded = (item.quantity || 1) * mult;
         if (refNeeded > item.product.stock) {
-          alert(
-            "⚠️ Encaissement bloqué (Mode Strict) :\n\n" +
-            "L'article \"" + item.product.name + "\" a un stock disponible insuffisant (" + item.product.stock + " disponible, " + refNeeded + " demandé).\n\n" +
-            "Pour autoriser la vente avant la saisie de l'arrivage fournisseur, activez l'option \"Autoriser la vente en stock épuisé\" dans les Paramètres de la boutique."
+          notifyPos(
+            "error",
+            `Encaissement bloqué (Mode Strict) : "${item.product.name}" n'a que ${item.product.stock} en stock (${refNeeded} demandé).`
           );
           return;
         }
@@ -299,7 +302,10 @@ export default function POSPage() {
     }
 
     if (!activeCashSession) {
-      alert("⚠️ La caisse est actuellement fermée. Veuillez d'abord ouvrir la caisse avec votre fond de caisse initial pour commencer les encaissements.");
+      notifyPos(
+        "error",
+        "La caisse est fermée. Veuillez ouvrir la caisse avec votre fond initial avant d'encaisser."
+      );
       setOpeningAmountInput("");
       setShowOpenModal(true);
       return;
@@ -310,7 +316,10 @@ export default function POSPage() {
       return;
     }
     if (payMethod === "credit" && !customerName.trim()) {
-      alert("⚠️ Le nom du client est obligatoire pour enregistrer une vente à crédit.");
+      notifyPos(
+        "error",
+        "Le nom du client est obligatoire pour enregistrer une vente à crédit."
+      );
       return;
     }
 
@@ -322,10 +331,10 @@ export default function POSPage() {
     const remaining = isCredit ? Math.max(0, total - deposit) : 0;
     const status = isCredit ? (remaining === 0 ? "paid" : (deposit > 0 ? "partial" : "unpaid")) : "paid";
     const now = new Date().toISOString();
-    const saleId = "s" + Date.now();
+    const saleId = generateClientUUID();
 
     const initialPayments: DebtPayment[] = (isCredit && deposit > 0) ? [{
-      id: "init-" + Date.now(),
+      id: generateClientUUID(),
       saleId,
       amount: deposit,
       paymentMethod: "cash",
@@ -382,7 +391,10 @@ export default function POSPage() {
     };
 
     if (subscription?.isExpired) {
-      alert("L'abonnement de votre boutique est expiré. L'encaissement est bloqué jusqu'au renouvellement.");
+      notifyPos(
+        "error",
+        "L'abonnement de votre boutique est expiré. L'encaissement est bloqué jusqu'au renouvellement."
+      );
       return;
     }
     dispatch({ type: "COMPLETE_SALE", payload: sale });
@@ -400,7 +412,7 @@ export default function POSPage() {
   const handleCreateQuoteFromCart = () => {
     if (cart.length === 0) return;
     const now = new Date();
-    const quoteId = "quote_" + Date.now().toString(36);
+    const quoteId = generateClientUUID();
     const quoteNumber = `DEV-${now.getFullYear()}-${String((state.quotes || []).length + 1).padStart(3, "0")}`;
     const validityDate = new Date(now.getTime() + 15 * 24 * 3600 * 1000).toISOString().split("T")[0];
 
@@ -457,7 +469,10 @@ export default function POSPage() {
 
     dispatch({ type: "ADD_QUOTE", payload: quote });
     dispatch({ type: "CLEAR_CART" });
-    alert(`Devis ${quoteNumber} créé avec succès ! Retrouvez-le dans l'onglet Devis & Proforma.`);
+    notifyPos(
+      "success",
+      `Devis ${quoteNumber} créé avec succès ! Retrouvez-le dans l'onglet Devis & Proforma.`
+    );
   };
 
   const handlePrint = () => {
@@ -476,7 +491,10 @@ export default function POSPage() {
       });
     } catch (e) {
       console.error("Erreur génération PDF reçu:", e);
-      alert("La génération du PDF du reçu a échoué. Vous pouvez utiliser le bouton Imprimer.");
+      notifyPos(
+        "error",
+        "La génération du PDF du reçu a échoué. Vous pouvez utiliser le bouton Imprimer."
+      );
     } finally {
       setIsDownloadingReceipt(false);
     }
@@ -494,7 +512,10 @@ export default function POSPage() {
       });
     } catch (e) {
       console.error("Erreur génération PDF facture:", e);
-      alert("La génération du PDF de la facture a échoué. Vous pouvez utiliser le bouton Imprimer la Facture.");
+      notifyPos(
+        "error",
+        "La génération du PDF de la facture a échoué. Vous pouvez utiliser le bouton Imprimer la Facture."
+      );
     } finally {
       setIsDownloadingInvoice(false);
     }
@@ -541,7 +562,10 @@ export default function POSPage() {
       }, 600);
     } catch (e) {
       console.error("Erreur PDF Rapport Z:", e);
-      alert("La génération du PDF du rapport a échoué. Vous pouvez utiliser le bouton Imprimer.");
+      notifyPos(
+        "error",
+        "La génération du PDF du rapport a échoué. Vous pouvez utiliser le bouton Imprimer."
+      );
     } finally {
       setIsDownloadingRapportZ(false);
     }
@@ -582,6 +606,34 @@ export default function POSPage() {
 
   return (
     <div className="flex flex-col gap-4 animate-fade-in">
+      {posNotice && (
+        <div
+          className={`print:hidden w-full rounded-2xl border px-4 py-3 text-xs font-bold flex items-center justify-between gap-3 shadow-sm ${
+            posNotice.type === "error"
+              ? "border-rose-500/40 bg-rose-500/10 text-rose-700 dark:text-rose-300"
+              : posNotice.type === "success"
+              ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
+              : "border-blue-500/40 bg-blue-500/10 text-blue-700 dark:text-blue-300"
+          }`}
+        >
+          <span className="flex items-center gap-2">
+            {posNotice.type === "success" ? (
+              <CheckCircle2 className="h-4 w-4 shrink-0" />
+            ) : (
+              <AlertTriangle className="h-4 w-4 shrink-0" />
+            )}
+            <span>{posNotice.text}</span>
+          </span>
+          <button
+            type="button"
+            onClick={() => setPosNotice(null)}
+            className="p-1 rounded-lg hover:bg-black/5 dark:hover:bg-white/10 cursor-pointer"
+          >
+            <X className="h-3.5 w-3.5" />
+          </button>
+        </div>
+      )}
+
       {/* Cash Session Status Banner */}
       <div className="w-full flex flex-wrap items-center justify-between gap-3 p-3.5 rounded-2xl border border-border/50 bg-card/90 shadow-xs print:hidden">
         <div className="flex items-center gap-3">
@@ -616,68 +668,8 @@ export default function POSPage() {
         </div>
 
         <div className="flex items-center gap-2 flex-wrap">
-          {/* Indicateur Réseau & File d'attente Hors-Ligne */}
-          {!isOnline ? (
-            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-600 dark:text-amber-400 text-xs font-bold animate-pulse">
-              <WifiOff className="h-3.5 w-3.5 shrink-0" />
-              <span>Hors-Ligne</span>
-              {pendingSyncCount > 0 && (
-                <span className="px-1.5 py-0.2 rounded-full bg-amber-500 text-white text-[10px] ml-1">
-                  {pendingSyncCount} attente
-                </span>
-              )}
-            </div>
-          ) : pendingSyncCount > 0 ? (
-            <div className="flex items-center gap-1.5 animate-fade-in">
-              <button
-                type="button"
-                onClick={async () => {
-                  const res = await syncOfflineSales();
-                  if (res.success > 0) {
-                    alert(`✅ ${res.success} vente(s) synchronisée(s) avec succès !`);
-                  } else if (res.failed > 0) {
-                    const confirmClear = window.confirm(
-                      `⚠️ La vente n'a pas pu être synchronisée (erreur réseau ou déjà présente).\n\nVoulez-vous vérifier et purger cette vente de la file d'attente locale pour débloquer le compteur ?`
-                    );
-                    if (confirmClear) {
-                      await clearOfflineSalesQueue();
-                      alert("🧹 File d'attente réinitialisée avec succès !");
-                    }
-                  } else {
-                    await clearOfflineSalesQueue();
-                    alert("✅ File d'attente actualisée et nettoyée !");
-                  }
-                }}
-                disabled={isSyncing}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/30 text-blue-600 dark:text-blue-400 text-xs font-bold transition-all shadow-xs active:scale-95 cursor-pointer"
-                title="Cliquer pour synchroniser les ventes enregistrées hors-ligne"
-              >
-                <RefreshCw className={`h-3.5 w-3.5 ${isSyncing ? "animate-spin" : ""}`} />
-                <span>{isSyncing ? "Synchronisation..." : `${pendingSyncCount} en attente • Synchroniser`}</span>
-              </button>
-              <button
-                type="button"
-                onClick={async () => {
-                  if (window.confirm("Voulez-vous forcer le nettoyage de la file d'attente hors-ligne ?")) {
-                    await clearOfflineSalesQueue();
-                    alert("🧹 File d'attente vidée avec succès !");
-                  }
-                }}
-                className="p-1.5 rounded-xl border border-blue-500/30 text-blue-600 dark:text-blue-400 hover:bg-blue-500/15 text-xs transition-colors cursor-pointer"
-                title="Purger la file d'attente si elle reste bloquée"
-              >
-                <Trash2 className="h-3.5 w-3.5" />
-              </button>
-            </div>
-          ) : (
-            <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 text-[11px] font-semibold border border-emerald-500/20" title="Synchronisation temps réel WebSocket active pour votre boutique">
-              <span className="relative flex h-2 w-2">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
-              </span>
-              <span>En direct (Realtime)</span>
-            </div>
-          )}
+          {/* Indicateur Réseau 4 états & Centre de Synchronisation Offline-First */}
+          <NetworkStatusPill onClick={() => setShowSyncCenter(true)} />
 
           {activeCashSession ? (
             <>
@@ -2816,6 +2808,12 @@ export default function POSPage() {
         customerName={whatsappModalData.customerName}
         messageText={whatsappModalData.messageText}
         onPhoneUpdated={handleWhatsAppPhoneUpdated}
+      />
+
+      {/* Centre de Synchronisation & Résolution de Conflits Offline-First */}
+      <SyncCenterModal
+        isOpen={showSyncCenter}
+        onClose={() => setShowSyncCenter(false)}
       />
     </div>
   );

@@ -1,0 +1,25 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "target": "ES2022",
+    "noEmit": false,
+    "module": "commonjs",
+    "moduleResolution": "node",
+    "jsx": "react-jsx",
+    "baseUrl": ".",
+    "sourceMap": false,
+    "incremental": false,
+    "paths": {
+      "@/*": ["./src/*"]
+    }
+  },
+  "include": [
+    "next-env.d.ts",
+    "src/lib/**/*.ts",
+    "src/types/**/*.ts",
+    "src/context/**/*.tsx",
+    "tests/**/*.ts"
+  ],
+  "exclude": ["node_modules", "src/lib/server/**"]
+}
+

@@ -4,7 +4,7 @@ import React, { useState, useRef } from "react";
 import * as XLSX from "xlsx";
 import { useStore, Product, ProductUnit } from "@/context/StoreContext";
 import { useAuth } from "@/context/AuthContext";
-import { supabase } from "@/lib/supabase";
+import { generateClientUUID } from "@/lib/offlineQueue";
 import {
   Upload,
   FileSpreadsheet,
@@ -554,7 +554,7 @@ export default function ProductExcelImportModal({ isOpen, onClose }: ProductExce
 
         const targetProdId = (row.isExisting && row.existingId)
           ? row.existingId
-          : ("p" + Date.now() + "_" + Math.random().toString(36).substring(2, 7));
+          : generateClientUUID();
 
         const existingProd = row.existingId ? state.products.find((p) => p.id === row.existingId) : undefined;
         const currentStock = existingProd ? Number(existingProd.stock) || 0 : 0;
@@ -570,7 +570,7 @@ export default function ProductExcelImportModal({ isOpen, onClose }: ProductExce
         if (row.wholesaleName && Number(row.wholesaleMultiplier) > 1) {
           const wholesaleIdx = units.findIndex(u => u.name.toLowerCase() === row.wholesaleName!.toLowerCase() || u.multiplier === row.wholesaleMultiplier);
           const newWholesaleUnit: ProductUnit = {
-            id: wholesaleIdx >= 0 ? units[wholesaleIdx].id : ("pu_" + Math.random().toString(36).substring(7)),
+            id: wholesaleIdx >= 0 ? units[wholesaleIdx].id : generateClientUUID(),
             storeId: activeStore?.id || "",
             productId: targetProdId,
             name: row.wholesaleName.trim(),
@@ -619,7 +619,7 @@ export default function ProductExcelImportModal({ isOpen, onClose }: ProductExce
             ? row.batchNumber.trim()
             : ("LOT-" + new Date().getFullYear() + "-" + Math.floor(100 + Math.random() * 900));
           batchesToCreate.push({
-            id: "b_" + Date.now() + "_" + Math.random().toString(36).substring(7),
+            id: generateClientUUID(),
             storeId: activeStore?.id || "",
             productId: targetProdId,
             batchNumber: bNum,
@@ -631,28 +631,15 @@ export default function ProductExcelImportModal({ isOpen, onClose }: ProductExce
         }
       }
 
-      // 1. Ajouter les nouvelles catégories dans Supabase & state
+      // 1. Ajouter les nouvelles catégories via le store & la file offline-first
       for (const catName of Array.from(newCategoriesToAdd)) {
-        const catId = "cat_" + Date.now() + "_" + Math.random().toString(36).substring(2, 6);
         const newCat = {
-          id: catId,
+          id: generateClientUUID(),
           name: catName,
           icon: "📦",
           color: "#6343EA",
         };
         dispatch({ type: "ADD_CATEGORY", payload: newCat });
-
-        if (activeStore?.id) {
-          await supabase.from("categories").insert([
-            {
-              id: catId,
-              store_id: activeStore.id,
-              name: catName,
-              icon: "📦",
-              color: "#6343EA",
-            },
-          ]);
-        }
       }
 
       // 2. Dispatch BATCH_ADD_PRODUCTS (met à jour le state et enregistre en base via upsert)

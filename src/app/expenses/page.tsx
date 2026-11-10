@@ -2,6 +2,7 @@
 
 import React, { useState } from "react";
 import { useStore } from "@/context/StoreContext";
+import { generateClientUUID } from "@/lib/offlineQueue";
 import { Plus, Search, Edit2, Trash2, Receipt, FileSpreadsheet, Download } from "lucide-react";
 import { exportExpensesJournal } from "@/lib/accountingExport";
 
@@ -35,7 +36,7 @@ export default function ExpensesPage() {
       dispatch({
         type: "ADD_EXPENSE",
         payload: {
-          id: "exp" + Date.now(),
+          id: generateClientUUID(),
           ...form, description: "",
           createdAt: new Date().toISOString(),
         },

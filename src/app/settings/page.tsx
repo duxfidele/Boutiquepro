@@ -1,16 +1,49 @@
 "use client";
 import SubscriptionModal from "@/components/subscription/SubscriptionModal";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { useStore } from "@/context/StoreContext";
 import { useAuth } from "@/context/AuthContext";
 import { supabase } from "@/lib/supabase";
 import Link from "next/link";
-import { Save, Sparkles, Trash2, Image as ImageIcon, CreditCard, Store, DollarSign, Percent, MapPin, Mail, Phone, Loader2, User, Layers, ArrowRight, PackageCheck } from "lucide-react";
+import {
+  Save,
+  Sparkles,
+  Trash2,
+  Image as ImageIcon,
+  CreditCard,
+  Store,
+  DollarSign,
+  Percent,
+  MapPin,
+  Mail,
+  Phone,
+  Loader2,
+  User,
+  Layers,
+  ArrowRight,
+  PackageCheck,
+  Database,
+  Download,
+  Upload,
+  HardDrive,
+  RefreshCw,
+  AlertTriangle,
+  CheckCircle2,
+} from "lucide-react";
 import { useRouter } from "next/navigation";
+import SyncCenterModal from "@/components/offline/SyncCenterModal";
 
 export default function SettingsPage() {
-  const { state, dispatch } = useStore();
+  const {
+    state,
+    dispatch,
+    outboxCounts,
+    storageDiagnostics,
+    lastSyncedAt,
+    exportOfflineBackup,
+    importOfflineBackup,
+  } = useStore();
   const [name, setName] = useState(state.settings.name);
   const [currency, setCurrency] = useState(state.settings.currency);
   const [taxRate, setTaxRate] = useState(state.settings.taxRate.toString());
@@ -25,6 +58,13 @@ export default function SettingsPage() {
   const [saved, setSaved] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [showSubModal, setShowSubModal] = useState(false);
+  const [showSyncCenter, setShowSyncCenter] = useState(false);
+  const [backupBanner, setBackupBanner] = useState<{
+    type: "success" | "error";
+    text: string;
+  } | null>(null);
+  const [isBackingUp, setIsBackingUp] = useState(false);
+  const backupFileInputRef = useRef<HTMLInputElement>(null);
   const router = useRouter();
 
   // Protection caissier : accès strictement interdit, redirection immédiate vers /pos
@@ -115,6 +155,83 @@ export default function SettingsPage() {
       }
     } catch (err: any) {
       alert("Erreur lors de la suppression : " + err.message);
+    }
+  };
+
+  const handleExportOfflineBackup = async () => {
+    setIsBackingUp(true);
+    setBackupBanner(null);
+    try {
+      const payload = await exportOfflineBackup();
+      if (!payload) {
+        setBackupBanner({
+          type: "error",
+          text: "Impossible de générer la sauvegarde locale pour cette boutique.",
+        });
+        return;
+      }
+      const blob = new Blob([JSON.stringify(payload, null, 2)], {
+        type: "application/json",
+      });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      const slug = (state.settings.name || activeStore?.name || "boutique")
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "-");
+      a.href = url;
+      a.download = `boutiquepro-backup-${slug}-${new Date()
+        .toISOString()
+        .slice(0, 10)}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+      setBackupBanner({
+        type: "success",
+        text: `Sauvegarde exportée (${payload.outbox.length} opération(s) en file incluses).`,
+      });
+    } finally {
+      setIsBackingUp(false);
+    }
+  };
+
+  const handleImportOfflineBackup = async (
+    e: React.ChangeEvent<HTMLInputElement>
+  ) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setBackupBanner(null);
+    if (file.size > 15 * 1024 * 1024) {
+      setBackupBanner({
+        type: "error",
+        text: "Le fichier de sauvegarde dépasse la limite de 15 Mo.",
+      });
+      if (backupFileInputRef.current) backupFileInputRef.current.value = "";
+      return;
+    }
+    setIsBackingUp(true);
+    try {
+      const raw = await file.text();
+      const res = await importOfflineBackup(raw);
+      if (res.success) {
+        setBackupBanner({
+          type: "success",
+          text: `Restauration réussie : ${res.importedOutboxCount} opération(s) importée(s), ${res.skippedDuplicateCount} doublon(s) ignoré(s)${
+            res.restoredSnapshot ? ", snapshot local restauré" : ""
+          }.`,
+        });
+      } else {
+        setBackupBanner({
+          type: "error",
+          text: res.error || "Fichier de sauvegarde invalide ou incompatible.",
+        });
+      }
+    } catch (err: any) {
+      setBackupBanner({
+        type: "error",
+        text: err?.message || "Erreur lors de la lecture du fichier JSON.",
+      });
+    } finally {
+      setIsBackingUp(false);
+      if (backupFileInputRef.current) backupFileInputRef.current.value = "";
     }
   };
 
@@ -431,6 +548,115 @@ export default function SettingsPage() {
         </div>
       </div>
 
+      {/* Sauvegarde Hors-Ligne, IndexedDB & Synchronisation */}
+      {role === "admin" && (
+        <div className="bg-card border border-border/40 rounded-2xl p-6 space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div>
+              <h2 className="text-lg font-bold flex items-center gap-2">
+                <Database className="w-5 h-5 text-primary" />
+                Sauvegarde &amp; Mode Hors-Ligne (IndexedDB)
+              </h2>
+              <p className="text-xs text-muted-foreground mt-1">
+                Exportez ou restaurez vos données locales et surveillez l&apos;espace de stockage du navigateur.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setShowSyncCenter(true)}
+              className="inline-flex items-center gap-1.5 rounded-xl border border-primary/30 bg-primary/10 px-3.5 py-2 text-xs font-bold text-primary hover:bg-primary/20 transition-colors cursor-pointer shrink-0"
+            >
+              <RefreshCw className="w-3.5 h-3.5" />
+              <span>Centre de Sync ({outboxCounts.actionableTotal})</span>
+            </button>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
+            <div className="p-3 rounded-xl bg-secondary/30 border border-border/40">
+              <div className="text-muted-foreground font-medium">File d&apos;attente locale</div>
+              <div className="text-sm font-bold text-foreground mt-1">
+                {outboxCounts.actionableTotal} en attente • {outboxCounts.conflict} conflit(s)
+              </div>
+            </div>
+            <div className="p-3 rounded-xl bg-secondary/30 border border-border/40">
+              <div className="text-muted-foreground font-medium flex items-center gap-1">
+                <HardDrive className="w-3.5 h-3.5" />
+                Quota navigateur
+              </div>
+              <div className="text-sm font-bold text-foreground mt-1">
+                {storageDiagnostics?.usagePercent !== null &&
+                storageDiagnostics?.usagePercent !== undefined
+                  ? `${storageDiagnostics.usagePercent.toFixed(1)}% utilisé`
+                  : `${storageDiagnostics?.outboxCount ?? 0} opérations mémorisées`}
+              </div>
+            </div>
+            <div className="p-3 rounded-xl bg-secondary/30 border border-border/40">
+              <div className="text-muted-foreground font-medium">Dernière synchronisation</div>
+              <div className="text-sm font-bold text-foreground mt-1">
+                {lastSyncedAt
+                  ? new Date(lastSyncedAt).toLocaleString("fr-FR")
+                  : "En attente"}
+              </div>
+            </div>
+          </div>
+
+          {storageDiagnostics?.isNearLimit && (
+            <div className="rounded-xl border border-amber-500/40 bg-amber-500/10 p-3 text-xs font-semibold text-amber-700 dark:text-amber-300 flex items-center gap-2">
+              <AlertTriangle className="w-4 h-4 shrink-0" />
+              <span>
+                L&apos;espace de stockage hors-ligne atteint {storageDiagnostics.usagePercent?.toFixed(1)}%. Pensez à synchroniser et exporter une sauvegarde JSON.
+              </span>
+            </div>
+          )}
+
+          {backupBanner && (
+            <div
+              className={`rounded-xl border p-3 text-xs font-semibold flex items-center gap-2 ${
+                backupBanner.type === "success"
+                  ? "border-emerald-500/35 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
+                  : "border-rose-500/35 bg-rose-500/10 text-rose-700 dark:text-rose-300"
+              }`}
+            >
+              {backupBanner.type === "success" ? (
+                <CheckCircle2 className="w-4 h-4 shrink-0" />
+              ) : (
+                <AlertTriangle className="w-4 h-4 shrink-0" />
+              )}
+              <span>{backupBanner.text}</span>
+            </div>
+          )}
+
+          <div className="flex flex-wrap items-center gap-3 pt-1">
+            <button
+              type="button"
+              onClick={handleExportOfflineBackup}
+              disabled={isBackingUp}
+              className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-secondary hover:bg-secondary/80 text-foreground text-xs font-bold border border-border/60 transition-colors cursor-pointer disabled:opacity-50"
+            >
+              <Download className="w-4 h-4" />
+              <span>Exporter une sauvegarde JSON</span>
+            </button>
+
+            <input
+              ref={backupFileInputRef}
+              type="file"
+              accept=".json,application/json"
+              onChange={handleImportOfflineBackup}
+              className="hidden"
+            />
+            <button
+              type="button"
+              onClick={() => backupFileInputRef.current?.click()}
+              disabled={isBackingUp}
+              className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl border border-border/70 bg-background hover:bg-secondary/40 text-foreground text-xs font-bold transition-colors cursor-pointer disabled:opacity-50"
+            >
+              <Upload className="w-4 h-4" />
+              <span>Restaurer depuis un fichier JSON</span>
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Zone de Danger : Suppression de la boutique */}
       {role === "admin" && (
         <div className="bg-destructive/5 border border-destructive/20 rounded-2xl p-6 space-y-4">
@@ -469,6 +695,10 @@ export default function SettingsPage() {
       <SubscriptionModal
         isOpen={showSubModal}
         onClose={() => setShowSubModal(false)}
+      />
+      <SyncCenterModal
+        isOpen={showSyncCenter}
+        onClose={() => setShowSyncCenter(false)}
       />
 
     </div>

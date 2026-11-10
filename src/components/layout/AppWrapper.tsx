@@ -11,6 +11,8 @@ import Header from "@/components/layout/Header";
 import MobileBottomNav from "@/components/layout/MobileBottomNav";
 import SubscriptionModal from "@/components/subscription/SubscriptionModal";
 import OnboardingWizard from "@/components/onboarding/OnboardingWizard";
+import SessionExpiredBanner from "@/components/offline/SessionExpiredBanner";
+import PwaLifecycleManager from "@/components/pwa/PwaLifecycleManager";
 import { Loader2, Lock, LogOut, Sparkles } from "lucide-react";
 import { usePathname, useRouter } from "next/navigation";
 import { ModuleKey } from "@/types/modules";
@@ -39,7 +41,7 @@ export default function AppWrapper({ children }: { children: React.ReactNode }) 
   const router = useRouter();
 
   React.useEffect(() => {
-    if (pathname === "/reset-password") return;
+    if (pathname === "/reset-password" || pathname === "/~offline") return;
     if (role === "cashier") {
       const allowedPaths = ["/", "/pos", "/debts", "/products", "/customers", "/support", "/profile"];
       if (!allowedPaths.includes(pathname)) {
@@ -74,12 +76,13 @@ export default function AppWrapper({ children }: { children: React.ReactNode }) 
     }
   }, [role, pathname, router, getModuleStatus]);
 
-  // 1. Routes publiques : Réinitialisation de mot de passe, Retour Google OAuth, Confidentialité et CGU (sans contrôle d'accès)
+  // 1. Routes publiques : Réinitialisation de mot de passe, Retour Google OAuth, Confidentialité, CGU et Secours Hors-Ligne
   if (
     pathname === "/reset-password" ||
     pathname === "/privacy" ||
     pathname === "/terms" ||
-    pathname === "/auth/google"
+    pathname === "/auth/google" ||
+    pathname === "/~offline"
   ) {
     return <ErrorBoundary>{children}</ErrorBoundary>;
   }
@@ -192,10 +195,16 @@ export default function AppWrapper({ children }: { children: React.ReactNode }) 
                 )
               )}
 
+              {/* Bannière non bloquante en cas d'expiration de session JWT avec opérations locales */}
+              <SessionExpiredBanner />
+
               <Header onMenuClick={() => setIsMobileMenuOpen(true)} />
               <main className="flex-1 overflow-y-auto p-4 sm:p-6 pb-6">
                 {children}
               </main>
+
+              {/* Gestionnaire discret de mise à jour PWA et préchargement des routes hors-ligne */}
+              <PwaLifecycleManager />
 
               {/* Modal de souscription facultatif déclenché manuellement */}
               <SubscriptionModal

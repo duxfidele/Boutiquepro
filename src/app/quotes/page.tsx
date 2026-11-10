@@ -3,6 +3,7 @@
 import React, { useState, useMemo, useRef } from "react";
 import { useStore, Quote, QuoteItem, Sale, Product } from "@/context/StoreContext";
 import { useAuth } from "@/context/AuthContext";
+import { generateClientUUID } from "@/lib/offlineQueue";
 import { getWhatsAppUrl, formatWhatsAppNumber } from "@/lib/whatsapp";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
@@ -44,6 +45,8 @@ export default function QuotesPage() {
   const [viewingQuote, setViewingQuote] = useState<Quote | null>(null);
   const [convertingQuote, setConvertingQuote] = useState<Quote | null>(null);
   const [paymentMethod, setPaymentMethod] = useState<"cash" | "mobile_money" | "card" | "credit">("cash");
+  const [pageNotice, setPageNotice] = useState<{ type: "success" | "error"; text: string } | null>(null);
+  const [modalError, setModalError] = useState<string | null>(null);
 
   // Formulaire Devis
   const [customerName, setCustomerName] = useState("");
@@ -153,6 +156,7 @@ export default function QuotesPage() {
 
   // Ouvrir modal création
   const handleOpenCreate = () => {
+    setModalError(null);
     setEditingQuote(null);
     setCustomerName("");
     setCustomerPhone("");
@@ -166,6 +170,7 @@ export default function QuotesPage() {
 
   // Ouvrir modal édition
   const handleOpenEdit = (q: Quote) => {
+    setModalError(null);
     setEditingQuote(q);
     setCustomerName(q.customerName);
     setCustomerPhone(q.customerPhone || "");
@@ -188,24 +193,25 @@ export default function QuotesPage() {
 
   // Sauvegarder devis
   const handleSaveQuote = (statusToSave: "draft" | "sent" = "draft") => {
+    setModalError(null);
     if (!customerName.trim()) {
-      alert("Veuillez saisir le nom du client.");
+      setModalError("Veuillez saisir le nom du client.");
       return;
     }
     if (formItems.length === 0) {
-      alert("Veuillez ajouter au moins un article au devis.");
+      setModalError("Veuillez ajouter au moins un article au devis.");
       return;
     }
 
     const now = new Date();
     const validityDate = new Date(now.getTime() + validityDays * 24 * 3600 * 1000).toISOString().split("T")[0];
-    const quoteId = editingQuote ? editingQuote.id : "quote_" + Date.now().toString(36);
+    const quoteId = editingQuote ? editingQuote.id : generateClientUUID();
     const quoteNumber = editingQuote
       ? editingQuote.quoteNumber
       : `DEV-${now.getFullYear()}-${String((state.quotes || []).length + 1).padStart(3, "0")}`;
 
-    const items: QuoteItem[] = formItems.map((it, idx) => ({
-      id: `${quoteId}_item_${idx + 1}`,
+    const items: QuoteItem[] = formItems.map((it) => ({
+      id: generateClientUUID(),
       quoteId,
       productId: it.productId,
       productName: it.productName,
@@ -258,11 +264,11 @@ export default function QuotesPage() {
     if (!convertingQuote) return;
 
     const q = convertingQuote;
-    const saleId = "sale_" + Date.now();
+    const saleId = generateClientUUID();
     const nowIso = new Date().toISOString();
 
-    const saleItems = q.items.map((it, idx) => ({
-      id: `si_${Date.now()}_${idx}`,
+    const saleItems = q.items.map((it) => ({
+      id: generateClientUUID(),
       productId: it.productId,
       productName: it.productName,
       quantity: it.quantity,
@@ -300,7 +306,10 @@ export default function QuotesPage() {
     });
 
     setConvertingQuote(null);
-    alert(`Devis ${q.quoteNumber} converti avec succès en Vente directe #${saleId.slice(-6)} !`);
+    setPageNotice({
+      type: "success",
+      text: `Devis ${q.quoteNumber} converti avec succès en Vente directe #${saleId.slice(-6).toUpperCase()} !`,
+    });
   };
 
   // Partage WhatsApp
@@ -482,7 +491,10 @@ export default function QuotesPage() {
       doc.save(`Devis_${q.quoteNumber}.pdf`);
     } catch (err) {
       console.error("Erreur génération PDF Devis:", err);
-      alert("Une erreur est survenue lors de la génération du PDF.");
+      setPageNotice({
+        type: "error",
+        text: "Une erreur est survenue lors de la génération du PDF.",
+      });
     } finally {
       setDownloadingQuoteId(null);
     }
@@ -535,6 +547,33 @@ export default function QuotesPage() {
           Nouveau Devis / Proforma
         </button>
       </div>
+
+      {pageNotice && (
+        <div
+          className={`flex items-center justify-between gap-3 rounded-2xl border px-4 py-3 text-xs font-semibold ${
+            pageNotice.type === "error"
+              ? "border-rose-500/30 bg-rose-500/10 text-rose-700 dark:text-rose-300"
+              : "border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
+          }`}
+        >
+          <div className="flex items-center gap-2">
+            {pageNotice.type === "error" ? (
+              <AlertCircle className="h-4 w-4 shrink-0" />
+            ) : (
+              <CheckCircle className="h-4 w-4 shrink-0" />
+            )}
+            <span>{pageNotice.text}</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setPageNotice(null)}
+            className="p-1 rounded-lg hover:bg-black/5 dark:hover:bg-white/10"
+            aria-label="Fermer"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+      )}
 
       {/* KPI Cards */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
@@ -750,6 +789,17 @@ export default function QuotesPage() {
             </div>
 
             <div className="p-5 overflow-y-auto flex-1 space-y-5 no-scrollbar">
+              {modalError && (
+                <div className="flex items-center justify-between gap-2 rounded-xl border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-xs font-semibold text-rose-700 dark:text-rose-300">
+                  <div className="flex items-center gap-2">
+                    <AlertCircle className="h-4 w-4 shrink-0" />
+                    <span>{modalError}</span>
+                  </div>
+                  <button type="button" onClick={() => setModalError(null)} className="p-0.5 rounded hover:bg-black/5">
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              )}
               {/* Coordonnées Client */}
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div className="sm:col-span-1">
@@ -1072,6 +1122,18 @@ export default function QuotesPage() {
                 </button>
               </div>
             </div>
+
+            {pageNotice?.type === "error" && (
+              <div className="mx-4 mt-3 flex items-center justify-between gap-2 rounded-xl border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-xs font-semibold text-rose-700 dark:text-rose-300">
+                <div className="flex items-center gap-2">
+                  <AlertCircle className="h-4 w-4 shrink-0" />
+                  <span>{pageNotice.text}</span>
+                </div>
+                <button type="button" onClick={() => setPageNotice(null)} className="p-0.5 rounded hover:bg-black/5">
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            )}
 
             {/* Document Proforma Imprimable */}
             <div ref={printRef} className="p-8 bg-white text-black space-y-6 text-xs font-sans print:p-0 print:m-0">

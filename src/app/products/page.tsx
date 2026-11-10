@@ -3,6 +3,7 @@
 import React, { useState, useMemo } from "react";
 import { useStore, Product, ProductUnit } from "@/context/StoreContext";
 import { useAuth } from "@/context/AuthContext";
+import { generateClientUUID } from "@/lib/offlineQueue";
 import { resolveModuleStatus } from "@/types/modules";
 import { ProductAvatar } from "@/components/ui/ProductAvatar";
 import { formatDecomposedStock } from "@/lib/stockDisplay";
@@ -371,7 +372,7 @@ export default function ProductsPage() {
     const parsedUnits: ProductUnit[] = allUnitsList
       .filter((u) => u.name.trim().length > 0 && Number(u.multiplier) > 0)
       .map((u) => ({
-        id: u.id || ("pu_" + Math.random().toString(36).substring(7)),
+        id: u.id || generateClientUUID(),
         storeId: activeStore?.id || "",
         productId: editProduct ? editProduct.id : "",
         name: u.name.trim(),
@@ -382,7 +383,7 @@ export default function ProductsPage() {
         isReference: false,
       }));
 
-    const newProdId = "p" + Date.now();
+    const newProdId = generateClientUUID();
     if (editProduct) {
       parsedUnits.forEach((u) => (u.productId = editProduct.id));
       dispatch({ 
@@ -420,7 +421,7 @@ export default function ProductsPage() {
       const alreadyExists = existingBatches.some((b) => b.expiryDate === initialBatch.expiryDate);
       if (!alreadyExists) {
         const newBatch: ProductBatch = {
-          id: 'b_' + Date.now() + '_' + Math.random().toString(36).substring(7),
+          id: generateClientUUID(),
           storeId: activeStore?.id || '',
           productId: targetProdId,
           batchNumber: initialBatch.batchNumber.trim() || ('LOT-' + new Date().getFullYear() + '-' + Math.floor(100 + Math.random() * 900)),
@@ -444,7 +445,7 @@ export default function ProductsPage() {
     dispatch({ 
       type: "ADD_CATEGORY", 
       payload: { 
-        id: "cat" + Date.now(), 
+        id: generateClientUUID(), 
         name: categoryForm.name, 
         icon: categoryForm.icon, 
         color: categoryForm.color 
@@ -1912,7 +1913,7 @@ export default function ProductsPage() {
                               setIsAddingBatch(true);
                               try {
                                 const newB: ProductBatch = {
-                                  id: "batch_" + Date.now().toString(36) + "_" + Math.random().toString(36).substring(2, 6),
+                                  id: generateClientUUID(),
                                   storeId: activeStore?.id || "",
                                   productId: selectedProductForBatches.id,
                                   batchNumber: newBatchForm.batchNumber.trim(),

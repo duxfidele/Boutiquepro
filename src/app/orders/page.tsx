@@ -4,6 +4,7 @@ import React, { useState, useMemo } from "react";
 import { useAuth } from "@/context/AuthContext";
 import SubscriptionModal from "@/components/subscription/SubscriptionModal";
 import { useStore, Order, Product } from "@/context/StoreContext";
+import { generateClientUUID } from "@/lib/offlineQueue";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import {
@@ -30,6 +31,7 @@ export default function OrdersPage() {
   const [search, setSearch] = useState("");
   const [showModal, setShowModal] = useState(false);
   const [statusFilter, setStatusFilter] = useState<"all" | "pending" | "received">("all");
+  const [orderNotice, setOrderNotice] = useState<{ type: "info" | "success" | "error"; text: string } | null>(null);
 
   const [form, setForm] = useState({
     supplierName: "",
@@ -98,7 +100,7 @@ export default function OrdersPage() {
     const totalCost = form.items.reduce((sum, item) => sum + (item.quantity * item.costPrice), 0);
 
     const newOrder: Order = {
-      id: "CMD-" + Date.now().toString().slice(-6),
+      id: "CMD-" + generateClientUUID().slice(0, 12).toUpperCase(),
       supplierName: form.supplierName || "Fournisseur divers",
       items: form.items.map(i => {
         const mult = Number(i.unitMultiplier) || 1;
@@ -179,8 +181,12 @@ export default function OrdersPage() {
 
 
   const handleSmartSuggestion = () => {
+    setOrderNotice(null);
     if (lowStockProducts.length === 0) {
-      alert("Vos stocks sont suffisants ! Aucune suggestion de réapprovisionnement pour le moment.");
+      setOrderNotice({
+        type: "info",
+        text: "Vos stocks sont suffisants ! Aucune suggestion de réapprovisionnement pour le moment.",
+      });
       return;
     }
     
@@ -274,6 +280,31 @@ export default function OrdersPage() {
           </button>
         </div>
       </div>
+
+      {orderNotice && (
+        <div
+          className={`flex items-center justify-between gap-3 rounded-2xl border px-4 py-3 text-sm font-medium ${
+            orderNotice.type === "error"
+              ? "border-rose-500/30 bg-rose-500/10 text-rose-700 dark:text-rose-300"
+              : orderNotice.type === "success"
+              ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
+              : "border-amber-500/30 bg-amber-500/10 text-amber-800 dark:text-amber-300"
+          }`}
+        >
+          <div className="flex items-center gap-2">
+            <AlertTriangle className="h-4 w-4 shrink-0" />
+            <span>{orderNotice.text}</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setOrderNotice(null)}
+            className="p-1 rounded-lg hover:bg-black/5 dark:hover:bg-white/10"
+            aria-label="Fermer"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+      )}
 
       <div className="flex flex-col sm:flex-row gap-4 items-center justify-between rounded-2xl border border-border/40 bg-card p-2 shadow-sm">
         <div className="relative w-full sm:max-w-xs">

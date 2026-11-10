@@ -4,12 +4,88 @@ const withPWA = withPWAInit({
   dest: "public",
   disable: false,
   register: true,
-  skipWaiting: true,
+  cacheStartUrl: true,
+  dynamicStartUrl: true,
   cacheOnFrontEndNav: true,
   aggressiveFrontEndNavCaching: true,
   reloadOnOnline: false,
+  extendDefaultRuntimeCaching: true,
+  fallbacks: {
+    document: "/~offline",
+  },
   workboxOptions: {
     disableDevLogs: true,
+    skipWaiting: false,
+    clientsClaim: true,
+    cleanupOutdatedCaches: true,
+    runtimeCaching: [
+      {
+        urlPattern: /^https:\/\/[a-z0-9-]+\.supabase\.co\/.*/i,
+        handler: "NetworkOnly",
+        options: {
+          cacheName: "supabase-network-only",
+        },
+      },
+      {
+        urlPattern: /^https:\/\/(challenges\.cloudflare\.com|accounts\.google\.com)\/.*/i,
+        handler: "NetworkOnly",
+        options: {
+          cacheName: "auth-providers-network-only",
+        },
+      },
+      {
+        urlPattern: ({ sameOrigin, url: { pathname } }) =>
+          sameOrigin && pathname.startsWith("/api/"),
+        handler: "NetworkOnly",
+        options: {
+          cacheName: "apis",
+        },
+      },
+      {
+        urlPattern: ({ request, url: { pathname }, sameOrigin }) =>
+          request.headers.get("RSC") === "1" &&
+          request.headers.get("Next-Router-Prefetch") === "1" &&
+          sameOrigin &&
+          !pathname.startsWith("/api/"),
+        handler: "NetworkFirst",
+        options: {
+          cacheName: "pages-rsc-prefetch",
+          networkTimeoutSeconds: 3,
+          expiration: {
+            maxEntries: 64,
+            maxAgeSeconds: 7 * 24 * 60 * 60,
+          },
+        },
+      },
+      {
+        urlPattern: ({ request, url: { pathname }, sameOrigin }) =>
+          request.headers.get("RSC") === "1" &&
+          sameOrigin &&
+          !pathname.startsWith("/api/"),
+        handler: "NetworkFirst",
+        options: {
+          cacheName: "pages-rsc",
+          networkTimeoutSeconds: 3,
+          expiration: {
+            maxEntries: 64,
+            maxAgeSeconds: 7 * 24 * 60 * 60,
+          },
+        },
+      },
+      {
+        urlPattern: ({ url: { pathname }, sameOrigin }) =>
+          sameOrigin && !pathname.startsWith("/api/"),
+        handler: "NetworkFirst",
+        options: {
+          cacheName: "pages",
+          networkTimeoutSeconds: 3,
+          expiration: {
+            maxEntries: 64,
+            maxAgeSeconds: 7 * 24 * 60 * 60,
+          },
+        },
+      },
+    ],
   },
 });
 

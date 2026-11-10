@@ -1,26 +1,59 @@
 "use client";
-import {
-  saveOfflineSale,
-  getOfflineSales,
-  removeOfflineSale,
-  getOfflineSalesCount,
-  clearOfflineQueue,
-  updateOfflineSale,
-  getFailedOfflineSales,
-  retryOfflineSale,
-  OfflineSaleItem,
-  withNetworkTimeout,
-  isNetworkLikeError,
-  savePendingDebtPayment,
-  getPendingDebtPayments,
-  removePendingDebtPayment,
-  savePendingCashSession,
-  getPendingCashSessions,
-  removePendingCashSession,
-} from "@/lib/offlineQueue";
 
-import React, { createContext, useContext, useReducer, useEffect, useState, useMemo, useRef, ReactNode } from "react";
-import { useAuth } from '@/context/AuthContext';
+import React, {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useReducer,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
+import { useAuth } from "@/context/AuthContext";
+import {
+  getNetworkHealthSnapshot,
+  isAuthInvalidError,
+  probeServerHealth,
+  startNetworkMonitor,
+  subscribeNetworkHealth,
+  type NetworkHealthSnapshot,
+  type NetworkHealthStatus,
+} from "@/lib/networkMonitor";
+import {
+  adoptLegacyOutboxForScope,
+  clearOutboxForScope,
+  enqueueOutboxOperation,
+  exportStoreOfflineBackup,
+  generateClientUUID,
+  getOutboxCounts,
+  getOutboxItems,
+  getStorageDiagnostics,
+  getStoreSnapshot,
+  getSyncLogs,
+  importStoreOfflineBackup,
+  makeScopeKey,
+  migrateLegacyOfflineStorage,
+  removeOutboxItem,
+  requestPersistentStorage,
+  retryOutboxItem,
+  saveStoreSnapshot,
+  subscribeOfflineEvents,
+  type BackupImportResult,
+  type OfflineBackupPayload,
+  type OutboxCounts,
+  type OutboxItem,
+  type StorageDiagnostics,
+  type SyncLogEntry,
+} from "@/lib/offlineDb";
+import { isNetworkLikeError, type OfflineSaleItem } from "@/lib/offlineQueue";
+import {
+  processOutboxForScope,
+  pullStoreIncrementalDelta,
+  resolveOutboxConflict,
+  type SyncRunResult,
+} from "@/lib/syncEngine";
 import { supabase } from "@/lib/supabase";
 
 // ─── Types ───────────────────────────────────────────────────
@@ -48,6 +81,7 @@ export interface Product {
   minStock: number;
   image: string;
   createdAt: string;
+  updatedAt?: string;
   unit?: string;
   units?: ProductUnit[];
   storeId?: string;
@@ -63,7 +97,6 @@ export interface CartItem {
   isAmountMode?: boolean;
 }
 
-
 export interface Expense {
   id: string;
   date: string;
@@ -71,6 +104,7 @@ export interface Expense {
   description: string;
   amount: number;
   createdAt?: string;
+  updatedAt?: string;
 }
 
 export interface ProductBatch {
@@ -196,6 +230,7 @@ export interface Sale {
   createdAt: string;
   userId?: string;
   storeId?: string;
+  sessionId?: string | null;
   paymentStatus?: "paid" | "partial" | "unpaid";
   amountPaid?: number;
   remainingAmount?: number;
@@ -224,6 +259,7 @@ export interface StoreSettings {
   phone?: string;
   managerName?: string;
   allowNegativeStock?: boolean;
+  updatedAt?: string;
 }
 
 export interface Category {
@@ -288,38 +324,63 @@ export interface StoreState {
 }
 
 // ─── Actions ─────────────────────────────────────────────────
-type Action =
+export type Action =
   | { type: "ADD_PRODUCT"; payload: Product }
   | { type: "BATCH_ADD_PRODUCTS"; payload: Product[] }
   | { type: "UPDATE_PRODUCT"; payload: Product }
   | { type: "DELETE_PRODUCT"; payload: string }
-  | { type: "ADD_TO_CART"; payload: Product | { product: Product; selectedUnit?: ProductUnit } }
-  | { type: "REMOVE_FROM_CART"; payload: string | { productId: string; unitId?: string } }
-  | { type: "UPDATE_CART_QTY"; payload: { productId: string; quantity: number; unitId?: string; customTotal?: number; isAmountMode?: boolean } }
-  | { type: "UPDATE_CART_UNIT"; payload: { productId: string; oldUnitId?: string; selectedUnit?: ProductUnit } }
+  | {
+      type: "ADD_TO_CART";
+      payload: Product | { product: Product; selectedUnit?: ProductUnit };
+    }
+  | {
+      type: "REMOVE_FROM_CART";
+      payload: string | { productId: string; unitId?: string };
+    }
+  | {
+      type: "UPDATE_CART_QTY";
+      payload: {
+        productId: string;
+        quantity: number;
+        unitId?: string;
+        customTotal?: number;
+        isAmountMode?: boolean;
+      };
+    }
+  | {
+      type: "UPDATE_CART_UNIT";
+      payload: {
+        productId: string;
+        oldUnitId?: string;
+        selectedUnit?: ProductUnit;
+      };
+    }
   | { type: "CLEAR_CART" }
   | { type: "COMPLETE_SALE"; payload: Sale }
-  | { 
-      type: "RECORD_DEBT_PAYMENT"; 
-      payload: { 
-        saleId: string; 
-        paymentAmount: number; 
-        newPaid: number; 
-        newRemaining: number; 
-        newStatus: "paid" | "partial"; 
-        method: "cash" | "mobile_money" | "card"; 
+  | {
+      type: "RECORD_DEBT_PAYMENT";
+      payload: {
+        saleId: string;
+        paymentAmount: number;
+        newPaid: number;
+        newRemaining: number;
+        newStatus: "paid" | "partial";
+        method: "cash" | "mobile_money" | "card";
         payment?: DebtPayment;
-      } 
+      };
     }
   | { type: "ADD_CUSTOMER"; payload: Customer }
   | { type: "ADD_CATEGORY"; payload: Category }
   | { type: "DELETE_CATEGORY"; payload: string }
   | { type: "UPDATE_SETTINGS"; payload: Partial<StoreSettings> }
-    | { type: "ADD_ORDER"; payload: Order }
+  | { type: "ADD_ORDER"; payload: Order }
   | { type: "ADD_EXPENSE"; payload: Expense }
   | { type: "UPDATE_EXPENSE"; payload: Expense }
   | { type: "DELETE_EXPENSE"; payload: string }
-  | { type: "UPDATE_ORDER_STATUS"; payload: { orderId: string; status: "received" } }
+  | {
+      type: "UPDATE_ORDER_STATUS";
+      payload: { orderId: string; status: "received" };
+    }
   | { type: "DELETE_ORDER"; payload: string }
   | { type: "ADD_BATCH"; payload: ProductBatch }
   | { type: "DELETE_BATCH"; payload: string }
@@ -328,106 +389,136 @@ type Action =
   | { type: "ADD_QUOTE"; payload: Quote }
   | { type: "UPDATE_QUOTE"; payload: Quote }
   | { type: "DELETE_QUOTE"; payload: string }
-  | { type: "CONVERT_QUOTE_TO_SALE"; payload: { quoteId: string; sale: Sale } }
+  | {
+      type: "CONVERT_QUOTE_TO_SALE";
+      payload: { quoteId: string; sale: Sale };
+    }
   | { type: "ADD_INVENTORY_SESSION"; payload: InventorySession }
   | { type: "OPEN_CASH_SESSION"; payload: CashSession }
   | { type: "CLOSE_CASH_SESSION"; payload: CashSession }
   | { type: "REALTIME_PRODUCT_UPDATE"; payload: Product }
   | { type: "REALTIME_PRODUCT_INSERT"; payload: Product }
   | { type: "REALTIME_PRODUCT_DELETE"; payload: string }
-  | { type: "REALTIME_PRODUCT_COST_UPDATE"; payload: { productId: string; cost: number } }
+  | {
+      type: "REALTIME_PRODUCT_COST_UPDATE";
+      payload: { productId: string; cost: number };
+    }
   | { type: "REALTIME_SALE_INSERT"; payload: Sale }
-  | { type: "REALTIME_SALE_UPDATE"; payload: Partial<Sale> & { id: string } }
+  | {
+      type: "REALTIME_SALE_UPDATE";
+      payload: Partial<Sale> & { id: string };
+    }
   | { type: "LOAD_STATE"; payload: StoreState };
 
-// ─── Demo seed data ──────────────────────────────────────────
-const demoCategories: Category[] = [
+// ─── Catégories par défaut & État vierge strictement isolé ──
+const defaultCategories: Category[] = [
   { id: "cat1", name: "Vêtements", icon: "👕", color: "#6343EA" },
   { id: "cat2", name: "Chaussures", icon: "👟", color: "#22C580" },
   { id: "cat3", name: "Accessoires", icon: "👜", color: "#F59E0B" },
   { id: "cat4", name: "Beauté", icon: "🧴", color: "#EC4899" },
 ];
 
-const demoProducts: Product[] = [
-  { id: "p1", name: "T-Shirt Premium", sku: "TSH-001", category: "Vêtements", price: 12500, cost: 6000, stock: 45, minStock: 10, image: "👕", createdAt: "2026-09-01" },
-  { id: "p2", name: "Jean Slim Fit", sku: "JEA-002", category: "Vêtements", price: 18000, cost: 9500, stock: 28, minStock: 8, image: "👖", createdAt: "2026-09-01" },
-  { id: "p3", name: "Sneakers Urban", sku: "SNK-003", category: "Chaussures", price: 35000, cost: 18000, stock: 15, minStock: 5, image: "👟", createdAt: "2026-09-02" },
-  { id: "p4", name: "Sac à Main Cuir", sku: "SAC-004", category: "Accessoires", price: 25000, cost: 12000, stock: 20, minStock: 5, image: "👜", createdAt: "2026-09-03" },
-  { id: "p5", name: "Montre Classique", sku: "MON-005", category: "Accessoires", price: 45000, cost: 22000, stock: 8, minStock: 3, image: "⌚", createdAt: "2026-09-04" },
-  { id: "p6", name: "Casquette Sport", sku: "CAS-006", category: "Accessoires", price: 8000, cost: 3500, stock: 60, minStock: 15, image: "🧢", createdAt: "2026-09-05" },
-  { id: "p7", name: "Robe Élégante", sku: "ROB-007", category: "Vêtements", price: 22000, cost: 11000, stock: 18, minStock: 5, image: "👗", createdAt: "2026-09-06" },
-  { id: "p8", name: "Lunettes de Soleil", sku: "LUN-008", category: "Accessoires", price: 15000, cost: 6500, stock: 3, minStock: 5, image: "🕶️", createdAt: "2026-09-07" },
-  { id: "p9", name: "Parfum Prestige", sku: "PAR-009", category: "Beauté", price: 38000, cost: 15000, stock: 12, minStock: 4, image: "🧴", createdAt: "2026-09-08" },
-  { id: "p10", name: "Ceinture Cuir", sku: "CEI-010", category: "Accessoires", price: 9500, cost: 4000, stock: 2, minStock: 8, image: "🪢", createdAt: "2026-09-09" },
-].sort((a, b) => a.name.localeCompare(b.name));
-
-const demoSales: Sale[] = [
-  { id: "s1", items: [{ productId: "p1", productName: "T-Shirt Premium", quantity: 2, unitPrice: 12500, total: 25000 }], subtotal: 25000, tax: 4500, discount: 0, total: 29500, paymentMethod: "cash", createdAt: "2026-09-18T09:30:00" },
-  { id: "s2", items: [{ productId: "p3", productName: "Sneakers Urban", quantity: 1, unitPrice: 35000, total: 35000 }, { productId: "p6", productName: "Casquette Sport", quantity: 2, unitPrice: 8000, total: 16000 }], subtotal: 51000, tax: 9180, discount: 2000, total: 58180, paymentMethod: "mobile_money", createdAt: "2026-09-18T11:15:00" },
-  { id: "s3", items: [{ productId: "p5", productName: "Montre Classique", quantity: 1, unitPrice: 45000, total: 45000 }], subtotal: 45000, tax: 8100, discount: 0, total: 53100, paymentMethod: "card", createdAt: "2026-09-18T14:00:00" },
-  { id: "s4", items: [{ productId: "p7", productName: "Robe Élégante", quantity: 1, unitPrice: 22000, total: 22000 }, { productId: "p4", productName: "Sac à Main Cuir", quantity: 1, unitPrice: 25000, total: 25000 }], subtotal: 47000, tax: 8460, discount: 5000, total: 50460, paymentMethod: "cash", createdAt: "2026-09-19T08:45:00" },
-  { id: "s5", items: [{ productId: "p9", productName: "Parfum Prestige", quantity: 2, unitPrice: 38000, total: 76000 }], subtotal: 76000, tax: 13680, discount: 3000, total: 86680, paymentMethod: "mobile_money", createdAt: "2026-09-19T10:20:00" },
-];
-
-const demoCustomers: Customer[] = [
-  { id: "c1", name: "Awa Diallo", phone: "+221 77 123 4567", totalPurchases: 87500, lastVisit: "2026-09-19" },
-  { id: "c2", name: "Moussa Ndiaye", phone: "+221 78 234 5678", totalPurchases: 58180, lastVisit: "2026-09-18" },
-  { id: "c3", name: "Fatou Sow", phone: "+221 76 345 6789", totalPurchases: 53100, lastVisit: "2026-09-18" },
-  { id: "c4", name: "Ibrahima Fall", phone: "+221 77 456 7890", totalPurchases: 50460, lastVisit: "2026-09-19" },
-];
-
-const initialState: StoreState = {
-  products: demoProducts,
-  sales: demoSales,
-  orders: [],
-  expenses: [],
-  customers: demoCustomers,
-  cart: [],
-  categories: demoCategories,
-  inventorySessions: [],
-  cashSessions: [],
-  activeCashSession: null,
-  batches: [],
-  priceHistory: [],
-  quotes: [],
-  settings: { name: "MaBoutiquePro", logo: "/logo.png", currency: "FCFA", taxRate: 0, city: "Lomé", country: "Togo", email: "contact@maboutiquepro.app", phone: "+228 98 37 61 01", allowNegativeStock: false },
+const DEFAULT_SETTINGS: StoreSettings = {
+  name: "MaBoutiquePro",
+  logo: "/logo.png",
+  currency: "FCFA",
+  taxRate: 0,
+  city: "Lomé",
+  country: "Togo",
+  email: "contact@maboutiquepro.app",
+  phone: "+228 98 37 61 01",
+  allowNegativeStock: false,
 };
 
-const getInitialStoreState = (defaultState: StoreState): StoreState => {
-  if (typeof window !== "undefined") {
-    try {
-      const activeId = localStorage.getItem("activeStoreId");
-      const key = activeId ? `boutiquepro-state-${activeId}` : null;
-      const saved = key ? localStorage.getItem(key) : null;
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (parsed && Array.isArray(parsed.products) && parsed.products.length > 0) {
-          return {
-            ...defaultState,
-            ...parsed,
-            cart: Array.isArray(parsed.cart) ? parsed.cart : [],
-          };
-        }
-      }
-    } catch (e) {}
-  }
-  return defaultState;
-};
-
-
-// ─── Fonctions d'agrégation des ventes de caisse ──────────────
-function generateUUID(): string {
-  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
-    return crypto.randomUUID();
-  }
-  return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, function (c) {
-    const r = (Math.random() * 16) | 0;
-    const v = c === "x" ? r : (r & 0x3) | 0x8;
-    return v.toString(16);
-  });
+export function createCleanEmptyState(storeName?: string): StoreState {
+  return {
+    products: [],
+    sales: [],
+    orders: [],
+    expenses: [],
+    customers: [],
+    cart: [],
+    categories: defaultCategories,
+    inventorySessions: [],
+    cashSessions: [],
+    activeCashSession: null,
+    batches: [],
+    priceHistory: [],
+    quotes: [],
+    settings: {
+      ...DEFAULT_SETTINGS,
+      name: storeName || DEFAULT_SETTINGS.name,
+    },
+  };
 }
 
-export function isSameCalendarDay(d1: string | Date, d2: string | Date = new Date()): boolean {
+const EMPTY_OUTBOX_COUNTS: OutboxCounts = {
+  pending: 0,
+  syncing: 0,
+  failed: 0,
+  conflict: 0,
+  authPaused: 0,
+  done: 0,
+  actionableTotal: 0,
+  attentionTotal: 0,
+};
+
+// ─── Helpers Panier isolé par user + store ────────────────────
+export function scopedCartKey(userId: string, storeId: string): string {
+  return `bp_cart_${userId}_${storeId}`;
+}
+
+export function readScopedCart(userId: string, storeId: string): CartItem[] {
+  if (typeof window === "undefined" || !userId || !storeId) return [];
+  try {
+    const raw = window.localStorage.getItem(scopedCartKey(userId, storeId));
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) {
+        return parsed.filter(
+          (c) => c && c.product && typeof c.product.price === "number"
+        );
+      }
+    }
+    // Repli unique depuis l'ancien cache par boutique uniquement si bp_last_auth_uid concorde
+    const lastUid = window.localStorage.getItem("bp_last_auth_uid");
+    if (!lastUid || lastUid === userId) {
+      const legacyRaw = window.localStorage.getItem(
+        `boutiquepro-state-${storeId}`
+      );
+      if (legacyRaw) {
+        const parsed = JSON.parse(legacyRaw);
+        if (Array.isArray(parsed?.cart)) {
+          return parsed.cart.filter(
+            (c: any) => c && c.product && typeof c.product.price === "number"
+          );
+        }
+      }
+    }
+  } catch {}
+  return [];
+}
+
+export function writeScopedCart(
+  userId: string,
+  storeId: string,
+  cart: CartItem[]
+): void {
+  if (typeof window === "undefined" || !userId || !storeId) return;
+  try {
+    window.localStorage.setItem(
+      scopedCartKey(userId, storeId),
+      JSON.stringify(cart || [])
+    );
+  } catch {}
+}
+
+// ─── Fonctions pures d'agrégation des ventes & sessions ──────
+
+export function isSameCalendarDay(
+  d1: string | Date,
+  d2: string | Date = new Date()
+): boolean {
   try {
     const date1 = new Date(d1);
     const date2 = new Date(d2);
@@ -444,14 +535,15 @@ export function isSameCalendarDay(d1: string | Date, d2: string | Date = new Dat
 export function getSalesForSession(
   session: CashSession | null,
   allSales: Sale[],
-  allSessions: CashSession[] = []
+  _allSessions: CashSession[] = []
 ): Sale[] {
   if (!session || !session.openedAt) return [];
   const sessionOpenedTime = new Date(session.openedAt).getTime();
   if (isNaN(sessionOpenedTime)) return [];
-  const sessionClosedTime = session.closedAt ? new Date(session.closedAt).getTime() : Infinity;
+  const sessionClosedTime = session.closedAt
+    ? new Date(session.closedAt).getTime()
+    : Infinity;
 
-  // Strictement les ventes enregistrées durant cette session de caisse (entre son ouverture et sa clôture)
   return (allSales || []).filter((s) => {
     if (!s || !s.createdAt) return false;
     const saleTime = new Date(s.createdAt).getTime();
@@ -476,23 +568,36 @@ export interface SessionStats {
   expectedCashInDrawer: number;
 }
 
-export function getInitialCreditDeposit(s: Sale): { amount: number; method: "cash" | "mobile_money" | "card" } {
+export function getInitialCreditDeposit(s: Sale): {
+  amount: number;
+  method: "cash" | "mobile_money" | "card";
+} {
   if (s.paymentMethod !== "credit") return { amount: 0, method: "cash" };
 
   if (Array.isArray(s.payments) && s.payments.length > 0) {
     const initPayment = s.payments.find(
-      (p) => p && (p.note?.toLowerCase().includes("initial") || p.id?.startsWith("init-") || p.id?.startsWith("legacy-"))
+      (p) =>
+        p &&
+        (p.note?.toLowerCase().includes("initial") ||
+          p.id?.startsWith("init-") ||
+          p.id?.startsWith("legacy-"))
     );
     if (initPayment && Number.isFinite(Number(initPayment.amount))) {
-      const m = initPayment.paymentMethod === "mobile_money" || initPayment.paymentMethod === "card"
-        ? initPayment.paymentMethod
-        : "cash";
+      const m =
+        initPayment.paymentMethod === "mobile_money" ||
+        initPayment.paymentMethod === "card"
+          ? initPayment.paymentMethod
+          : "cash";
       return { amount: Math.max(0, Number(initPayment.amount)), method: m };
     }
-    // Si aucun paiement n'est explicitement nommé 'initial',
-    // l'acompte initial correspond au total payé moins tous les paiements ultérieurs de dettes
     const subsequentSum = s.payments
-      .filter((p) => p && !p.note?.toLowerCase().includes("initial") && !p.id?.startsWith("init-") && !p.id?.startsWith("legacy-"))
+      .filter(
+        (p) =>
+          p &&
+          !p.note?.toLowerCase().includes("initial") &&
+          !p.id?.startsWith("init-") &&
+          !p.id?.startsWith("legacy-")
+      )
       .reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
     const calculated = (Number(s.amountPaid) || 0) - subsequentSum;
     return { amount: Math.max(0, calculated), method: "cash" };
@@ -525,7 +630,9 @@ export function getSessionStats(
 
   const sessionOpenedTime = new Date(session.openedAt).getTime();
   if (isNaN(sessionOpenedTime)) return empty;
-  const sessionClosedTime = session.closedAt ? new Date(session.closedAt).getTime() : Infinity;
+  const sessionClosedTime = session.closedAt
+    ? new Date(session.closedAt).getTime()
+    : Infinity;
 
   const sessionSales = getSalesForSession(session, allSales, allSessions);
 
@@ -560,12 +667,14 @@ export function getSessionStats(
       creditTotal += saleTotal;
       const rem = Number.isFinite(Number(s.remainingAmount))
         ? Math.max(0, Number(s.remainingAmount))
-        : Math.max(0, saleTotal - (Number(s.amountPaid) || initDeposit.amount));
+        : Math.max(
+            0,
+            saleTotal - (Number(s.amountPaid) || initDeposit.amount)
+          );
       creditRemaining += rem;
     }
   });
 
-  // Recouvrements de dettes perçus durant la session
   let debtRecoveriesCash = 0;
   let debtRecoveriesMM = 0;
   let debtRecoveriesCard = 0;
@@ -578,10 +687,11 @@ export function getSessionStats(
       if (isNaN(pTime)) return;
       if (pTime >= sessionOpenedTime && pTime <= sessionClosedTime) {
         const isSessionSale = sessionSales.some((ss) => ss.id === sale.id);
-        const isInitialPayment = p.note?.toLowerCase().includes("initial") || p.id?.startsWith("init-") || p.id?.startsWith("legacy-");
+        const isInitialPayment =
+          p.note?.toLowerCase().includes("initial") ||
+          p.id?.startsWith("init-") ||
+          p.id?.startsWith("legacy-");
 
-        // Si c'est l'acompte initial d'une vente réalisée pendant cette même session,
-        // il est déjà compté dans creditDeposits / mmSales / cardSales ci-dessus.
         if (isSessionSale && isInitialPayment) {
           return;
         }
@@ -622,397 +732,542 @@ export function getSessionStats(
   };
 }
 
+function getSaleItemRefQty(item: SaleItem): number {
+  if (
+    item.quantityReference !== undefined &&
+    item.quantityReference !== null &&
+    Number(item.quantityReference) > 0
+  ) {
+    return Number(item.quantityReference);
+  }
+  return Number(item.quantity) * (Number(item.unitMultiplier) || 1);
+}
+
+export function applySaleStockAndBatchesFEFO(
+  products: Product[],
+  batches: ProductBatch[],
+  saleItems: SaleItem[],
+  allowNegative: boolean
+): { products: Product[]; batches: ProductBatch[] } {
+  // 1. Agréger les quantités vendues par productId (corrige le bug multi-unités sur un même produit)
+  const qtyByProduct = new Map<string, number>();
+  for (const it of saleItems) {
+    if (!it?.productId) continue;
+    qtyByProduct.set(
+      it.productId,
+      (qtyByProduct.get(it.productId) || 0) + getSaleItemRefQty(it)
+    );
+  }
+
+  const updatedProducts = products.map((p) => {
+    const qtyToDeduct = qtyByProduct.get(p.id) || 0;
+    if (!qtyToDeduct) return p;
+    const rawNext = Math.round((p.stock - qtyToDeduct) * 1000) / 1000;
+    return {
+      ...p,
+      stock: allowNegative ? rawNext : Math.max(0, rawNext),
+    };
+  });
+
+  // 2. Décompte FEFO sur les lots (triés par date d'expiration croissante)
+  const updatedBatches = [...batches];
+  for (const soldItem of saleItems) {
+    let remDeduct = getSaleItemRefQty(soldItem);
+    if (remDeduct <= 0) continue;
+
+    const prodBatches = updatedBatches
+      .map((b, idx) => ({ ...b, idx }))
+      .filter(
+        (b) => b.productId === soldItem.productId && b.currentQuantity > 0
+      )
+      .sort(
+        (a, b) =>
+          new Date(a.expiryDate).getTime() - new Date(b.expiryDate).getTime()
+      );
+
+    for (const pb of prodBatches) {
+      if (remDeduct <= 0) break;
+      const ded = Math.min(pb.currentQuantity, remDeduct);
+      updatedBatches[pb.idx] = {
+        ...updatedBatches[pb.idx],
+        currentQuantity: Math.round((pb.currentQuantity - ded) * 1000) / 1000,
+      };
+      remDeduct -= ded;
+    }
+  }
+
+  return { products: updatedProducts, batches: updatedBatches };
+}
+
+export function refreshSessionStatsInList(
+  activeSession: CashSession | null,
+  cashSessions: CashSession[],
+  sales: Sale[]
+): {
+  activeCashSession: CashSession | null;
+  cashSessions: CashSession[];
+} {
+  if (!activeSession) {
+    return { activeCashSession: null, cashSessions };
+  }
+  const stats = getSessionStats(activeSession, sales, cashSessions);
+  const updatedActive: CashSession = {
+    ...activeSession,
+    totalCashSales: stats.cash,
+    totalMobileMoneySales: stats.mm,
+    totalCardSales: stats.card,
+    totalSalesCount: stats.count,
+    totalSalesAmount: stats.total,
+    expectedAmount: stats.expectedCashInDrawer,
+  };
+  const updatedList = cashSessions.map((cs) =>
+    cs.id === updatedActive.id ? updatedActive : cs
+  );
+  return { activeCashSession: updatedActive, cashSessions: updatedList };
+}
+
 // ─── Reducer ─────────────────────────────────────────────────
-function storeReducer(state: StoreState, action: Action): StoreState {
+export function storeReducer(state: StoreState, action: Action): StoreState {
   switch (action.type) {
-    case "ADD_PRODUCT":
-      return { ...state, products: [...state.products, action.payload].sort((a, b) => a.name.localeCompare(b.name)) };
+    case "ADD_PRODUCT": {
+      const exists = state.products.some((p) => p.id === action.payload.id);
+      const nextProducts = exists
+        ? state.products.map((p) =>
+            p.id === action.payload.id ? action.payload : p
+          )
+        : [...state.products, action.payload];
+      return {
+        ...state,
+        products: nextProducts.sort((a, b) => a.name.localeCompare(b.name)),
+      };
+    }
+
     case "BATCH_ADD_PRODUCTS": {
       const incomingMap = new Map<string, Product>();
       state.products.forEach((p) => incomingMap.set(p.id, p));
       action.payload.forEach((p) => incomingMap.set(p.id, p));
       return {
         ...state,
-        products: Array.from(incomingMap.values()).sort((a, b) => a.name.localeCompare(b.name)),
+        products: Array.from(incomingMap.values()).sort((a, b) =>
+          a.name.localeCompare(b.name)
+        ),
       };
     }
-    case "UPDATE_PRODUCT": {
-      const oldProd = state.products.find(p => p.id === action.payload.id);
-      const newEntries: PriceHistoryEntry[] = [];
-      const nowIso = new Date().toISOString();
 
-      if (oldProd) {
-        if (Number(action.payload.price) !== Number(oldProd.price)) {
-          newEntries.push({
-            id: "ph_" + Date.now().toString(36) + "_" + Math.random().toString(36).substring(2, 6),
-            storeId: (action.payload.storeId || oldProd.storeId) || "",
-            productId: action.payload.id,
-            priceType: "selling",
-            oldPrice: Number(oldProd.price),
-            newPrice: Number(action.payload.price),
-            changeReason: "Ajustement du prix de vente",
-            userName: "Admin",
-            createdAt: nowIso
-          });
-        }
-        if (action.payload.cost !== undefined && oldProd.cost !== undefined && Number(action.payload.cost) !== Number(oldProd.cost)) {
-          newEntries.push({
-            id: "ph_" + Date.now().toString(36) + "_" + Math.random().toString(36).substring(2, 6),
-            storeId: (action.payload.storeId || oldProd.storeId) || "",
-            productId: action.payload.id,
-            priceType: "cost",
-            oldPrice: Number(oldProd.cost),
-            newPrice: Number(action.payload.cost),
-            changeReason: "Ajustement du coût d'achat",
-            userName: "Admin",
-            createdAt: nowIso
-          });
-        }
-        if (Array.isArray(action.payload.units) && Array.isArray(oldProd.units)) {
-          for (const u of action.payload.units) {
-            const oldU = oldProd.units.find(ou => ou.name === u.name || ou.id === u.id);
-            if (oldU && Number(u.price || 0) > 0 && Number(oldU.price || 0) > 0 && Number(u.price) !== Number(oldU.price)) {
-              newEntries.push({
-                id: "ph_" + Date.now().toString(36) + "_" + Math.random().toString(36).substring(2, 6),
-                storeId: (action.payload.storeId || oldProd.storeId) || "",
-                productId: action.payload.id,
-                priceType: "unit_selling",
-                unitName: u.name,
-                oldPrice: Number(oldU.price),
-                newPrice: Number(u.price),
-                changeReason: "Ajustement prix unité [" + u.name + "]",
-                userName: "Admin",
-                createdAt: nowIso
-              });
-            }
-          }
-        }
-      }
-
+    case "UPDATE_PRODUCT":
       return {
         ...state,
-        products: state.products.map((p) => (p.id === action.payload.id ? action.payload : p)).sort((a, b) => a.name.localeCompare(b.name)),
-        priceHistory: newEntries.length > 0 ? [...newEntries, ...(state.priceHistory || [])] : (state.priceHistory || [])
+        products: state.products
+          .map((p) => (p.id === action.payload.id ? action.payload : p))
+          .sort((a, b) => a.name.localeCompare(b.name)),
       };
-    }
+
     case "DELETE_PRODUCT":
-      return { ...state, products: state.products.filter((p) => p.id !== action.payload) };
+      return {
+        ...state,
+        products: state.products.filter((p) => p.id !== action.payload),
+      };
+
     case "ADD_TO_CART": {
-      const prod = ('product' in action.payload) ? (action.payload as any).product : action.payload;
-      const unit = ('selectedUnit' in action.payload) ? (action.payload as any).selectedUnit : undefined;
-      const unitId = unit ? unit.id : 'ref';
+      const prod =
+        "product" in action.payload
+          ? (action.payload as { product: Product }).product
+          : (action.payload as Product);
+      const unit =
+        "selectedUnit" in action.payload
+          ? (action.payload as { selectedUnit?: ProductUnit }).selectedUnit
+          : undefined;
+      const unitId = unit ? unit.id : "ref";
 
       const existingIndex = state.cart.findIndex(
-        (c) => c.product.id === prod.id && (c.selectedUnit?.id || 'ref') === unitId
+        (c) =>
+          c.product.id === prod.id && (c.selectedUnit?.id || "ref") === unitId
       );
       if (existingIndex >= 0) {
         return {
           ...state,
           cart: state.cart.map((c, i) =>
             i === existingIndex ? { ...c, quantity: c.quantity + 1 } : c
-          )
+          ),
         };
       }
-      const unitPrice = unit ? (unit.price ?? (prod.price * unit.multiplier)) : prod.price;
+      const unitPrice = unit
+        ? unit.price ?? prod.price * unit.multiplier
+        : prod.price;
       return {
         ...state,
-        cart: [...state.cart, { product: prod, quantity: 1, selectedUnit: unit, unitPrice }]
+        cart: [
+          ...state.cart,
+          { product: prod, quantity: 1, selectedUnit: unit, unitPrice },
+        ],
       };
     }
+
     case "REMOVE_FROM_CART": {
-      if (typeof action.payload === 'string') {
-        return { ...state, cart: state.cart.filter((c) => c.product.id !== action.payload) };
+      if (typeof action.payload === "string") {
+        return {
+          ...state,
+          cart: state.cart.filter((c) => c.product.id !== action.payload),
+        };
       }
-      const { productId, unitId } = action.payload as any;
+      const { productId, unitId } = action.payload;
       return {
         ...state,
-        cart: state.cart.filter((c) => !(c.product.id === productId && (c.selectedUnit?.id || 'ref') === (unitId || 'ref')))
+        cart: state.cart.filter(
+          (c) =>
+            !(
+              c.product.id === productId &&
+              (c.selectedUnit?.id || "ref") === (unitId || "ref")
+            )
+        ),
       };
     }
+
     case "UPDATE_CART_QTY": {
-      const { productId, quantity, unitId, customTotal, isAmountMode } = action.payload as any;
+      const { productId, quantity, unitId, customTotal, isAmountMode } =
+        action.payload;
       if (quantity <= 0 && (!customTotal || customTotal <= 0)) {
         return {
           ...state,
-          cart: state.cart.filter((c) => !(c.product.id === productId && (unitId ? (c.selectedUnit?.id || 'ref') === unitId : true)))
+          cart: state.cart.filter(
+            (c) =>
+              !(
+                c.product.id === productId &&
+                (unitId ? (c.selectedUnit?.id || "ref") === unitId : true)
+              )
+          ),
         };
       }
       return {
         ...state,
         cart: state.cart.map((c) => {
-          if (c.product.id === productId && (!unitId || (c.selectedUnit?.id || 'ref') === unitId)) {
+          if (
+            c.product.id === productId &&
+            (!unitId || (c.selectedUnit?.id || "ref") === unitId)
+          ) {
             return {
               ...c,
               quantity: Math.max(0, quantity),
-              customTotal: customTotal !== undefined ? customTotal : (isAmountMode === false ? undefined : c.customTotal),
-              isAmountMode: isAmountMode !== undefined ? isAmountMode : c.isAmountMode
+              customTotal:
+                customTotal !== undefined
+                  ? customTotal
+                  : isAmountMode === false
+                    ? undefined
+                    : c.customTotal,
+              isAmountMode:
+                isAmountMode !== undefined ? isAmountMode : c.isAmountMode,
             };
           }
           return c;
-        })
+        }),
       };
     }
+
     case "UPDATE_CART_UNIT": {
-      const { productId, oldUnitId, selectedUnit } = action.payload as any;
+      const { productId, oldUnitId, selectedUnit } = action.payload;
       return {
         ...state,
         cart: state.cart.map((c) => {
-          if (c.product.id === productId && (c.selectedUnit?.id || 'ref') === (oldUnitId || 'ref')) {
-            const unitPrice = selectedUnit ? (selectedUnit.price ?? (c.product.price * selectedUnit.multiplier)) : c.product.price;
+          if (
+            c.product.id === productId &&
+            (c.selectedUnit?.id || "ref") === (oldUnitId || "ref")
+          ) {
+            const unitPrice = selectedUnit
+              ? selectedUnit.price ?? c.product.price * selectedUnit.multiplier
+              : c.product.price;
             return { ...c, selectedUnit, unitPrice };
           }
           return c;
-        })
+        }),
       };
     }
+
     case "CLEAR_CART":
       return { ...state, cart: [] };
+
     case "COMPLETE_SALE": {
       const saleExists = state.sales.some((s) => s.id === action.payload.id);
       const updatedSales = saleExists
-        ? state.sales.map((s) => (s.id === action.payload.id ? { ...s, ...action.payload } : s))
+        ? state.sales.map((s) =>
+            s.id === action.payload.id ? { ...s, ...action.payload } : s
+          )
         : [action.payload, ...state.sales];
 
       const allowNegative = Boolean(state.settings?.allowNegativeStock);
-      const updatedProducts = state.products.map((p) => {
-        const soldItem = action.payload.items.find((i) => i.productId === p.id);
-        const qtyToDeduct = soldItem
-          ? (soldItem.quantityReference !== undefined && soldItem.quantityReference !== null && Number(soldItem.quantityReference) > 0)
-            ? Number(soldItem.quantityReference)
-            : (Number(soldItem.quantity) * (Number(soldItem.unitMultiplier) || 1))
-          : 0;
-        return soldItem
-          ? {
-              ...p,
-              stock: allowNegative
-                ? Math.round((p.stock - qtyToDeduct) * 1000) / 1000
-                : Math.max(0, Math.round((p.stock - qtyToDeduct) * 1000) / 1000)
-            }
-          : p;
-      });
+      const { products: updatedProducts, batches: updatedBatches } = saleExists
+        ? { products: state.products, batches: state.batches }
+        : applySaleStockAndBatchesFEFO(
+            state.products,
+            state.batches,
+            action.payload.items || [],
+            allowNegative
+          );
 
-      // Décompte FEFO des lots en temps réel
-      let updatedBatches = [...state.batches];
-      action.payload.items.forEach((soldItem) => {
-        const mult = Number(soldItem.unitMultiplier) || 1;
-        let remDeduct = (soldItem.quantityReference !== undefined && soldItem.quantityReference !== null && Number(soldItem.quantityReference) > 0)
-          ? Number(soldItem.quantityReference)
-          : (Number(soldItem.quantity) * mult);
-
-        const prodBatches = updatedBatches
-          .map((b, idx) => ({ ...b, idx }))
-          .filter((b) => b.productId === soldItem.productId && b.currentQuantity > 0)
-          .sort((a, b) => new Date(a.expiryDate).getTime() - new Date(b.expiryDate).getTime());
-
-        for (const pb of prodBatches) {
-          if (remDeduct <= 0) break;
-          const ded = Math.min(pb.currentQuantity, remDeduct);
-          updatedBatches[pb.idx] = {
-            ...updatedBatches[pb.idx],
-            currentQuantity: Math.round((pb.currentQuantity - ded) * 1000) / 1000
-          };
-          remDeduct -= ded;
-        }
-      });
-
-      let updatedActiveSession = state.activeCashSession;
-      let updatedCashSessions = state.cashSessions;
-
-      if (updatedActiveSession) {
-        const stats = getSessionStats(updatedActiveSession, updatedSales, updatedCashSessions);
-        updatedActiveSession = {
-          ...updatedActiveSession,
-          totalCashSales: stats.cash,
-          totalMobileMoneySales: stats.mm,
-          totalCardSales: stats.card,
-          totalSalesCount: stats.count,
-          totalSalesAmount: stats.total,
-          expectedAmount: stats.expectedCashInDrawer
-        };
-
-        updatedCashSessions = updatedCashSessions.map((cs) =>
-          cs.id === updatedActiveSession?.id ? updatedActiveSession : cs
+      const { activeCashSession: nextActive, cashSessions: nextSessions } =
+        refreshSessionStatsInList(
+          state.activeCashSession,
+          state.cashSessions,
+          updatedSales
         );
-      }
 
-      return { 
-        ...state, 
-        sales: updatedSales, 
-        products: updatedProducts, 
+      return {
+        ...state,
+        sales: updatedSales,
+        products: updatedProducts,
+        batches: updatedBatches,
         cart: [],
-        activeCashSession: updatedActiveSession,
-        cashSessions: updatedCashSessions
+        activeCashSession: nextActive,
+        cashSessions: nextSessions,
       };
     }
+
     case "RECORD_DEBT_PAYMENT": {
-      const { saleId, paymentAmount, newPaid, newRemaining, newStatus, method, payment } = action.payload;
+      const { saleId, newPaid, newRemaining, newStatus, payment } =
+        action.payload;
       const updatedSales = state.sales.map((s) => {
         if (s.id !== saleId) return s;
         const prevPayments = s.payments || [];
+        const hasPay = payment && prevPayments.some((p) => p.id === payment.id);
         return {
           ...s,
           amountPaid: newPaid,
           remainingAmount: newRemaining,
           paymentStatus: newStatus,
-          payments: payment ? [payment, ...prevPayments] : prevPayments,
+          payments:
+            payment && !hasPay ? [payment, ...prevPayments] : prevPayments,
         };
       });
 
-      let updatedActiveSession = state.activeCashSession;
-      let updatedCashSessions = state.cashSessions;
-
-      if (updatedActiveSession) {
-        const stats = getSessionStats(updatedActiveSession, updatedSales, updatedCashSessions);
-        updatedActiveSession = {
-          ...updatedActiveSession,
-          totalCashSales: stats.cash,
-          totalMobileMoneySales: stats.mm,
-          totalCardSales: stats.card,
-          totalSalesCount: stats.count,
-          totalSalesAmount: stats.total,
-          expectedAmount: stats.expectedCashInDrawer,
-        };
-        updatedCashSessions = updatedCashSessions.map((cs) =>
-          cs.id === updatedActiveSession?.id ? updatedActiveSession : cs
+      const { activeCashSession: nextActive, cashSessions: nextSessions } =
+        refreshSessionStatsInList(
+          state.activeCashSession,
+          state.cashSessions,
+          updatedSales
         );
-      }
 
       return {
         ...state,
         sales: updatedSales,
-        activeCashSession: updatedActiveSession,
-        cashSessions: updatedCashSessions,
+        activeCashSession: nextActive,
+        cashSessions: nextSessions,
       };
     }
-        case "ADD_EXPENSE":
-      return { ...state, expenses: [action.payload, ...state.expenses].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()) };
+
+    case "ADD_EXPENSE":
+      return {
+        ...state,
+        expenses: [
+          action.payload,
+          ...state.expenses.filter((e) => e.id !== action.payload.id),
+        ].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()),
+      };
+
     case "UPDATE_EXPENSE":
-      return { ...state, expenses: state.expenses.map((e) => (e.id === action.payload.id ? action.payload : e)).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()) };
+      return {
+        ...state,
+        expenses: state.expenses
+          .map((e) => (e.id === action.payload.id ? action.payload : e))
+          .sort(
+            (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
+          ),
+      };
+
     case "DELETE_EXPENSE":
-      return { ...state, expenses: state.expenses.filter((e) => e.id !== action.payload) };
+      return {
+        ...state,
+        expenses: state.expenses.filter((e) => e.id !== action.payload),
+      };
+
     case "ADD_ORDER":
-      return { ...state, orders: [action.payload, ...state.orders] };
+      return {
+        ...state,
+        orders: [
+          action.payload,
+          ...state.orders.filter((o) => o.id !== action.payload.id),
+        ],
+      };
+
     case "ADD_BATCH":
-      return { ...state, batches: [action.payload, ...state.batches] };
+      return {
+        ...state,
+        batches: [
+          action.payload,
+          ...state.batches.filter((b) => b.id !== action.payload.id),
+        ],
+      };
+
     case "DELETE_BATCH":
-      return { ...state, batches: state.batches.filter((b) => b.id !== action.payload) };
+      return {
+        ...state,
+        batches: state.batches.filter((b) => b.id !== action.payload),
+      };
+
     case "SET_PRICE_HISTORY":
       return { ...state, priceHistory: action.payload };
+
     case "ADD_PRICE_HISTORY_ENTRY":
-      return { ...state, priceHistory: [action.payload, ...(state.priceHistory || [])] };
+      return {
+        ...state,
+        priceHistory: [
+          action.payload,
+          ...(state.priceHistory || []).filter(
+            (h) => h.id !== action.payload.id
+          ),
+        ],
+      };
+
     case "ADD_QUOTE":
-      return { ...state, quotes: [action.payload, ...(state.quotes || [])] };
+      return {
+        ...state,
+        quotes: [
+          action.payload,
+          ...(state.quotes || []).filter((q) => q.id !== action.payload.id),
+        ],
+      };
+
     case "UPDATE_QUOTE":
       return {
         ...state,
-        quotes: (state.quotes || []).map((q) => (q.id === action.payload.id ? action.payload : q))
+        quotes: (state.quotes || []).map((q) =>
+          q.id === action.payload.id ? action.payload : q
+        ),
       };
+
     case "DELETE_QUOTE":
       return {
         ...state,
-        quotes: (state.quotes || []).filter((q) => q.id !== action.payload)
+        quotes: (state.quotes || []).filter((q) => q.id !== action.payload),
       };
+
     case "CONVERT_QUOTE_TO_SALE": {
       const { quoteId, sale } = action.payload;
       const updatedQuotes = (state.quotes || []).map((q) =>
-        q.id === quoteId ? { ...q, status: "converted" as const, saleId: sale.id } : q
+        q.id === quoteId
+          ? { ...q, status: "converted" as const, saleId: sale.id }
+          : q
       );
 
-      let updatedBatches = [...(state.batches || [])];
-      const updatedProducts = state.products.map((p) => {
-        const saleItem = sale.items.find((i) => i.productId === p.id);
-        if (!saleItem) return p;
-        const qtyToDeduct = (saleItem.quantityReference !== undefined && saleItem.quantityReference !== null && Number(saleItem.quantityReference) > 0)
-          ? Number(saleItem.quantityReference)
-          : (Number(saleItem.quantity) * (Number(saleItem.unitMultiplier) || 1));
+      const saleExists = state.sales.some((s) => s.id === sale.id);
+      const updatedSales = saleExists ? state.sales : [sale, ...state.sales];
 
-        let remainingToDeduct = qtyToDeduct;
-        updatedBatches = updatedBatches.map((b) => {
-          if (b.productId === p.id && b.currentQuantity > 0 && remainingToDeduct > 0) {
-            const deduct = Math.min(b.currentQuantity, remainingToDeduct);
-            remainingToDeduct -= deduct;
-            return { ...b, currentQuantity: b.currentQuantity - deduct };
-          }
-          return b;
-        });
+      const allowNegative = Boolean(state.settings?.allowNegativeStock);
+      const { products: updatedProducts, batches: updatedBatches } = saleExists
+        ? { products: state.products, batches: state.batches || [] }
+        : applySaleStockAndBatchesFEFO(
+            state.products,
+            state.batches || [],
+            sale.items || [],
+            allowNegative
+          );
 
-        const newStock = state.settings.allowNegativeStock
-          ? p.stock - qtyToDeduct
-          : Math.max(0, p.stock - qtyToDeduct);
-        return { ...p, stock: newStock };
-      });
+      const { activeCashSession: nextActive, cashSessions: nextSessions } =
+        refreshSessionStatsInList(
+          state.activeCashSession,
+          state.cashSessions,
+          updatedSales
+        );
 
       return {
         ...state,
-        sales: [sale, ...state.sales],
+        sales: updatedSales,
         products: updatedProducts,
         batches: updatedBatches,
-        quotes: updatedQuotes
+        quotes: updatedQuotes,
+        activeCashSession: nextActive,
+        cashSessions: nextSessions,
       };
     }
+
     case "DELETE_ORDER":
-      return { ...state, orders: state.orders.filter((o) => o.id !== action.payload) };
+      return {
+        ...state,
+        orders: state.orders.filter((o) => o.id !== action.payload),
+      };
+
     case "UPDATE_ORDER_STATUS": {
-      const order = state.orders.find(o => o.id === action.payload.orderId);
+      const order = state.orders.find((o) => o.id === action.payload.orderId);
       if (!order || order.status === "received") return state;
-      
-      // Update order status
-      const updatedOrders = state.orders.map(o => o.id === action.payload.orderId ? { ...o, status: "received" as const } : o);
-      
-      // Increase product stock in reference units & update reference cost
-      const updatedProducts = state.products.map(p => {
-        const orderedItem = order.items.find(i => i.productId === p.id);
-        if (!orderedItem) return p;
-        const mult = Number(orderedItem.unitMultiplier) || 1;
-        const refQty = (orderedItem.quantityReference !== undefined && orderedItem.quantityReference !== null && Number(orderedItem.quantityReference) > 0)
-          ? Number(orderedItem.quantityReference)
-          : (Number(orderedItem.quantity) * mult);
-        const newRefCost = mult > 0 ? (Number(orderedItem.costPrice) / mult) : Number(orderedItem.costPrice);
+
+      const updatedOrders = state.orders.map((o) =>
+        o.id === action.payload.orderId
+          ? { ...o, status: "received" as const }
+          : o
+      );
+
+      // Agrégation multi-lignes par productId
+      const qtyByProd = new Map<string, number>();
+      const costByProd = new Map<string, number>();
+      for (const it of order.items) {
+        const mult = Number(it.unitMultiplier) || 1;
+        const refQty =
+          it.quantityReference !== undefined &&
+          it.quantityReference !== null &&
+          Number(it.quantityReference) > 0
+            ? Number(it.quantityReference)
+            : Number(it.quantity) * mult;
+        qtyByProd.set(it.productId, (qtyByProd.get(it.productId) || 0) + refQty);
+        const newRefCost =
+          mult > 0 ? Number(it.costPrice) / mult : Number(it.costPrice);
+        if (newRefCost > 0) {
+          costByProd.set(it.productId, Number(newRefCost.toFixed(4)));
+        }
+      }
+
+      const updatedProducts = state.products.map((p) => {
+        const addQty = qtyByProd.get(p.id) || 0;
+        const newCost = costByProd.get(p.id);
+        if (!addQty && !newCost) return p;
         return {
           ...p,
-          stock: p.stock + refQty,
-          cost: newRefCost > 0 ? Number(newRefCost.toFixed(4)) : p.cost
+          stock: Math.round((p.stock + addQty) * 1000) / 1000,
+          cost: newCost && newCost > 0 ? newCost : p.cost,
         };
       });
 
-      // Création automatique des lots dans le state
+      const nowIso = new Date().toISOString();
       const createdBatches: ProductBatch[] = [];
       order.items.forEach((it) => {
         if (it.batchNumber && it.expiryDate) {
           const mult = Number(it.unitMultiplier) || 1;
-          const refQty = (it.quantityReference !== undefined && it.quantityReference !== null && Number(it.quantityReference) > 0)
-            ? Number(it.quantityReference)
-            : (Number(it.quantity) * mult);
+          const refQty =
+            it.quantityReference !== undefined &&
+            it.quantityReference !== null &&
+            Number(it.quantityReference) > 0
+              ? Number(it.quantityReference)
+              : Number(it.quantity) * mult;
           createdBatches.push({
-            id: "batch_" + Date.now() + "_" + Math.random().toString(36).substring(2, 6),
-            storeId: (state.products.find(p => p.id === it.productId)?.storeId) || "",
+            id: generateClientUUID(),
+            storeId:
+              state.products.find((p) => p.id === it.productId)?.storeId || "",
             productId: it.productId,
             batchNumber: it.batchNumber,
             expiryDate: it.expiryDate,
             initialQuantity: refQty,
             currentQuantity: refQty,
             orderId: order.id,
-            createdAt: new Date().toISOString()
+            createdAt: nowIso,
           });
         }
       });
+
       const orderPriceHistoryEntries: PriceHistoryEntry[] = [];
       order.items.forEach((it) => {
-        const prod = state.products.find(p => p.id === it.productId);
+        const prod = state.products.find((p) => p.id === it.productId);
         if (prod) {
           const mult = Number(it.unitMultiplier) || 1;
-          const newRefCost = mult > 0 ? (Number(it.costPrice) / mult) : Number(it.costPrice);
+          const newRefCost =
+            mult > 0 ? Number(it.costPrice) / mult : Number(it.costPrice);
           if (newRefCost > 0 && Number(newRefCost.toFixed(4)) !== Number(prod.cost)) {
             orderPriceHistoryEntries.push({
-              id: "ph_" + Date.now().toString(36) + "_" + Math.random().toString(36).substring(2, 6),
+              id: generateClientUUID(),
               storeId: prod.storeId || "",
               productId: it.productId,
               priceType: "cost",
               oldPrice: Number(prod.cost) || 0,
               newPrice: Number(newRefCost.toFixed(4)),
-              changeReason: "Réception commande #" + order.id.slice(-6),
+              changeReason: `Réception commande #${order.id.slice(-6)}`,
               userName: "Admin",
-              createdAt: new Date().toISOString()
+              createdAt: nowIso,
             });
           }
         }
@@ -1023,124 +1278,248 @@ function storeReducer(state: StoreState, action: Action): StoreState {
         orders: updatedOrders,
         products: updatedProducts,
         batches: [...createdBatches, ...state.batches],
-        priceHistory: orderPriceHistoryEntries.length > 0 ? [...orderPriceHistoryEntries, ...(state.priceHistory || [])] : (state.priceHistory || [])
+        priceHistory:
+          orderPriceHistoryEntries.length > 0
+            ? [...orderPriceHistoryEntries, ...(state.priceHistory || [])]
+            : state.priceHistory || [],
       };
     }
+
     case "ADD_CUSTOMER":
-      return { ...state, customers: [...state.customers, action.payload] };
+      return {
+        ...state,
+        customers: [
+          ...state.customers.filter((c) => c.id !== action.payload.id),
+          action.payload,
+        ],
+      };
+
     case "ADD_CATEGORY":
-      return { ...state, categories: [...state.categories, action.payload] };
+      return {
+        ...state,
+        categories: [
+          ...state.categories.filter((c) => c.id !== action.payload.id),
+          action.payload,
+        ],
+      };
+
     case "DELETE_CATEGORY":
-      return { ...state, categories: state.categories.filter((c) => c.id !== action.payload) };
+      return {
+        ...state,
+        categories: state.categories.filter((c) => c.id !== action.payload),
+      };
+
     case "UPDATE_SETTINGS":
-      return { ...state, settings: { ...state.settings, ...action.payload } };
+      return {
+        ...state,
+        settings: { ...state.settings, ...action.payload },
+      };
+
     case "ADD_INVENTORY_SESSION": {
+      const exists = state.inventorySessions.some(
+        (s) => s.id === action.payload.id
+      );
+      if (exists) return state;
+
       const newSessions = [action.payload, ...state.inventorySessions];
-      const updatedProducts = state.products.map(p => {
-        const item = action.payload.items.find(i => i.productId === p.id);
-        if (item) {
-          return { ...p, stock: item.actualStock };
-        }
-        return p;
+      const varianceByProd = new Map<string, number>();
+      action.payload.items.forEach((item) => {
+        const v =
+          item.variance !== undefined && Number.isFinite(Number(item.variance))
+            ? Number(item.variance)
+            : Number(item.actualStock) - Number(item.expectedStock);
+        varianceByProd.set(item.productId, (varianceByProd.get(item.productId) || 0) + v);
       });
-      return { ...state, inventorySessions: newSessions, products: updatedProducts };
+
+      const allowNegative = Boolean(state.settings?.allowNegativeStock);
+      const updatedProducts = state.products.map((p) => {
+        const variance = varianceByProd.get(p.id);
+        if (variance === undefined) return p;
+        const nextStock = Math.round((p.stock + variance) * 1000) / 1000;
+        return {
+          ...p,
+          stock: allowNegative ? nextStock : Math.max(0, nextStock),
+        };
+      });
+      return {
+        ...state,
+        inventorySessions: newSessions,
+        products: updatedProducts,
+      };
     }
+
     case "OPEN_CASH_SESSION": {
-      const updated = [action.payload, ...state.cashSessions.filter((cs) => cs.id !== action.payload.id)];
+      const updated = [
+        action.payload,
+        ...state.cashSessions
+          .filter((cs) => cs.id !== action.payload.id)
+          .map((cs) =>
+            cs.status === "open" &&
+            (!cs.userId || cs.userId === action.payload.userId)
+              ? { ...cs, status: "closed" as const, closedAt: action.payload.openedAt }
+              : cs
+          ),
+      ];
       return {
         ...state,
         activeCashSession: action.payload,
-        cashSessions: updated
+        cashSessions: updated,
       };
     }
+
     case "CLOSE_CASH_SESSION": {
-      const exists = state.cashSessions.some((cs) => cs.id === action.payload.id);
+      const exists = state.cashSessions.some(
+        (cs) => cs.id === action.payload.id
+      );
       const updated = exists
-        ? state.cashSessions.map((cs) => cs.id === action.payload.id ? action.payload : cs)
+        ? state.cashSessions.map((cs) =>
+            cs.id === action.payload.id ? action.payload : cs
+          )
         : [action.payload, ...state.cashSessions];
       return {
         ...state,
         activeCashSession: null,
-        cashSessions: updated
+        cashSessions: updated,
       };
     }
+
     case "REALTIME_PRODUCT_UPDATE": {
       const updated = action.payload;
       return {
         ...state,
-        products: state.products.map((p) => (p.id === updated.id ? { ...p, ...updated, cost: (updated.cost !== undefined && updated.cost !== null) ? updated.cost : p.cost } : p)),
+        products: state.products.map((p) =>
+          p.id === updated.id
+            ? {
+                ...p,
+                ...updated,
+                cost:
+                  updated.cost !== undefined && updated.cost !== null
+                    ? updated.cost
+                    : p.cost,
+                units: p.units,
+              }
+            : p
+        ),
       };
     }
+
     case "REALTIME_PRODUCT_COST_UPDATE": {
       const { productId, cost } = action.payload;
       return {
         ...state,
-        products: state.products.map((p) => (p.id === productId ? { ...p, cost } : p)),
+        products: state.products.map((p) =>
+          p.id === productId ? { ...p, cost } : p
+        ),
       };
     }
+
     case "REALTIME_PRODUCT_INSERT": {
       const newProd = action.payload;
       if (state.products.some((p) => p.id === newProd.id)) {
         return {
           ...state,
-          products: state.products.map((p) => (p.id === newProd.id ? { ...p, ...newProd } : p)),
+          products: state.products.map((p) =>
+            p.id === newProd.id ? { ...p, ...newProd } : p
+          ),
         };
       }
       return {
         ...state,
-        products: [...state.products, newProd].sort((a, b) => a.name.localeCompare(b.name)),
+        products: [...state.products, newProd].sort((a, b) =>
+          a.name.localeCompare(b.name)
+        ),
       };
     }
-    case "REALTIME_PRODUCT_DELETE": {
+
+    case "REALTIME_PRODUCT_DELETE":
       return {
         ...state,
         products: state.products.filter((p) => p.id !== action.payload),
       };
-    }
+
     case "REALTIME_SALE_INSERT": {
       const sale = action.payload;
       if (state.sales.some((s) => s.id === sale.id)) return state;
+      const nextSales = [sale, ...state.sales];
+      const { activeCashSession: nextActive, cashSessions: nextSessions } =
+        refreshSessionStatsInList(
+          state.activeCashSession,
+          state.cashSessions,
+          nextSales
+        );
       return {
         ...state,
-        sales: [sale, ...state.sales],
+        sales: nextSales,
+        activeCashSession: nextActive,
+        cashSessions: nextSessions,
       };
     }
+
     case "REALTIME_SALE_UPDATE": {
       const updated = action.payload;
+      const nextSales = state.sales.map((s) =>
+        s.id === updated.id ? { ...s, ...updated } : s
+      );
+      const { activeCashSession: nextActive, cashSessions: nextSessions } =
+        refreshSessionStatsInList(
+          state.activeCashSession,
+          state.cashSessions,
+          nextSales
+        );
       return {
         ...state,
-        sales: state.sales.map((s) => (s.id === updated.id ? { ...s, ...updated } : s)),
+        sales: nextSales,
+        activeCashSession: nextActive,
+        cashSessions: nextSessions,
       };
     }
+
     case "LOAD_STATE": {
       const rawSales = action.payload.sales || [];
       const salesMap = new Map<string, Sale>();
       rawSales.forEach((s: Sale) => {
         if (s && s.id && !salesMap.has(s.id)) salesMap.set(s.id, s);
       });
-      return { 
-        ...action.payload, 
-        sales: Array.from(salesMap.values()),
-        products: [...(action.payload.products || [])].sort((a, b) => a.name.localeCompare(b.name)),
-        categories: action.payload.categories || demoCategories,
+      const dedupSales = Array.from(salesMap.values()).sort(
+        (a, b) => (Date.parse(b.createdAt) || 0) - (Date.parse(a.createdAt) || 0)
+      );
+      const nextCashSessions = action.payload.cashSessions || [];
+      const { activeCashSession: nextActive, cashSessions: syncedCashSessions } =
+        refreshSessionStatsInList(
+          action.payload.activeCashSession || null,
+          nextCashSessions,
+          dedupSales
+        );
+
+      return {
+        ...action.payload,
+        sales: dedupSales,
+        products: [...(action.payload.products || [])].sort((a, b) =>
+          a.name.localeCompare(b.name)
+        ),
+        categories:
+          action.payload.categories && action.payload.categories.length > 0
+            ? action.payload.categories
+            : defaultCategories,
         orders: action.payload.orders || [],
         cart: action.payload.cart || [],
         inventorySessions: action.payload.inventorySessions || [],
         expenses: action.payload.expenses || [],
-        cashSessions: action.payload.cashSessions || [],
-        activeCashSession: action.payload.activeCashSession || null,
+        cashSessions: syncedCashSessions,
+        activeCashSession: nextActive,
         batches: action.payload.batches || [],
         priceHistory: action.payload.priceHistory || [],
-        quotes: action.payload.quotes || []
+        quotes: action.payload.quotes || [],
       };
     }
+
     default:
       return state;
   }
 }
 
-// ─── Context ─────────────────────────────────────────────────
-interface StoreContextType {
+// ─── Context Interface ───────────────────────────────────────
+export interface StoreContextType {
   state: StoreState;
   sales: Sale[];
   products: Product[];
@@ -1164,16 +1543,44 @@ interface StoreContextType {
   cashSessions: CashSession[];
   currentSessionSales: Sale[];
   currentSessionStats: SessionStats;
-  openCashSession: (openingAmount: number, cashierName?: string) => Promise<CashSession>;
-  closeCashSession: (closingAmount: number, notes?: string) => Promise<CashSession | null>;
+  openCashSession: (
+    openingAmount: number,
+    cashierName?: string
+  ) => Promise<CashSession>;
+  closeCashSession: (
+    closingAmount: number,
+    notes?: string
+  ) => Promise<CashSession | null>;
   isOnline: boolean;
+  isInitialized: boolean;
+  networkStatus: NetworkHealthStatus;
+  networkHealth: NetworkHealthSnapshot;
   pendingSyncCount: number;
   isSyncing: boolean;
+  lastSyncedAt: string | null;
+  syncError: string | null;
+  outboxCounts: OutboxCounts;
+  outboxItems: OutboxItem[];
+  conflictItems: OutboxItem[];
+  syncLogs: SyncLogEntry[];
+  storageDiagnostics: StorageDiagnostics | null;
   syncOfflineSales: () => Promise<{ success: number; failed: number }>;
   clearOfflineSalesQueue: () => Promise<void>;
   failedOfflineSales: OfflineSaleItem[];
-  retryFailedSale: (saleId: string) => Promise<{ success: number; failed: number }>;
+  retryFailedSale: (
+    saleId: string
+  ) => Promise<{ success: number; failed: number }>;
   refreshFailedOfflineSales: () => Promise<void>;
+  triggerManualSync: (opts?: { forcePull?: boolean }) => Promise<SyncRunResult>;
+  retryOutboxOperation: (itemId: string) => Promise<void>;
+  dismissOutboxOperation: (itemId: string) => Promise<void>;
+  resolveConflict: (
+    itemId: string,
+    decision: "keep_server" | "force_local" | "dismiss"
+  ) => Promise<{ success: boolean; error?: string }>;
+  refreshOutbox: () => Promise<void>;
+  exportOfflineBackup: () => Promise<OfflineBackupPayload | null>;
+  importOfflineBackup: (rawJson: string) => Promise<BackupImportResult>;
   isRealtimeActive: boolean;
   unpaidDebts: Sale[];
   totalDebtsAmount: number;
@@ -1194,8 +1601,8 @@ interface StoreContextType {
   discrepantSessionsCount: number;
   lastClosedCashSession: CashSession | null;
   recordDebtPayment: (
-    saleId: string, 
-    amount: number, 
+    saleId: string,
+    amount: number,
     method?: "cash" | "mobile_money" | "card",
     note?: string,
     cashierName?: string
@@ -1214,735 +1621,587 @@ interface StoreContextType {
 
 const StoreContext = createContext<StoreContextType | undefined>(undefined);
 
-
 export const isSubscriptionExpiredError = (err: any): boolean => {
   if (!err) return false;
   const msg = (err.message || err.details || err.hint || "").toLowerCase();
-  const isExplicitSubGate = 
+  const isExplicitSubGate =
     msg.includes("abonnement expiré") ||
     msg.includes("sub_gate") ||
     msg.includes("subscription_ends_at") ||
     msg.includes("is_store_subscription_active");
-  const isSubscriptionP0001 = 
-    err.code === "P0001" && (
-      msg.includes("abonnement") ||
+  const isSubscriptionP0001 =
+    err.code === "P0001" &&
+    (msg.includes("abonnement") ||
       msg.includes("forfait") ||
       msg.includes("souscription") ||
       msg.includes("essai") ||
       msg.includes("expired") ||
-      msg.includes("subscription")
-    );
+      msg.includes("subscription"));
   return isExplicitSubGate || isSubscriptionP0001;
 };
 
+const EMPTY_SYNC_RESULT: SyncRunResult = {
+  processed: 0,
+  succeeded: 0,
+  failed: 0,
+  conflicts: 0,
+  authPaused: false,
+  networkOffline: false,
+  skippedLocked: false,
+  syncedEntityTypes: [],
+};
+
 export function StoreProvider({ children }: { children: ReactNode }) {
-  const { activeStore, user, role, setActiveStore } = useAuth();
-  const isAdmin = role === 'admin' || activeStore?.role === 'admin';
-  const [state, dispatchBase] = useReducer(storeReducer, initialState, getInitialStoreState);
+  const {
+    activeStore,
+    user,
+    role,
+    setActiveStore,
+    authStatus,
+    sessionExpired,
+    markSessionExpired,
+    markSessionRestored,
+  } = useAuth();
+
+  const isAdmin = role === "admin" || activeStore?.role === "admin";
+  const effectiveRole = role || activeStore?.role || "cashier";
+
+  const [state, dispatchBase] = useReducer(storeReducer, undefined, () =>
+    createCleanEmptyState(activeStore?.name)
+  );
   const [isInitialized, setIsInitialized] = useState(false);
-  const [isOnline, setIsOnline] = useState<boolean>(() => (typeof window !== "undefined" ? navigator.onLine : true));
-  const [pendingSyncCount, setPendingSyncCount] = useState<number>(0);
-  const [failedOfflineSales, setFailedOfflineSales] = useState<OfflineSaleItem[]>([]);
 
-  const refreshFailedOfflineSales = async () => {
-    if (activeStore?.id) {
-      const failed = await getFailedOfflineSales(activeStore.id);
-      setFailedOfflineSales(failed);
+  // Santé réseau réelle (probe serveur vs faux en-ligne)
+  const [networkHealth, setNetworkHealth] = useState<NetworkHealthSnapshot>(
+    () => getNetworkHealthSnapshot()
+  );
+  const isOnline = networkHealth.isReachable;
+
+  // États Outbox, conflits & journaux
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [lastSyncedAt, setLastSyncedAt] = useState<string | null>(null);
+  const [syncError, setSyncError] = useState<string | null>(null);
+  const [outboxItems, setOutboxItems] = useState<OutboxItem[]>([]);
+  const [outboxCounts, setOutboxCounts] =
+    useState<OutboxCounts>(EMPTY_OUTBOX_COUNTS);
+  const [syncLogs, setSyncLogs] = useState<SyncLogEntry[]>([]);
+  const [storageDiagnostics, setStorageDiagnostics] =
+    useState<StorageDiagnostics | null>(null);
+  const [isRealtimeActive, setIsRealtimeActive] = useState(false);
+
+  // Refs toujours à jour pour éviter toute closure obsolète
+  const stateRef = useRef<StoreState>(state);
+  const userRef = useRef(user);
+  const activeStoreRef = useRef(activeStore);
+  const effectiveRoleRef = useRef(effectiveRole);
+  const networkHealthRef = useRef(networkHealth);
+  const authStatusRef = useRef(authStatus);
+  const sessionExpiredRef = useRef(sessionExpired);
+  const lastSyncedAtRef = useRef(lastSyncedAt);
+  const isInitializedRef = useRef(isInitialized);
+  const scopeTokenRef = useRef<string | null>(null);
+  const syncInProgressRef = useRef(false);
+  const snapshotSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null
+  );
+
+  stateRef.current = state;
+  userRef.current = user;
+  activeStoreRef.current = activeStore;
+  effectiveRoleRef.current = effectiveRole;
+  networkHealthRef.current = networkHealth;
+  authStatusRef.current = authStatus;
+  sessionExpiredRef.current = sessionExpired;
+  lastSyncedAtRef.current = lastSyncedAt;
+  isInitializedRef.current = isInitialized;
+
+  // ── Rafraîchir état local outbox / conflits / diagnostics ────────────────
+  const refreshOutbox = useCallback(async () => {
+    const uid = userRef.current?.id;
+    const sid = activeStoreRef.current?.id;
+    if (!uid || !sid) {
+      setOutboxItems([]);
+      setOutboxCounts(EMPTY_OUTBOX_COUNTS);
+      setSyncLogs([]);
+      return;
     }
-  };
 
-  useEffect(() => {
-    refreshFailedOfflineSales();
-  }, [activeStore?.id]);
+    const scopeKey = makeScopeKey(uid, sid);
+    try {
+      const [items, counts, logs, diag] = await Promise.all([
+        getOutboxItems({
+          scopeKey,
+          storeId: sid,
+          includeLegacyUserForStore: true,
+        }),
+        getOutboxCounts({
+          scopeKey,
+          storeId: sid,
+          includeLegacyUserForStore: true,
+        }),
+        getSyncLogs({ storeId: sid, scopeKey, limit: 60 }),
+        getStorageDiagnostics(sid),
+      ]);
 
-  const retryFailedSale = async (saleId: string) => {
-    await retryOfflineSale(saleId);
-    await refreshFailedOfflineSales();
-    return syncOfflineSales();
-  };
-  const [isSyncing, setIsSyncing] = useState<boolean>(false);
-  const syncInProgressRef = useRef<boolean>(false);
-
-  // Synchronisation des ventes hors-ligne
-  const unpaidDebts = useMemo(() => {
-    return (state.sales || []).filter((s) => {
-      if (!s || s.paymentMethod !== "credit") return false;
-      const total = Number.isFinite(Number(s.total)) ? Number(s.total) : 0;
-      const paid = Number.isFinite(Number(s.amountPaid)) ? Number(s.amountPaid) : 0;
-      const calculatedRem = Math.max(0, total - paid);
-      const rem = (s.remainingAmount !== undefined && s.remainingAmount !== null && s.remainingAmount > 0)
-        ? Number(s.remainingAmount)
-        : calculatedRem;
-      const isPaid = (s.paymentStatus === "paid" && paid >= total) || rem <= 0;
-      return !isPaid && rem > 0;
-    });
-  }, [state.sales]);
-
-  const totalDebtsAmount = useMemo(() => {
-    return (unpaidDebts || []).reduce((sum, s) => {
-      if (!s) return sum;
-      const total = Number.isFinite(Number(s.total)) ? Number(s.total) : 0;
-      const paid = Number.isFinite(Number(s.amountPaid)) ? Number(s.amountPaid) : 0;
-      const calculatedRem = Math.max(0, total - paid);
-      const rem = (s.remainingAmount !== undefined && s.remainingAmount !== null && s.remainingAmount > 0)
-        ? Number(s.remainingAmount)
-        : calculatedRem;
-      return sum + rem;
-    }, 0);
-  }, [unpaidDebts]);
-
-  const recordDebtPayment = async (
-    saleId: string,
-    amount: number,
-    method: "cash" | "mobile_money" | "card" = "cash",
-    note?: string,
-    cashierName?: string
-  ): Promise<DebtPayment | null> => {
-    if (amount <= 0) return null;
-    const targetSale = state.sales.find((s) => s.id === saleId);
-    if (!targetSale) return null;
-
-    const currentPaid = targetSale.amountPaid || 0;
-    const currentRemaining = targetSale.remainingAmount ?? targetSale.total;
-    const paymentAmount = Math.min(amount, currentRemaining);
-
-    const newPaid = currentPaid + paymentAmount;
-    const newRemaining = Math.max(0, currentRemaining - paymentAmount);
-    const newStatus = newRemaining === 0 ? ("paid" as const) : ("partial" as const);
-    const now = new Date().toISOString();
-
-    const paymentRecord: DebtPayment = {
-      id: `rec-${Date.now()}`,
-      saleId,
-      amount: paymentAmount,
-      paymentMethod: method,
-      paidAt: now,
-      note: note || undefined,
-      cashierName: cashierName || user?.user_metadata?.full_name || state.settings?.managerName || (role === "admin" ? "Gérant" : "Caissier")
-    };
-
-    dispatchBase({
-      type: "RECORD_DEBT_PAYMENT",
-      payload: { saleId, paymentAmount, newPaid, newRemaining, newStatus, method, payment: paymentRecord },
-    });
-
-    if (typeof window !== "undefined" && activeStore?.id) {
-      try {
-        const storeKey = `boutiquepro_debt_payments_${activeStore.id}`;
-        const existingStored = JSON.parse(localStorage.getItem(storeKey) || "[]");
-        localStorage.setItem(storeKey, JSON.stringify([paymentRecord, ...existingStored]));
-      } catch (e) {
-        console.warn("Erreur stockage paiement local:", e);
+      // Vérifier qu'on n'a pas changé de boutique pendant la lecture async
+      if (
+        userRef.current?.id !== uid ||
+        activeStoreRef.current?.id !== sid
+      ) {
+        return;
       }
+
+      setOutboxItems(items);
+      setOutboxCounts(counts);
+      setSyncLogs(logs);
+      setStorageDiagnostics(diag);
+    } catch (err) {
+      console.warn("[StoreContext] Erreur lecture outbox/diagnostics:", err);
     }
+  }, []);
 
-    const resolvedCashierName =
-      cashierName ||
-      user?.user_metadata?.full_name ||
-      state.settings?.managerName ||
-      (role === "admin" ? "Gérant" : "Caissier");
+  const refreshFailedOfflineSales = useCallback(async () => {
+    await refreshOutbox();
+  }, [refreshOutbox]);
 
-    if (typeof window !== "undefined" && activeStore?.id) {
-      if (!navigator.onLine) {
-        savePendingDebtPayment({
-          id: paymentRecord.id,
-          storeId: activeStore.id,
-          saleId,
-          paymentAmount,
-          newPaid,
-          newRemaining,
-          newStatus,
-          method,
-          note: note || undefined,
-          cashierName: resolvedCashierName,
-          createdAt: now,
+  // ── Persistance immédiate du snapshot scoped `${userId}:${storeId}` ──────
+  const persistSnapshotNow = useCallback(
+    async (nextState: StoreState, serverSyncIso?: string | null) => {
+      const uid = userRef.current?.id;
+      const sid = activeStoreRef.current?.id;
+      if (!uid || !sid) return;
+      try {
+        await saveStoreSnapshot({
+          userId: uid,
+          storeId: sid,
+          role: effectiveRoleRef.current || "cashier",
+          state: nextState,
+          lastServerSyncAt: serverSyncIso ?? lastSyncedAtRef.current,
         });
-        const cnt = await getOfflineSalesCount(activeStore.id);
-        setPendingSyncCount(cnt);
-      } else {
-        let debtSynced = false;
-        try {
-          const { error: rpcErr } = await withNetworkTimeout(
-            supabase.rpc("record_debt_payment", {
-              p_store_id: activeStore.id,
-              p_sale_id: saleId,
-              p_payment_amount: paymentAmount,
-              p_payment_method: method,
-              p_note: note || null,
-              p_cashier_name: resolvedCashierName,
-            }),
-            5000
-          );
-
-          if (!rpcErr) {
-            debtSynced = true;
-          } else if (!isNetworkLikeError(rpcErr)) {
-            const { error: updErr } = await withNetworkTimeout(
-              supabase
-                .from("sales")
-                .update({
-                  amount_paid: newPaid,
-                  remaining_amount: newRemaining,
-                  payment_status: newStatus,
-                })
-                .eq("id", saleId)
-                .eq("store_id", activeStore.id),
-              5000
-            );
-            if (!updErr) {
-              debtSynced = true;
-            }
-          }
-        } catch (err) {
-          console.warn("Réseau instable sur remboursement dette, mise en file locale:", err);
-        }
-
-        if (!debtSynced) {
-          savePendingDebtPayment({
-            id: paymentRecord.id,
-            storeId: activeStore.id,
-            saleId,
-            paymentAmount,
-            newPaid,
-            newRemaining,
-            newStatus,
-            method,
-            note: note || undefined,
-            cashierName: resolvedCashierName,
-            createdAt: now,
-          });
-          const cnt = await getOfflineSalesCount(activeStore.id);
-          setPendingSyncCount(cnt);
-        }
-
-        if (debtSynced && state.activeCashSession?.id) {
-          try {
-            const updatedSalesForStats = state.sales.map((s) =>
-              s.id === saleId
-                ? {
-                    ...s,
-                    amountPaid: newPaid,
-                    remainingAmount: newRemaining,
-                    paymentStatus: newStatus,
-                    payments: [paymentRecord, ...(s.payments || [])],
-                  }
-                : s
-            );
-            const stats = getSessionStats(
-              state.activeCashSession,
-              updatedSalesForStats,
-              state.cashSessions
-            );
-            await withNetworkTimeout(
-              supabase
-                .from("cash_sessions")
-                .update({
-                  total_cash_sales: stats.cash,
-                  total_mobile_money_sales: stats.mm,
-                  total_card_sales: stats.card,
-                  total_sales_count: stats.count,
-                  total_sales_amount: stats.total,
-                  expected_amount: stats.expectedCashInDrawer,
-                })
-                .eq("id", state.activeCashSession.id),
-              4000
-            );
-          } catch (err) {
-            console.warn("Erreur crédit session caisse dette:", err);
-          }
-        }
+      } catch (err) {
+        console.warn("[StoreContext] Avertissement sauvegarde snapshot IDB:", err);
       }
-    }
+    },
+    []
+  );
 
-    return paymentRecord;
-  };
-
-  const createDirectDebt = async (data: {
-    customerName: string;
-    customerPhone?: string;
-    description: string;
-    totalAmount: number;
-    initialDeposit?: number;
-    depositPaymentMethod?: "cash" | "mobile_money" | "card";
-    dueDate?: string;
-    notes?: string;
-  }): Promise<Sale> => {
-    const deposit = Math.min(Math.max(0, data.initialDeposit || 0), data.totalAmount);
-    const remaining = Math.max(0, data.totalAmount - deposit);
-    const status = remaining === 0 ? "paid" : deposit > 0 ? "partial" : "unpaid";
-    const saleId = `debt-${Date.now()}`;
-    const now = new Date().toISOString();
-
-    const initialPayment: DebtPayment[] = deposit > 0 ? [{
-      id: `rec-${Date.now()}`,
-      saleId,
-      amount: deposit,
-      paymentMethod: data.depositPaymentMethod || "cash",
-      paidAt: now,
-      note: "Acompte initial versé à la création",
-      cashierName: user?.email?.split("@")[0] || "Caissier"
-    }] : [];
-
-    const sale: Sale = {
-      id: saleId,
-      items: [
-        {
-          productId: "custom-credit",
-          productName: data.description.trim() || "Créance / Vente à crédit",
-          quantity: 1,
-          unitPrice: data.totalAmount,
-          total: data.totalAmount
-        }
-      ],
-      subtotal: data.totalAmount,
-      tax: 0,
-      discount: 0,
-      total: data.totalAmount,
-      paymentMethod: "credit",
-      amountPaid: deposit,
-      remainingAmount: remaining,
-      paymentStatus: status,
-      customerName: data.customerName.trim(),
-      customerPhone: data.customerPhone?.trim() || undefined,
-      dueDate: data.dueDate || undefined,
-      notes: data.notes?.trim() || undefined,
-      createdAt: now,
-      userId: user?.id,
-      storeId: activeStore?.id,
-      payments: initialPayment
-    };
-
-    dispatchBase({ type: "COMPLETE_SALE", payload: sale });
-
-    if (initialPayment.length > 0 && typeof window !== "undefined" && activeStore?.id) {
-      try {
-        const storeKey = `boutiquepro_debt_payments_${activeStore.id}`;
-        const existingStored = JSON.parse(localStorage.getItem(storeKey) || "[]");
-        localStorage.setItem(storeKey, JSON.stringify([initialPayment[0], ...existingStored]));
-      } catch (e) {
-        console.warn("Erreur stockage acompte initial:", e);
-      }
-    }
-
-    if (data.customerName.trim()) {
-      const existing = (state.customers || []).find(
-        (c) => c.name.toLowerCase() === data.customerName.trim().toLowerCase()
-      );
-      if (!existing) {
-        const newCust: Customer = {
-          id: `cust-${Date.now()}`,
-          name: data.customerName.trim(),
-          phone: data.customerPhone?.trim() || "",
-          totalPurchases: data.totalAmount,
-          lastVisit: now
-        };
-        dispatchBase({ type: "ADD_CUSTOMER", payload: newCust });
-        if (typeof window !== "undefined" && navigator.onLine && activeStore?.id) {
-          supabase.from("customers").insert([{
-            id: newCust.id,
-            store_id: activeStore.id,
-            name: newCust.name,
-            phone: newCust.phone,
-            total_purchases: newCust.totalPurchases,
-            last_visit: newCust.lastVisit
-          }]).then();
-        }
-      }
-    }
-
-    if (activeStore?.id) {
-      // Sauvegarde préventive immédiate (Write-Ahead) avant tout appel réseau
-      await saveOfflineSale(activeStore.id, sale);
-
-      if (typeof window !== "undefined" && !navigator.onLine) {
-        const cnt = await getOfflineSalesCount(activeStore.id);
-        setPendingSyncCount(cnt);
-      } else {
-        try {
-          const { error: saleError } = await withNetworkTimeout(
-            supabase.rpc("create_sale", {
-              p_store_id: activeStore.id,
-              p_sale_id: sale.id,
-              p_subtotal: sale.subtotal,
-              p_tax: sale.tax,
-              p_discount: sale.discount,
-              p_total: sale.total,
-              p_payment_method: sale.paymentMethod,
-              p_customer_name: sale.customerName || null,
-              p_created_at: sale.createdAt,
-              p_items: sale.items,
-              p_customer_phone: sale.customerPhone || null,
-              p_amount_paid: sale.amountPaid,
-              p_remaining_amount: sale.remainingAmount,
-              p_payment_status: sale.paymentStatus,
-              p_due_date: sale.dueDate || null,
-            }),
-            6000
-          );
-
-          const isDuplicate = Boolean(
-            saleError &&
-              (saleError.code === "23505" ||
-                saleError.message?.toLowerCase().includes("duplicate key") ||
-                saleError.message?.toLowerCase().includes("sales_pkey"))
-          );
-
-          if (!saleError || isDuplicate) {
-            try {
-              await withNetworkTimeout(
-                supabase
-                  .from("sales")
-                  .update({
-                    customer_phone: sale.customerPhone,
-                    amount_paid: sale.amountPaid,
-                    remaining_amount: sale.remainingAmount,
-                    payment_status: sale.paymentStatus,
-                    due_date: sale.dueDate,
-                  })
-                  .eq("id", sale.id)
-                  .eq("store_id", activeStore.id),
-                4000
-              );
-            } catch {}
-            await removeOfflineSale(sale.id);
-            const cnt = await getOfflineSalesCount(activeStore.id);
-            setPendingSyncCount(cnt);
-          } else if (isNetworkLikeError(saleError)) {
-            console.warn("Réseau instable, créance conservée dans la file hors-ligne:", saleError);
-            const cnt = await getOfflineSalesCount(activeStore.id);
-            setPendingSyncCount(cnt);
-          } else {
-            console.error("Erreur RPC create_sale pour dette:", saleError);
-            await removeOfflineSale(sale.id);
-            const cnt = await getOfflineSalesCount(activeStore.id);
-            setPendingSyncCount(cnt);
-            alert(`Erreur d'enregistrement de la créance : ${saleError.message || "Erreur base de données"}`);
-            return sale;
-          }
-        } catch (err) {
-          console.warn("Basculement offline pour créance (timeout / coupure):", err);
-          const cnt = await getOfflineSalesCount(activeStore.id);
-          setPendingSyncCount(cnt);
-        }
-      }
-    }
-
-    return sale;
-  };
-
-  const syncOfflineSales = async (): Promise<{ success: number; failed: number }> => {
-    if (!activeStore?.id || !navigator.onLine || syncInProgressRef.current) {
-      return { success: 0, failed: 0 };
-    }
-    syncInProgressRef.current = true;
-    setIsSyncing(true);
-    let success = 0;
-    let failed = 0;
-
-    try {
-      // 1. Synchroniser d'abord les ouvertures / clôtures de caisse en attente
-      const pendingSessions = getPendingCashSessions(activeStore.id);
-      for (const csItem of pendingSessions) {
-        const cs = csItem.session;
-        try {
-          const { error: csErr } = await withNetworkTimeout(
-            supabase.from("cash_sessions").upsert(
-              [
-                {
-                  id: cs.id,
-                  store_id: cs.storeId || activeStore.id,
-                  user_id: cs.userId || null,
-                  cashier_name: cs.cashierName,
-                  opening_amount: cs.openingAmount,
-                  closing_amount: cs.closingAmount ?? null,
-                  expected_amount: cs.expectedAmount ?? cs.openingAmount,
-                  difference: cs.difference ?? null,
-                  total_cash_sales: cs.totalCashSales || 0,
-                  total_mobile_money_sales: cs.totalMobileMoneySales || 0,
-                  total_card_sales: cs.totalCardSales || 0,
-                  total_sales_count: cs.totalSalesCount || 0,
-                  total_sales_amount: cs.totalSalesAmount || 0,
-                  status: cs.status || "open",
-                  opened_at: cs.openedAt,
-                  closed_at: cs.closedAt || null,
-                  notes: cs.notes || null,
-                },
-              ],
-              { onConflict: "id" }
-            ),
-            6000
-          );
-          if (!csErr) {
-            removePendingCashSession(csItem.id);
-            success++;
-          } else if (isNetworkLikeError(csErr)) {
-            failed++;
-          } else {
-            console.warn("Erreur sync session caisse:", csErr);
-            failed++;
-          }
-        } catch {
-          failed++;
-        }
-      }
-
-      // 2. Récupérer et synchroniser les ventes hors-ligne
-      let pendingItems = await getOfflineSales(activeStore.id);
-      if (pendingItems.length === 0) {
-        const allPending = await getOfflineSales();
-        pendingItems = allPending.filter((i) => !i.storeId || i.storeId === activeStore.id);
-      }
-
-      const actionableItems = pendingItems.filter((i) => i.status !== "failed");
-      for (const item of actionableItems) {
-        const s = item.sale;
-        const targetStoreId = activeStore.id || item.storeId;
-        try {
-          // ÉTAPE ANTI-DOUBLON 1 : Vérifier UNIQUEMENT dans Supabase (jamais sur state.sales local !)
-          const { data: existingSale, error: checkErr } = await withNetworkTimeout(
-            supabase.from("sales").select("id").eq("id", s.id).maybeSingle(),
-            6000
-          );
-
-          if (checkErr && isNetworkLikeError(checkErr)) {
-            failed++;
-            continue;
-          }
-
-          if (!checkErr && existingSale?.id) {
-            await removeOfflineSale(s.id);
-            success++;
-            continue;
-          }
-
-          // ÉTAPE ANTI-DOUBLON 2 : Appel atomique RPC create_sale avec timeout 8s
-          const { error: saleError } = await withNetworkTimeout(
-            supabase.rpc("create_sale", {
-              p_store_id: targetStoreId,
-              p_sale_id: s.id,
-              p_subtotal: s.subtotal,
-              p_tax: s.tax,
-              p_discount: s.discount,
-              p_total: s.total,
-              p_payment_method: s.paymentMethod,
-              p_customer_name: s.customerName || null,
-              p_created_at: s.createdAt,
-              p_items: s.items,
-              p_customer_phone: s.customerPhone || null,
-              p_amount_paid: s.amountPaid ?? (s.paymentMethod === "credit" ? 0 : s.total),
-              p_remaining_amount: s.remainingAmount ?? (s.paymentMethod === "credit" ? s.total : 0),
-              p_payment_status: s.paymentStatus || (s.paymentMethod === "credit" ? "unpaid" : "paid"),
-              p_due_date: s.dueDate || null,
-            }),
-            8000
-          );
-
-          const isDuplicate = Boolean(
-            saleError &&
-              (saleError.code === "23505" ||
-                saleError.message?.toLowerCase().includes("duplicate key") ||
-                saleError.message?.toLowerCase().includes("sales_pkey") ||
-                saleError.details?.toLowerCase().includes("already exists"))
-          );
-
-          if (!saleError || isDuplicate) {
-            if (s.paymentMethod === "credit") {
-              try {
-                await withNetworkTimeout(
-                  supabase
-                    .from("sales")
-                    .update({
-                      customer_phone: s.customerPhone || null,
-                      amount_paid: s.amountPaid ?? 0,
-                      remaining_amount: s.remainingAmount ?? s.total,
-                      payment_status: s.paymentStatus || "unpaid",
-                      due_date: s.dueDate || null,
-                    })
-                    .eq("id", s.id)
-                    .eq("store_id", targetStoreId),
-                  5000
-                );
-              } catch {}
-            }
-            await removeOfflineSale(s.id);
-            success++;
-          } else if (isNetworkLikeError(saleError)) {
-            // Coupure ou lenteur réseau temporaire : conserver intacte dans la file pour le prochain cycle
-            failed++;
-          } else {
-            // Erreur SQL réelle : incrémenter retryCount sans jamais supprimer la vente
-            const currentRetries = (item.retryCount || 0) + 1;
-            const errorMsg = saleError.message || "Erreur SQL";
-            if (currentRetries >= 3) {
-              console.error(`Vente ${s.id} marquée en échec après 3 tentatives: ${errorMsg}`);
-              await updateOfflineSale({
-                ...item,
-                retryCount: currentRetries,
-                lastError: errorMsg,
-                status: "failed",
-                lastAttemptAt: new Date().toISOString(),
-              });
-            } else {
-              await updateOfflineSale({
-                ...item,
-                retryCount: currentRetries,
-                lastError: errorMsg,
-                status: "pending",
-              });
-            }
-            failed++;
-          }
-        } catch (err) {
-          console.warn("Interruption réseau sync vente:", err);
-          failed++;
-        }
-      }
-
-      // 3. Synchroniser les remboursements de dettes en attente (une fois leurs ventes créées)
-      const remainingSales = await getOfflineSales(activeStore.id);
-      const unsyncedSaleIds = new Set(remainingSales.map((rs) => rs.id));
-      const pendingDebtOps = getPendingDebtPayments(activeStore.id);
-
-      for (const dp of pendingDebtOps) {
-        if (unsyncedSaleIds.has(dp.saleId)) {
-          // Attendre que la vente à crédit parente soit synchronisée d'abord
-          continue;
-        }
-        try {
-          const { error: rpcErr } = await withNetworkTimeout(
-            supabase.rpc("record_debt_payment", {
-              p_store_id: dp.storeId || activeStore.id,
-              p_sale_id: dp.saleId,
-              p_payment_amount: dp.paymentAmount,
-              p_payment_method: dp.method,
-              p_note: dp.note || null,
-              p_cashier_name: dp.cashierName || "Caissier",
-            }),
-            6000
-          );
-
-          if (!rpcErr) {
-            removePendingDebtPayment(dp.id);
-            success++;
-          } else if (!isNetworkLikeError(rpcErr)) {
-            const { error: updErr } = await withNetworkTimeout(
-              supabase
-                .from("sales")
-                .update({
-                  amount_paid: dp.newPaid,
-                  remaining_amount: dp.newRemaining,
-                  payment_status: dp.newStatus,
-                })
-                .eq("id", dp.saleId)
-                .eq("store_id", dp.storeId || activeStore.id),
-              5000
-            );
-            if (!updErr) {
-              removePendingDebtPayment(dp.id);
-              success++;
-            } else {
-              failed++;
-            }
-          } else {
-            failed++;
-          }
-        } catch {
-          failed++;
-        }
-      }
-    } finally {
-      const remaining = await getOfflineSalesCount(activeStore.id);
-      setPendingSyncCount(remaining);
-      await refreshFailedOfflineSales();
-      syncInProgressRef.current = false;
-      setIsSyncing(false);
-    }
-
-    return { success, failed };
-  };
-
-  const clearOfflineSalesQueue = async (): Promise<void> => {
-    try {
-      if (activeStore?.id) {
-        await clearOfflineQueue(activeStore.id);
-      }
-      await clearOfflineQueue();
-      setPendingSyncCount(0);
-    } catch (e) {
-      console.warn("Erreur purge queue offline:", e);
-    }
-  };
-
-
-  // Écoute de l'état réseau (en ligne / hors-ligne) et synchronisation automatique
+  // Sauvegarde automatique réactive du snapshot & panier à chaque évolution state
   useEffect(() => {
-    if (typeof window === "undefined") return;
+    const uid = user?.id;
+    const sid = activeStore?.id;
+    if (!isInitialized || !uid || !sid) return;
 
-    setIsOnline(navigator.onLine);
+    writeScopedCart(uid, sid, state.cart);
 
-    const refreshPendingCount = async () => {
-      if (activeStore?.id) {
-        const count = await getOfflineSalesCount(activeStore.id);
-        setPendingSyncCount(count);
+    if (snapshotSaveTimerRef.current) {
+      clearTimeout(snapshotSaveTimerRef.current);
+    }
+    snapshotSaveTimerRef.current = setTimeout(() => {
+      void persistSnapshotNow(stateRef.current);
+    }, 120);
+
+    return () => {
+      if (snapshotSaveTimerRef.current) {
+        clearTimeout(snapshotSaveTimerRef.current);
+        snapshotSaveTimerRef.current = null;
       }
     };
-    refreshPendingCount();
+  }, [state, isInitialized, user?.id, activeStore?.id, persistSnapshotNow]);
 
-    const handleOnline = () => {
-      setIsOnline(true);
-      setTimeout(() => {
-        syncOfflineSales();
-      }, 500);
-    };
+  // ── Cycle de Synchronisation Complet (Push Outbox -> Pull Delta) ─────────
+  const runSyncCycle = useCallback(
+    async (opts?: {
+      forceAll?: boolean;
+      forcePull?: boolean;
+      reason?: string;
+    }): Promise<SyncRunResult> => {
+      const uid = userRef.current?.id;
+      const sid = activeStoreRef.current?.id;
+      const storeName = activeStoreRef.current?.name || "MaBoutiquePro";
+      const curRole = effectiveRoleRef.current || "cashier";
 
-    const handleOffline = () => {
-      setIsOnline(false);
-    };
-
-    const handleVisibility = () => {
-      if (document.visibilityState === "visible" && navigator.onLine) {
-        setIsOnline(true);
-        refreshPendingCount();
-        syncOfflineSales();
+      if (!uid || !sid) return EMPTY_SYNC_RESULT;
+      if (syncInProgressRef.current) return EMPTY_SYNC_RESULT;
+      if (sessionExpiredRef.current) {
+        return { ...EMPTY_SYNC_RESULT, authPaused: true };
       }
-    };
 
-    const handleFocus = () => {
-      if (navigator.onLine) {
-        refreshPendingCount();
-        syncOfflineSales();
+      if (!networkHealthRef.current.isReachable) {
+        const probe = await probeServerHealth({ timeoutMs: 3000 });
+        if (!probe.isReachable) {
+          return { ...EMPTY_SYNC_RESULT, networkOffline: true };
+        }
       }
+
+      const cycleScope = makeScopeKey(uid, sid);
+      syncInProgressRef.current = true;
+      setIsSyncing(true);
+
+      let result: SyncRunResult = EMPTY_SYNC_RESULT;
+
+      try {
+        // 1. Pousser d'abord toutes les mutations en outbox selon l'ordre causal
+        result = await processOutboxForScope({
+          userId: uid,
+          storeId: sid,
+          role: curRole,
+          forceAll: Boolean(opts?.forceAll),
+        });
+
+        if (result.authPaused) {
+          markSessionExpired();
+          setSyncError(
+            "Session expirée : vos opérations restent en sécurité localement. Reconnectez-vous pour synchroniser."
+          );
+        } else if (result.conflicts > 0) {
+          setSyncError(
+            `${result.conflicts} conflit(s) de version détecté(s). Ouvrez le centre de synchronisation pour arbitrer.`
+          );
+        } else if (result.failed > 0 && !result.networkOffline) {
+          setSyncError(
+            `${result.failed} opération(s) en échec nécessitent une vérification.`
+          );
+        } else if (!result.networkOffline) {
+          setSyncError(null);
+        }
+
+        // 2. Descendre les deltas serveur (si quelque chose a changé, sur synchro forcée, ou pull demandé)
+        const shouldPull =
+          !result.authPaused &&
+          !result.networkOffline &&
+          (opts?.forcePull ||
+            result.succeeded > 0 ||
+            opts?.reason === "network_restored" ||
+            opts?.reason === "session_restored" ||
+            opts?.reason === "manual");
+
+        if (shouldPull && scopeTokenRef.current === cycleScope) {
+          try {
+            const pulled = await pullStoreIncrementalDelta({
+              userId: uid,
+              storeId: sid,
+              storeName,
+              role: curRole,
+              currentState: stateRef.current,
+              forceFull: Boolean(opts?.forcePull),
+            });
+
+            if (scopeTokenRef.current === cycleScope) {
+              const latestCart = stateRef.current.cart || [];
+              const mergedState: StoreState = {
+                ...pulled.state,
+                cart: latestCart,
+              };
+              dispatchBase({ type: "LOAD_STATE", payload: mergedState });
+              setLastSyncedAt(pulled.serverSyncAt);
+
+              if (
+                pulled.state.settings?.name &&
+                activeStoreRef.current?.name !== pulled.state.settings.name
+              ) {
+                setActiveStore({
+                  ...activeStoreRef.current,
+                  name: pulled.state.settings.name,
+                });
+              }
+            }
+          } catch (pullErr) {
+            if (isAuthInvalidError(pullErr)) {
+              markSessionExpired();
+            } else if (!isNetworkLikeError(pullErr)) {
+              console.warn("[StoreContext] Avertissement pull delta:", pullErr);
+            }
+          }
+        }
+      } catch (err) {
+        if (isAuthInvalidError(err)) {
+          markSessionExpired();
+          result = { ...result, authPaused: true };
+        }
+      } finally {
+        await refreshOutbox();
+        syncInProgressRef.current = false;
+        setIsSyncing(false);
+      }
+
+      return result;
+    },
+    [markSessionExpired, refreshOutbox, setActiveStore]
+  );
+
+  // ── Démarrage du Moniteur Réseau + Abonnement Cross-Tab ──────────────────
+  useEffect(() => {
+    const stopMonitor = startNetworkMonitor();
+    let prevReachable = getNetworkHealthSnapshot().isReachable;
+
+    const unsubHealth = subscribeNetworkHealth((snap) => {
+      setNetworkHealth(snap);
+      if (snap.authInvalid) {
+        markSessionExpired();
+      }
+      if (!prevReachable && snap.isReachable && !snap.authInvalid) {
+        // Reconnexion réseau confirmée : synchroniser immédiatement
+        void runSyncCycle({ forceAll: false, reason: "network_restored" });
+      }
+      prevReachable = snap.isReachable;
+    });
+
+    const unsubEvents = subscribeOfflineEvents((ev) => {
+      const curStoreId = activeStoreRef.current?.id;
+      if (!curStoreId || ev.storeId !== curStoreId) return;
+
+      if (
+        ev.type === "OUTBOX_UPDATED" ||
+        ev.type === "CONFLICT_DETECTED" ||
+        ev.type === "AUTH_PAUSED"
+      ) {
+        void refreshOutbox();
+      }
+      if (ev.type === "SNAPSHOT_UPDATED") {
+        const uid = userRef.current?.id;
+        if (uid && !syncInProgressRef.current) {
+          void getStoreSnapshot(uid, curStoreId).then((snap) => {
+            if (
+              snap &&
+              userRef.current?.id === uid &&
+              activeStoreRef.current?.id === curStoreId &&
+              Date.parse(snap.cachedAt) >
+                Date.parse(lastSyncedAtRef.current || "0") + 500
+            ) {
+              dispatchBase({
+                type: "LOAD_STATE",
+                payload: {
+                  ...snap.state,
+                  cart: stateRef.current.cart || [],
+                },
+              });
+            }
+          });
+        }
+      }
+    });
+
+    return () => {
+      unsubHealth();
+      unsubEvents();
+      stopMonitor();
     };
+  }, [markSessionExpired, refreshOutbox, runSyncCycle]);
 
-    window.addEventListener("online", handleOnline);
-    window.addEventListener("offline", handleOffline);
-    window.addEventListener("focus", handleFocus);
-    document.addEventListener("visibilitychange", handleVisibility);
+  // ── Reprise automatique lorsque la session auth est restaurée ────────────
+  const prevAuthStatusRef = useRef(authStatus);
+  useEffect(() => {
+    const prev = prevAuthStatusRef.current;
+    prevAuthStatusRef.current = authStatus;
+    if (prev === "session_expired" && authStatus === "authenticated") {
+      markSessionRestored();
+      void runSyncCycle({ forceAll: true, reason: "session_restored" });
+    }
+  }, [authStatus, markSessionRestored, runSyncCycle]);
 
-    const interval = setInterval(() => {
-      refreshPendingCount();
-      if (navigator.onLine && !isSyncing) {
-        syncOfflineSales();
+  // ── Boucle légère de retry automatique backoff en arrière-plan ───────────
+  useEffect(() => {
+    if (typeof window === "undefined" || !user?.id || !activeStore?.id) return;
+
+    const timer = setInterval(() => {
+      if (
+        typeof document !== "undefined" &&
+        document.visibilityState !== "visible"
+      ) {
+        return;
+      }
+      if (
+        syncInProgressRef.current ||
+        sessionExpiredRef.current ||
+        !networkHealthRef.current.isReachable
+      ) {
+        return;
+      }
+      if (outboxCounts.pending > 0) {
+        void runSyncCycle({ forceAll: false, reason: "backoff_timer" });
       }
     }, 20000);
 
-    return () => {
-      window.removeEventListener("online", handleOnline);
-      window.removeEventListener("offline", handleOffline);
-      window.removeEventListener("focus", handleFocus);
-      document.removeEventListener("visibilitychange", handleVisibility);
-      clearInterval(interval);
-    };
-  }, [activeStore?.id, isSyncing]);
+    return () => clearInterval(timer);
+  }, [user?.id, activeStore?.id, outboxCounts.pending, runSyncCycle]);
 
-  // ─── Synchronisation Temps Réel (Supabase Realtime) ───────────
-  // Écoute strictement isolée sur filter store_id = activeStore.id
-  const [isRealtimeActive, setIsRealtimeActive] = useState<boolean>(false);
-
+  // ── Chargement initial isolé (IDB instantané -> Push -> Pull incrémental) ─
   useEffect(() => {
-    if (!activeStore?.id) return;
+    const uid = user?.id;
+    const sid = activeStore?.id;
+    const storeName = activeStore?.name || "MaBoutiquePro";
 
-    const channelName = `store_${activeStore.id}_realtime`;
+    if (!uid || !sid || sid === "default") {
+      scopeTokenRef.current = null;
+      dispatchBase({
+        type: "LOAD_STATE",
+        payload: createCleanEmptyState(),
+      });
+      setOutboxItems([]);
+      setOutboxCounts(EMPTY_OUTBOX_COUNTS);
+      setSyncLogs([]);
+      setLastSyncedAt(null);
+      setIsInitialized(true);
+      return;
+    }
+
+    const activeScope = makeScopeKey(uid, sid);
+    scopeTokenRef.current = activeScope;
+    setIsInitialized(false);
+    setSyncError(null);
+
+    // 1. Reset synchrone immédiat pour empêcher toute fuite visuelle d'une autre boutique
+    const scopedCart = readScopedCart(uid, sid);
+    dispatchBase({
+      type: "LOAD_STATE",
+      payload: {
+        ...createCleanEmptyState(storeName),
+        cart: scopedCart,
+      },
+    });
+
+    let cancelled = false;
+
+    async function bootstrapStoreScope() {
+      try {
+        // 2. Migration silencieuse v1 -> v2 + adoption éventuelle d'opérations legacy
+        await migrateLegacyOfflineStorage({
+          userId: uid!,
+          storeId: sid!,
+          role: effectiveRole,
+        });
+        await adoptLegacyOutboxForScope(uid!, sid!);
+        void requestPersistentStorage();
+
+        if (cancelled || scopeTokenRef.current !== activeScope) return;
+
+        // 3. Restauration instantanée depuis le snapshot IndexedDB isolé (`userId:storeId`)
+        const snap = await getStoreSnapshot(uid!, sid!);
+        if (cancelled || scopeTokenRef.current !== activeScope) return;
+
+        if (snap?.state) {
+          dispatchBase({
+            type: "LOAD_STATE",
+            payload: {
+              ...snap.state,
+              cart: readScopedCart(uid!, sid!),
+            },
+          });
+          setLastSyncedAt(snap.lastServerSyncAt || snap.cachedAt || null);
+        }
+
+        await refreshOutbox();
+        if (cancelled || scopeTokenRef.current !== activeScope) return;
+        setIsInitialized(true);
+
+        // 4. Sondage serveur réel : si joignable et session active, pousser puis tirer le delta
+        const health = await probeServerHealth({ timeoutMs: 3500 });
+        if (cancelled || scopeTokenRef.current !== activeScope) return;
+
+        if (!health.isReachable) {
+          return;
+        }
+        if (health.authInvalid || sessionExpiredRef.current) {
+          markSessionExpired();
+          return;
+        }
+
+        // Pousser les opérations locales en attente AVANT de tirer le serveur
+        const pushRes = await processOutboxForScope({
+          userId: uid!,
+          storeId: sid!,
+          role: effectiveRole,
+        });
+
+        if (cancelled || scopeTokenRef.current !== activeScope) return;
+
+        if (pushRes.authPaused) {
+          markSessionExpired();
+          await refreshOutbox();
+          return;
+        }
+
+        // Tirer l'état incrémental (protégé par le bouclier outbox anti-écrasement)
+        try {
+          const pulled = await pullStoreIncrementalDelta({
+            userId: uid!,
+            storeId: sid!,
+            storeName,
+            role: effectiveRole,
+            currentState: snap?.state
+              ? { ...snap.state, cart: readScopedCart(uid!, sid!) }
+              : stateRef.current,
+          });
+
+          if (cancelled || scopeTokenRef.current !== activeScope) return;
+
+          dispatchBase({
+            type: "LOAD_STATE",
+            payload: {
+              ...pulled.state,
+              cart: stateRef.current.cart || scopedCart,
+            },
+          });
+          setLastSyncedAt(pulled.serverSyncAt);
+        } catch (pullErr) {
+          if (isAuthInvalidError(pullErr)) {
+            markSessionExpired();
+          } else if (!isNetworkLikeError(pullErr)) {
+            console.warn(
+              "[StoreContext] Rafraîchissement distant partiel (cache IDB conservé):",
+              pullErr
+            );
+          }
+        }
+
+        await refreshOutbox();
+      } catch (err) {
+        console.warn("[StoreContext] Erreur initialisation boutique:", err);
+      } finally {
+        if (!cancelled && scopeTokenRef.current === activeScope) {
+          setIsInitialized(true);
+        }
+      }
+    }
+
+    void bootstrapStoreScope();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    user?.id,
+    activeStore?.id,
+    effectiveRole,
+    markSessionExpired,
+    refreshOutbox,
+  ]);
+
+  // ── Synchronisation Temps Réel (Supabase Realtime) ───────────────────────
+  useEffect(() => {
+    if (!activeStore?.id || !user?.id) return;
+
+    const uid = user.id;
+    const sid = activeStore.id;
+    const scopeKey = makeScopeKey(uid, sid);
+    const channelName = `store_${sid}_realtime`;
+
+    const hasPendingOpFor = async (entityType: string, entityId: string) => {
+      try {
+        const pendings = await getOutboxItems({
+          scopeKey,
+          storeId: sid,
+          statuses: ["pending", "syncing", "conflict", "auth_paused"],
+          includeLegacyUserForStore: true,
+        });
+        return pendings.some(
+          (p) => p.entityType === entityType && p.entityId === entityId
+        );
+      } catch {
+        return false;
+      }
+    };
+
     const channel = supabase
       .channel(channelName)
       .on(
@@ -1951,11 +2210,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           event: "*",
           schema: "public",
           table: "products",
-          filter: `store_id=eq.${activeStore.id}`,
+          filter: `store_id=eq.${sid}`,
         },
-        (payload: any) => {
+        async (payload: any) => {
           if (payload.eventType === "UPDATE") {
             const p = payload.new;
+            if (await hasPendingOpFor("product", p.id)) return;
             dispatchBase({
               type: "REALTIME_PRODUCT_UPDATE",
               payload: {
@@ -1964,15 +2224,17 @@ export function StoreProvider({ children }: { children: ReactNode }) {
                 sku: p.sku,
                 category: p.category,
                 price: Number(p.price) || 0,
-                cost: undefined as any,
+                cost: undefined as unknown as number,
                 stock: Number(p.stock) || 0,
                 minStock: Number(p.min_stock || 0),
                 image: p.image || "📦",
                 createdAt: p.created_at || new Date().toISOString(),
+                updatedAt: p.updated_at || undefined,
               },
             });
           } else if (payload.eventType === "INSERT") {
             const p = payload.new;
+            if (await hasPendingOpFor("product", p.id)) return;
             dispatchBase({
               type: "REALTIME_PRODUCT_INSERT",
               payload: {
@@ -1986,10 +2248,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
                 minStock: Number(p.min_stock || 0),
                 image: p.image || "📦",
                 createdAt: p.created_at || new Date().toISOString(),
+                updatedAt: p.updated_at || undefined,
               },
             });
           } else if (payload.eventType === "DELETE") {
             if (payload.old?.id) {
+              if (await hasPendingOpFor("product", payload.old.id)) return;
               dispatchBase({
                 type: "REALTIME_PRODUCT_DELETE",
                 payload: payload.old.id,
@@ -2004,12 +2268,13 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           event: "*",
           schema: "public",
           table: "sales",
-          filter: `store_id=eq.${activeStore.id}`,
+          filter: `store_id=eq.${sid}`,
         },
         async (payload: any) => {
           if (payload.eventType === "INSERT") {
             const s = payload.new;
             if (!s?.id) return;
+            if (stateRef.current.sales.some((ls) => ls.id === s.id)) return;
 
             try {
               const { data: items } = await supabase
@@ -2019,11 +2284,19 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
               const isCredit = s.payment_method === "credit";
               const totalAmt = Number(s.total) || 0;
-              const rawPaid = Number.isFinite(Number(s.amount_paid)) ? Number(s.amount_paid) : (isCredit ? 0 : totalAmt);
-              const calculatedRem = isCredit ? Math.max(0, totalAmt - rawPaid) : 0;
-              const rawRem = (Number.isFinite(Number(s.remaining_amount)) && Number(s.remaining_amount) > 0)
-                ? Number(s.remaining_amount)
-                : calculatedRem;
+              const rawPaid = Number.isFinite(Number(s.amount_paid))
+                ? Number(s.amount_paid)
+                : isCredit
+                  ? 0
+                  : totalAmt;
+              const calculatedRem = isCredit
+                ? Math.max(0, totalAmt - rawPaid)
+                : 0;
+              const rawRem =
+                Number.isFinite(Number(s.remaining_amount)) &&
+                Number(s.remaining_amount) > 0
+                  ? Number(s.remaining_amount)
+                  : calculatedRem;
 
               const sale: Sale = {
                 id: s.id,
@@ -2039,13 +2312,23 @@ export function StoreProvider({ children }: { children: ReactNode }) {
                 discount: Number(s.discount) || 0,
                 total: totalAmt,
                 paymentMethod: s.payment_method || "cash",
-                amountGiven: s.amount_given ? Number(s.amount_given) : undefined,
+                amountGiven: s.amount_given
+                  ? Number(s.amount_given)
+                  : undefined,
                 change: s.change ? Number(s.change) : undefined,
                 customerName: s.customer_name || undefined,
                 customerPhone: s.customer_phone || undefined,
                 amountPaid: rawPaid,
                 remainingAmount: rawRem,
-                paymentStatus: s.payment_status || (isCredit ? (rawRem === 0 ? "paid" : rawPaid > 0 ? "partial" : "unpaid") : "paid"),
+                paymentStatus:
+                  s.payment_status ||
+                  (isCredit
+                    ? rawRem === 0
+                      ? "paid"
+                      : rawPaid > 0
+                        ? "partial"
+                        : "unpaid"
+                    : "paid"),
                 dueDate: s.due_date || undefined,
                 createdAt: s.created_at || new Date().toISOString(),
                 userId: s.user_id,
@@ -2056,12 +2339,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
                 type: "REALTIME_SALE_INSERT",
                 payload: sale,
               });
-            } catch (e) {
-              console.warn("Notice Realtime sale items:", e);
-            }
+            } catch {}
           } else if (payload.eventType === "UPDATE") {
             const s = payload.new;
             if (!s?.id) return;
+            if (await hasPendingOpFor("sale", s.id)) return;
 
             dispatchBase({
               type: "REALTIME_SALE_UPDATE",
@@ -2069,8 +2351,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
                 id: s.id,
                 customerName: s.customer_name || undefined,
                 customerPhone: s.customer_phone || undefined,
-                amountPaid: Number.isFinite(Number(s.amount_paid)) ? Number(s.amount_paid) : undefined,
-                remainingAmount: Number.isFinite(Number(s.remaining_amount)) ? Number(s.remaining_amount) : undefined,
+                amountPaid: Number.isFinite(Number(s.amount_paid))
+                  ? Number(s.amount_paid)
+                  : undefined,
+                remainingAmount: Number.isFinite(Number(s.remaining_amount))
+                  ? Number(s.remaining_amount)
+                  : undefined,
                 paymentStatus: s.payment_status || undefined,
                 dueDate: s.due_date || undefined,
               },
@@ -2086,10 +2372,13 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           event: "*",
           schema: "public",
           table: "product_costs",
-          filter: `store_id=eq.${activeStore.id}`,
+          filter: `store_id=eq.${sid}`,
         },
         (payload: any) => {
-          if (payload.eventType === "INSERT" || payload.eventType === "UPDATE") {
+          if (
+            payload.eventType === "INSERT" ||
+            payload.eventType === "UPDATE"
+          ) {
             const c = payload.new;
             if (c?.product_id) {
               dispatchBase({
@@ -2110,1466 +2399,788 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     });
 
     return () => {
-      supabase.removeChannel(channel);
+      void supabase.removeChannel(channel);
       setIsRealtimeActive(false);
     };
-  }, [activeStore?.id, isAdmin]);
+  }, [activeStore?.id, user?.id, isAdmin]);
 
-  // Load from Supabase
-  useEffect(() => {
-    if (!activeStore) return;
-
-    // Immédiatement restaurer le cache spécifique à cette boutique si disponible
-    if (typeof window !== "undefined" && activeStore.id) {
-      try {
-        // Nettoyage de sécurité du vieux cache global historique
-        if (localStorage.getItem("boutiquepro-state")) {
-          localStorage.removeItem("boutiquepro-state");
-        }
-        const storeCache = localStorage.getItem(`boutiquepro-state-${activeStore.id}`);
-        if (storeCache) {
-          const parsed = JSON.parse(storeCache);
-          if (parsed && Array.isArray(parsed.products)) {
-            dispatchBase({ type: "LOAD_STATE", payload: parsed });
-          }
-        } else {
-          // Si cette boutique n'a pas encore de cache local, initialiser un espace propre
-          dispatchBase({
-            type: "LOAD_STATE",
-            payload: {
-              ...initialState,
-              categories: demoCategories,
-              settings: {
-                ...initialState.settings,
-                name: activeStore.name || "MaBoutiquePro",
-              },
-            },
-          });
-        }
-      } catch (e) {}
-    }
-
-    async function loadData() {
-      // Si l'utilisateur est hors-ligne, ne pas lancer 10 requêtes vouées à échouer
-      if (typeof window !== "undefined" && !navigator.onLine) {
-        setIsInitialized(true);
+  // ── Enregistrement Write-Ahead Outbox + Réactivité UI Immédiate ──────────
+  const dispatch = useCallback(
+    async (action: Action) => {
+      // Actions purement locales (panier / chargement / temps réel)
+      if (
+        action.type === "ADD_TO_CART" ||
+        action.type === "REMOVE_FROM_CART" ||
+        action.type === "UPDATE_CART_QTY" ||
+        action.type === "UPDATE_CART_UNIT" ||
+        action.type === "CLEAR_CART" ||
+        action.type === "LOAD_STATE" ||
+        action.type === "SET_PRICE_HISTORY" ||
+        action.type === "REALTIME_PRODUCT_UPDATE" ||
+        action.type === "REALTIME_PRODUCT_INSERT" ||
+        action.type === "REALTIME_PRODUCT_DELETE" ||
+        action.type === "REALTIME_PRODUCT_COST_UPDATE" ||
+        action.type === "REALTIME_SALE_INSERT" ||
+        action.type === "REALTIME_SALE_UPDATE"
+      ) {
+        dispatchBase(action);
         return;
       }
+
+      const uid = userRef.current?.id;
+      const sid = activeStoreRef.current?.id;
+
+      // Sans boutique active, uniquement UI locale
+      if (!uid || !sid) {
+        dispatchBase(action);
+        return;
+      }
+
+      // Capturer l'état pré-mutation pour l'historique des prix et les jetons OCC
+      const currentState = stateRef.current;
+
       try {
-        const isAdminUser = role === 'admin' || activeStore?.role === 'admin';
-
-        const [
-          { data: settings },
-          { data: categories },
-          { data: products },
-          { data: sales },
-          { data: customers },
-          { data: orders },
-          { data: inventory },
-          { data: expenses },
-          { data: cashSessionsData },
-          productCostsRes,
-          saleItemCostsRes,
-          productUnitsRes,
-          productBatchesRes,
-          productPriceHistoryRes,
-          quotesRes
-        ] = await Promise.all([
-          supabase.from('settings').select('*').eq('store_id', activeStore.id).maybeSingle(),
-          supabase.from('categories').select('*').eq('store_id', activeStore.id),
-          supabase.from('products').select('id, name, sku, category, price, stock, min_stock, image, created_at, user_id, store_id').eq('store_id', activeStore.id),
-          supabase.from('sales').select('*, items:sale_items(*)').eq('store_id', activeStore.id).order('created_at', { ascending: false }),
-          supabase.from('customers').select('*').eq('store_id', activeStore.id),
-          supabase.from('orders').select('*, items:order_items(*)').eq('store_id', activeStore.id),
-          supabase.from('inventory_sessions').select('*, items:inventory_items(*)').eq('store_id', activeStore.id),
-          supabase.from('expenses').select('*').eq('store_id', activeStore.id).order('date', { ascending: false }),
-          supabase.from('cash_sessions').select('*').eq('store_id', activeStore.id).order('opened_at', { ascending: false }),
-          // Charger product_costs UNIQUEMENT pour l'admin (ne jamais interroger pour le caissier)
-          isAdminUser
-            ? supabase.from('product_costs').select('product_id, cost').eq('store_id', activeStore.id)
-            : Promise.resolve({ data: [] as any[] }),
-          // Charger sale_item_costs UNIQUEMENT pour l'admin (coûts d'achat figés au moment de la vente)
-          isAdminUser
-            ? supabase.from('sale_item_costs').select('sale_item_id, sale_id, unit_cost, is_estimated').eq('store_id', activeStore.id)
-            : Promise.resolve({ data: [] as any[] }),
-          // Charger product_units pour tous les membres (nécessaire au scan caisse et gestion produits)
-          supabase.from('product_units').select('*').eq('store_id', activeStore.id),
-          supabase.from('product_batches').select('*').eq('store_id', activeStore.id).order('expiry_date', { ascending: true }),
-          supabase.from('product_price_history').select('*').eq('store_id', activeStore.id).order('created_at', { ascending: false }),
-          supabase.from('quotes').select('*, items:quote_items(*)').eq('store_id', activeStore.id).order('created_at', { ascending: false })
-        ]);
-
-        const productUnitsData = productUnitsRes?.data;
-        const unitsByProduct = new Map<string, ProductUnit[]>();
-        if (Array.isArray(productUnitsData)) {
-          productUnitsData.forEach((u: any) => {
-            const list = unitsByProduct.get(u.product_id) || [];
-            list.push({
-              id: u.id,
-              storeId: u.store_id,
-              productId: u.product_id,
-              name: u.name,
-              multiplier: Number(u.multiplier) || 1,
-              price: u.price !== null && u.price !== undefined ? Number(u.price) : null,
-              cost: u.cost !== null && u.cost !== undefined ? Number(u.cost) : null,
-              barcode: u.barcode || null,
-              isReference: Boolean(u.is_reference),
-              createdAt: u.created_at,
-            });
-            unitsByProduct.set(u.product_id, list);
-          });
-        }
-
-        const productCostsData = productCostsRes?.data;
-        const saleItemCostsData = (saleItemCostsRes as any)?.data;
-
-        const costsMap = new Map<string, number>();
-        if (isAdminUser && Array.isArray(productCostsData)) {
-          productCostsData.forEach((c: any) => {
-            costsMap.set(c.product_id, Number(c.cost) || 0);
-          });
-        }
-
-        const frozenCostsMap = new Map<string, { unit_cost: number; is_estimated: boolean }>();
-        if (isAdminUser && Array.isArray(saleItemCostsData)) {
-          saleItemCostsData.forEach((sc: any) => {
-            frozenCostsMap.set(sc.sale_item_id, {
-              unit_cost: Number(sc.unit_cost) || 0,
-              is_estimated: Boolean(sc.is_estimated)
-            });
-          });
-        }
-
-        const batchesData = (productBatchesRes as any)?.data;
-        const loadedBatches: ProductBatch[] = Array.isArray(batchesData)
-          ? batchesData.map((b: any) => ({
-              id: b.id,
-              storeId: b.store_id,
-              productId: b.product_id,
-              batchNumber: b.batch_number,
-              expiryDate: b.expiry_date,
-              initialQuantity: Number(b.initial_quantity) || 0,
-              currentQuantity: Number(b.current_quantity) || 0,
-              orderId: b.order_id || undefined,
-              createdAt: b.created_at,
-              updatedAt: b.updated_at
-            }))
-          : [];
-
-        const priceHistoryData = (productPriceHistoryRes as any)?.data;
-        const loadedPriceHistory: PriceHistoryEntry[] = Array.isArray(priceHistoryData)
-          ? priceHistoryData.map((h: any) => ({
-              id: h.id,
-              storeId: h.store_id,
-              productId: h.product_id,
-              priceType: h.price_type,
-              unitName: h.unit_name || null,
-              oldPrice: Number(h.old_price) || 0,
-              newPrice: Number(h.new_price) || 0,
-              changeReason: h.change_reason || null,
-              userId: h.user_id || null,
-              userName: h.user_name || null,
-              createdAt: h.created_at
-            }))
-          : [];
-
-        const quotesData = (quotesRes as any)?.data;
-        const loadedQuotes: Quote[] = Array.isArray(quotesData)
-          ? quotesData.map((q: any) => ({
-              id: q.id,
-              storeId: q.store_id,
-              userId: q.user_id,
-              quoteNumber: q.quote_number,
-              customerName: q.customer_name,
-              customerPhone: q.customer_phone,
-              customerAddress: q.customer_address,
-              subtotal: Number(q.subtotal) || 0,
-              tax: Number(q.tax) || 0,
-              discount: Number(q.discount) || 0,
-              total: Number(q.total) || 0,
-              status: q.status || "draft",
-              validityDate: q.validity_date,
-              notes: q.notes,
-              saleId: q.sale_id,
-              createdAt: q.created_at,
-              updatedAt: q.updated_at,
-              items: Array.isArray(q.items)
-                ? q.items.map((qi: any) => ({
-                    id: qi.id,
-                    quoteId: qi.quote_id,
-                    productId: qi.product_id,
-                    productName: qi.product_name,
-                    quantity: Number(qi.quantity) || 1,
-                    unitPrice: Number(qi.unit_price) || 0,
-                    total: Number(qi.total) || 0,
-                    unitName: qi.unit_name || "Unité",
-                    unitMultiplier: Number(qi.unit_multiplier) || 1,
-                  }))
-                : []
-            }))
-          : [];
-
-        let cachedSettings: any = null;
-        if (typeof window !== "undefined" && activeStore?.id) {
-          try {
-            const storeCache = localStorage.getItem(`boutiquepro-state-${activeStore.id}`);
-            if (storeCache) {
-              const parsed = JSON.parse(storeCache);
-              if (parsed && parsed.settings) {
-                cachedSettings = parsed.settings;
-              }
-            }
-          } catch (e) {}
-        }
-
-        const defaultSettings = {
-          name: activeStore?.name || "MaBoutiquePro",
-          logo: "/logo.png",
-          currency: "FCFA",
-          taxRate: 0,
-          city: "Lomé",
-          country: "Togo",
-          email: "contact@maboutiquepro.app",
-          phone: "+228 98 37 61 01",
-          managerName: "Fr Fidèle"
-        };
-
-        const payload: any = {
-          sales: [],
-          inventorySessions: [],
-          orders: [],
-          expenses: [],
-          customers: [],
-          cart: [],
-          categories: demoCategories,
-          products: [],
-          batches: loadedBatches,
-          priceHistory: loadedPriceHistory,
-          quotes: loadedQuotes,
-          settings: { ...defaultSettings, ...(cachedSettings || {}) }
-        };
-
-        if (settings) {
-          payload.settings = {
-            name: activeStore?.name || settings.name || cachedSettings?.name || defaultSettings.name,
-            currency: settings.currency || cachedSettings?.currency || defaultSettings.currency,
-            taxRate: Number(settings.tax_rate) !== undefined && settings.tax_rate !== null ? Number(settings.tax_rate) : (cachedSettings?.taxRate || 0),
-            logo: settings.logo || cachedSettings?.logo || defaultSettings.logo,
-            city: settings.city || cachedSettings?.city || defaultSettings.city,
-            country: settings.country || cachedSettings?.country || defaultSettings.country,
-            email: settings.email || cachedSettings?.email || defaultSettings.email,
-            phone: settings.phone || cachedSettings?.phone || defaultSettings.phone,
-            managerName: (settings as any).manager_name || cachedSettings?.managerName || defaultSettings.managerName,
-            allowNegativeStock: (settings as any).allow_negative_stock !== undefined && (settings as any).allow_negative_stock !== null
-              ? Boolean((settings as any).allow_negative_stock)
-              : (cachedSettings?.allowNegativeStock ?? false)
-          };
-        } else if (cachedSettings) {
-          payload.settings = {
-            ...defaultSettings,
-            ...cachedSettings,
-            name: activeStore?.name || cachedSettings.name || defaultSettings.name,
-            allowNegativeStock: cachedSettings.allowNegativeStock ?? false
-          };
-        }
-        if (categories && categories.length > 0) payload.categories = categories;
-        if (products) {
-          payload.products = products.map((p: any) => {
-            const pUnits = unitsByProduct.get(p.id) || [];
-            const refUnit = pUnits.find((u: any) => u.isReference);
-            return {
-              id: p.id,
-              name: p.name,
-              sku: p.sku,
-              category: p.category,
-              price: Number(p.price) || 0,
-              cost: isAdminUser ? (costsMap.get(p.id) ?? 0) : 0,
-              stock: Number(p.stock) || 0,
-              minStock: Number(p.min_stock ?? p.minStock ?? 5),
-              image: p.image || "📦",
-              createdAt: p.created_at || new Date().toISOString(),
-              userId: p.user_id,
-              storeId: p.store_id,
-              unit: refUnit ? refUnit.name : "Pièce / Unité",
-              units: pUnits,
+        switch (action.type) {
+          case "COMPLETE_SALE": {
+            const activeSessionId = currentState.activeCashSession?.id || null;
+            const salePayload: Sale = {
+              ...action.payload,
+              userId: action.payload.userId || uid,
+              storeId: action.payload.storeId || sid,
+              sessionId: action.payload.sessionId ?? activeSessionId,
             };
-          });
-        }
-        let localStoredPayments: DebtPayment[] = [];
-        if (typeof window !== "undefined" && activeStore?.id) {
-          try {
-            localStoredPayments = JSON.parse(localStorage.getItem(`boutiquepro_debt_payments_${activeStore.id}`) || "[]");
-          } catch (e) {}
-        }
 
-        if (sales) {
-          payload.sales = sales.map((s: any) => {
-            const isCreditSale = s.payment_method === 'credit';
-            const total = Number.isFinite(Number(s.total)) ? Number(s.total) : 0;
-            const salePayments = localStoredPayments.filter((p) => p.saleId === s.id);
-            const paymentsSum = salePayments.reduce((sum, p) => sum + (Number.isFinite(Number(p.amount)) ? Number(p.amount) : 0), 0);
+            // 1. UI instantanée (< 10 ms)
+            dispatchBase({ type: "COMPLETE_SALE", payload: salePayload });
 
-            const rawPaid = (s.amount_paid !== null && s.amount_paid !== undefined && Number.isFinite(Number(s.amount_paid)))
-              ? Number(s.amount_paid)
-              : null;
-            const rawRemaining = (s.remaining_amount !== null && s.remaining_amount !== undefined && Number.isFinite(Number(s.remaining_amount)))
-              ? Number(s.remaining_amount)
-              : null;
+            // 2. Write-Ahead dans IndexedDB Outbox avant tout appel réseau
+            await enqueueOutboxOperation({
+              id: `sale:${salePayload.id}`,
+              idempotencyKey: salePayload.id,
+              userId: uid,
+              storeId: sid,
+              opType: "COMPLETE_SALE",
+              entityType: "sale",
+              entityId: salePayload.id,
+              payload: salePayload,
+              createdAt: salePayload.createdAt || new Date().toISOString(),
+            });
+            break;
+          }
 
-            let amountPaid = rawPaid !== null ? rawPaid : (isCreditSale ? paymentsSum : total);
-            if (isCreditSale && paymentsSum > amountPaid) {
-              amountPaid = paymentsSum;
-            }
-            if (!Number.isFinite(amountPaid)) amountPaid = isCreditSale ? paymentsSum : total;
-
-            let remainingAmount = rawRemaining !== null ? rawRemaining : (isCreditSale ? Math.max(0, total - amountPaid) : 0);
-            if (isCreditSale && rawRemaining === null) {
-              remainingAmount = Math.max(0, total - amountPaid);
-            }
-            if (!Number.isFinite(remainingAmount)) {
-              remainingAmount = isCreditSale ? Math.max(0, total - amountPaid) : 0;
-            }
-
-            // PROTECTION CRITIQUE : Si c'est une vente à crédit et total > amountPaid,
-            // la dette ne peut jamais être 0 ou 'paid' par erreur de valeur par défaut SQL
-            if (isCreditSale && total > amountPaid && (remainingAmount <= 0 || s.payment_status === 'paid')) {
-              remainingAmount = Math.max(0, total - amountPaid);
-            }
-
-            const paymentStatus = isCreditSale
-              ? (remainingAmount === 0 ? 'paid' : amountPaid > 0 ? 'partial' : 'unpaid')
-              : (s.payment_status || 'paid');
-
-            // Réparation en arrière-plan Supabase si nécessaire
-            if (isCreditSale && (s.remaining_amount !== remainingAmount || s.payment_status !== paymentStatus || s.amount_paid !== amountPaid)) {
-              if (activeStore?.id) {
-                supabase
-                  .from("sales")
-                  .update({
-                    amount_paid: amountPaid,
-                    remaining_amount: remainingAmount,
-                    payment_status: paymentStatus
-                  })
-                  .eq("id", s.id)
-                  .eq("store_id", activeStore.id)
-                  .then(() => {}, () => {});
-              }
-            }
-
-            const resolvedPayments = salePayments.length > 0 ? salePayments : (
-              (isCreditSale && amountPaid > 0) ? [{
-                id: `init-${s.id}`,
-                saleId: s.id,
-                amount: amountPaid,
-                paymentMethod: "cash" as const,
-                paidAt: s.created_at,
-                note: "Acompte initial à la caisse",
-                cashierName: "Caissier"
-              }] : []
+          case "CONVERT_QUOTE_TO_SALE": {
+            const { quoteId, sale } = action.payload;
+            const activeSessionId = currentState.activeCashSession?.id || null;
+            const enrichedSale: Sale = {
+              ...sale,
+              userId: sale.userId || uid,
+              storeId: sale.storeId || sid,
+              sessionId: sale.sessionId ?? activeSessionId,
+            };
+            const existingQuote = (currentState.quotes || []).find(
+              (q) => q.id === quoteId
             );
 
-            return {
-              ...s,
-              paymentMethod: s.payment_method || "cash",
-              customerName: s.customer_name,
-              customerPhone: s.customer_phone,
-              amountPaid,
-              remainingAmount,
-              paymentStatus,
-              dueDate: s.due_date,
-              createdAt: s.created_at,
-              payments: resolvedPayments,
-              items: s.items ? s.items.map((i: any) => {
-                const frozen = frozenCostsMap.get(i.id);
-                const unitCost = frozen !== undefined
-                  ? Number(frozen.unit_cost)
-                  : (costsMap.get(i.product_id) ?? 0);
-                return {
-                  ...i,
-                  productId: i.product_id,
-                  productName: i.product_name,
-                  unitPrice: Number(i.unit_price) || 0,
-                  total: Number(i.total) || 0,
-                  unitName: i.unit_name || 'Unité',
-                  unitMultiplier: Number(i.unit_multiplier) || 1,
-                  quantityReference: (i.quantity_reference !== undefined && i.quantity_reference !== null && Number(i.quantity_reference) > 0)
-                    ? Number(i.quantity_reference)
-                    : (Number(i.quantity) * (Number(i.unit_multiplier) || 1)),
-                  cost: isAdminUser ? unitCost : undefined,
-                  isEstimated: isAdminUser && frozen ? frozen.is_estimated : undefined,
-                  batchId: i.batch_id || undefined,
-                  batchNumber: i.batch_number || undefined,
-                  expiryDate: i.expiry_date || undefined,
-                };
-              }) : []
+            dispatchBase({
+              type: "CONVERT_QUOTE_TO_SALE",
+              payload: { quoteId, sale: enrichedSale },
+            });
+
+            await enqueueOutboxOperation({
+              id: `quote_convert:${quoteId}`,
+              idempotencyKey: `quote_convert:${quoteId}:${enrichedSale.id}`,
+              userId: uid,
+              storeId: sid,
+              opType: "CONVERT_QUOTE_TO_SALE",
+              entityType: "quote",
+              entityId: quoteId,
+              payload: { quoteId, sale: enrichedSale },
+              expectedUpdatedAt: existingQuote?.updatedAt || null,
+            });
+            break;
+          }
+
+          case "ADD_PRODUCT": {
+            const p: Product = {
+              ...action.payload,
+              storeId: action.payload.storeId || sid,
+              userId: action.payload.userId || uid,
             };
-          });
+            dispatchBase({ type: "ADD_PRODUCT", payload: p });
+            await enqueueOutboxOperation({
+              userId: uid,
+              storeId: sid,
+              opType: "ADD_PRODUCT",
+              entityType: "product",
+              entityId: p.id,
+              payload: p,
+              createdAt: p.createdAt || new Date().toISOString(),
+            });
+            break;
+          }
 
-          // Fusion sans perte : réinjecter les ventes hors-ligne non encore synchronisées et les paiements de dettes en attente
-          if (typeof window !== "undefined" && activeStore?.id) {
-            try {
-              const pendingOfflineItems = await getOfflineSales(activeStore.id);
-              const existingIds = new Set((payload.sales || []).map((ps: Sale) => ps.id));
-              const unsyncedSales = pendingOfflineItems
-                .filter((item) => item?.sale?.id && !existingIds.has(item.sale.id))
-                .map((item) => item.sale);
+          case "UPDATE_PRODUCT": {
+            const p = action.payload;
+            const oldProd = currentState.products.find(
+              (item) => item.id === p.id
+            );
+            const expectedUpdatedAt = oldProd?.updatedAt || null;
 
-              if (unsyncedSales.length > 0) {
-                payload.sales = [...unsyncedSales, ...(payload.sales || [])].sort(
-                  (a: Sale, b: Sale) =>
-                    new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-                );
+            dispatchBase({ type: "UPDATE_PRODUCT", payload: p });
 
-                // Ajuster le stock affiché pour refléter les ventes hors-ligne pas encore décomptées dans Supabase
-                if (Array.isArray(payload.products)) {
-                  const stockDeductions = new Map<string, number>();
-                  unsyncedSales.forEach((us) => {
-                    (us.items || []).forEach((it) => {
-                      const refQty =
-                        it.quantityReference !== undefined &&
-                        it.quantityReference !== null &&
-                        Number(it.quantityReference) > 0
-                          ? Number(it.quantityReference)
-                          : Number(it.quantity) * (Number(it.unitMultiplier) || 1);
-                      stockDeductions.set(
-                        it.productId,
-                        (stockDeductions.get(it.productId) || 0) + refQty
-                      );
+            await enqueueOutboxOperation({
+              userId: uid,
+              storeId: sid,
+              opType: "UPDATE_PRODUCT",
+              entityType: "product",
+              entityId: p.id,
+              payload: p,
+              expectedUpdatedAt,
+            });
+
+            // Générer et empiler les changements d'historique de prix en Outbox
+            if (oldProd) {
+              const nowIso = new Date().toISOString();
+              const authorName =
+                userRef.current?.user_metadata?.full_name ||
+                userRef.current?.email ||
+                "Admin";
+              const entries: PriceHistoryEntry[] = [];
+
+              if (Number(p.price) !== Number(oldProd.price)) {
+                entries.push({
+                  id: generateClientUUID(),
+                  storeId: sid,
+                  productId: p.id,
+                  priceType: "selling",
+                  oldPrice: Number(oldProd.price),
+                  newPrice: Number(p.price),
+                  changeReason: "Ajustement du prix de vente",
+                  userId: uid,
+                  userName: authorName,
+                  createdAt: nowIso,
+                });
+              }
+
+              if (
+                p.cost !== undefined &&
+                oldProd.cost !== undefined &&
+                Number(p.cost) !== Number(oldProd.cost)
+              ) {
+                entries.push({
+                  id: generateClientUUID(),
+                  storeId: sid,
+                  productId: p.id,
+                  priceType: "cost",
+                  oldPrice: Number(oldProd.cost),
+                  newPrice: Number(p.cost),
+                  changeReason: "Ajustement du coût d'achat",
+                  userId: uid,
+                  userName: authorName,
+                  createdAt: nowIso,
+                });
+              }
+
+              if (Array.isArray(p.units) && Array.isArray(oldProd.units)) {
+                for (const u of p.units) {
+                  const oldU = oldProd.units.find(
+                    (ou) => ou.name === u.name || ou.id === u.id
+                  );
+                  if (
+                    oldU &&
+                    Number(u.price || 0) > 0 &&
+                    Number(oldU.price || 0) > 0 &&
+                    Number(u.price) !== Number(oldU.price)
+                  ) {
+                    entries.push({
+                      id: generateClientUUID(),
+                      storeId: sid,
+                      productId: p.id,
+                      priceType: "unit_selling",
+                      unitName: u.name,
+                      oldPrice: Number(oldU.price),
+                      newPrice: Number(u.price),
+                      changeReason: `Ajustement prix unité [${u.name}]`,
+                      userId: uid,
+                      userName: authorName,
+                      createdAt: nowIso,
                     });
-                  });
-                  payload.products = payload.products.map((prod: Product) => {
-                    const deduct = stockDeductions.get(prod.id);
-                    if (!deduct) return prod;
-                    return { ...prod, stock: Math.max(0, prod.stock - deduct) };
-                  });
+                  }
                 }
               }
 
-              const pendingDebts = getPendingDebtPayments(activeStore.id);
-              if (pendingDebts.length > 0 && Array.isArray(payload.sales)) {
-                payload.sales = payload.sales.map((ps: Sale) => {
-                  const matchingOps = pendingDebts.filter((op) => op.saleId === ps.id);
-                  if (matchingOps.length === 0) return ps;
-                  const latestOp = matchingOps[matchingOps.length - 1];
-                  if (latestOp.newPaid > (ps.amountPaid || 0)) {
-                    return {
-                      ...ps,
-                      amountPaid: latestOp.newPaid,
-                      remainingAmount: latestOp.newRemaining,
-                      paymentStatus: latestOp.newStatus,
-                    };
-                  }
-                  return ps;
+              for (const entry of entries) {
+                dispatchBase({
+                  type: "ADD_PRICE_HISTORY_ENTRY",
+                  payload: entry,
+                });
+                await enqueueOutboxOperation({
+                  userId: uid,
+                  storeId: sid,
+                  opType: "ADD_PRICE_HISTORY_ENTRY",
+                  entityType: "price_history",
+                  entityId: entry.id,
+                  payload: entry,
+                  createdAt: entry.createdAt,
                 });
               }
-            } catch (mergeErr) {
-              console.warn("Avertissement fusion file hors-ligne dans loadData:", mergeErr);
             }
+            break;
           }
-        }
-        if (customers) {
-          payload.customers = customers.map((c: any) => ({
-            ...c,
-            totalPurchases: c.total_purchases,
-            lastVisit: c.last_visit
-          }));
-        }
-        if (orders) {
-          payload.orders = orders.map((o: any) => ({
-            ...o,
-            supplierName: o.supplier_name,
-            totalCost: o.total_cost,
-            createdAt: o.created_at,
-            expectedAt: o.expected_at,
-            items: o.items ? o.items.map((i: any) => ({
-              ...i,
-              productId: i.product_id,
-              productName: i.product_name,
-              costPrice: Number(i.cost_price) || 0,
-              quantity: Number(i.quantity) || 1,
-              total: Number(i.total) || 0,
-              unitName: i.unit_name || 'Unité',
-              unitMultiplier: Number(i.unit_multiplier) || 1,
-              quantityReference: (i.quantity_reference !== undefined && i.quantity_reference !== null && Number(i.quantity_reference) > 0)
-                ? Number(i.quantity_reference)
-                : (Number(i.quantity) * (Number(i.unit_multiplier) || 1)),
-            })) : []
-          }));
-        }
-        if (inventory) {
-          payload.inventorySessions = inventory.map((inv: any) => ({
-            ...inv,
-            totalVarianceValue: inv.total_variance_value,
-            items: inv.items ? inv.items.map((i: any) => ({
-              ...i,
-              productId: i.product_id,
-              productName: i.product_name,
-              expectedStock: i.expected_stock,
-              actualStock: i.actual_stock,
-              costPrice: i.cost_price
-            })) : []
-          }));
-        }
-        if (expenses) {
-          payload.expenses = expenses.map((e: any) => ({
-             ...e,
-             createdAt: e.created_at || e.createdAt || e.date
-          }));
-        }
-        // 1. Lire d'abord le cache local pour la boutique active (résilience multi-boutique absolue)
-        let localSessions: CashSession[] = [];
-        if (typeof window !== "undefined" && activeStore?.id) {
-          try {
-            const raw = localStorage.getItem(`boutiquepro_cash_sessions_${activeStore.id}`);
-            if (raw) localSessions = JSON.parse(raw);
-          } catch (e) {}
-        }
 
-        const supabaseSessions: CashSession[] = (cashSessionsData || []).map((cs: any) => ({
-          id: cs.id,
-          storeId: cs.store_id,
-          userId: cs.user_id,
-          cashierName: cs.cashier_name,
-          openingAmount: Number(cs.opening_amount) || 0,
-          closingAmount: cs.closing_amount !== null && cs.closing_amount !== undefined ? Number(cs.closing_amount) : undefined,
-          expectedAmount: cs.expected_amount !== null && cs.expected_amount !== undefined ? Number(cs.expected_amount) : undefined,
-          difference: cs.difference !== null && cs.difference !== undefined ? Number(cs.difference) : undefined,
-          totalCashSales: Number(cs.total_cash_sales) || 0,
-          totalMobileMoneySales: Number(cs.total_mobile_money_sales) || 0,
-          totalCardSales: Number(cs.total_card_sales) || 0,
-          totalSalesCount: Number(cs.total_sales_count) || 0,
-          totalSalesAmount: Number(cs.total_sales_amount) || 0,
-          openedAt: cs.opened_at,
-          closedAt: cs.closed_at,
-          status: cs.status || "open",
-          notes: cs.notes
-        }));
+          case "DELETE_PRODUCT": {
+            dispatchBase(action);
+            await enqueueOutboxOperation({
+              userId: uid,
+              storeId: sid,
+              opType: "DELETE_PRODUCT",
+              entityType: "product",
+              entityId: action.payload,
+              payload: { id: action.payload },
+            });
+            break;
+          }
 
-        // Fusion sans perte : Supabase consolidé par les données locales
-        const sessionMap = new Map<string, CashSession>();
-        localSessions.forEach((s) => { if (s && s.id) sessionMap.set(s.id, s); });
-        supabaseSessions.forEach((s) => { if (s && s.id) sessionMap.set(s.id, s); });
-
-        const mergedSessions = Array.from(sessionMap.values()).sort(
-          (a, b) => new Date(b.openedAt).getTime() - new Date(a.openedAt).getTime()
-        );
-
-        if (typeof window !== "undefined" && activeStore?.id && mergedSessions.length > 0) {
-          try {
-            localStorage.setItem(`boutiquepro_cash_sessions_${activeStore.id}`, JSON.stringify(mergedSessions));
-          } catch (e) {}
-        }
-
-        payload.cashSessions = mergedSessions;
-        const currentOpen = mergedSessions.find((cs: any) => cs.status === "open");
-        if (currentOpen) {
-          const stats = getSessionStats(currentOpen, payload.sales, mergedSessions);
-
-          currentOpen.totalCashSales = stats.cash;
-          currentOpen.totalMobileMoneySales = stats.mm;
-          currentOpen.totalCardSales = stats.card;
-          currentOpen.totalSalesCount = stats.count;
-          currentOpen.totalSalesAmount = stats.total;
-          currentOpen.expectedAmount = stats.expectedCashInDrawer;
-
-          payload.activeCashSession = currentOpen;
-        } else {
-          payload.activeCashSession = null;
-        }
-
-        // Restore Cart from localStorage per-store (cart shouldn't be in DB)
-        const saved = typeof window !== "undefined" && activeStore?.id ? localStorage.getItem(`boutiquepro-state-${activeStore.id}`) : null;
-        if (saved) {
-          try {
-            const localData = JSON.parse(saved);
-            if (Array.isArray(localData?.cart)) {
-              payload.cart = localData.cart.filter((c: any) => c && c.product && typeof c.product.price === "number");
+          case "BATCH_ADD_PRODUCTS": {
+            dispatchBase(action);
+            if (action.payload.length > 0) {
+              await enqueueOutboxOperation({
+                userId: uid,
+                storeId: sid,
+                opType: "BATCH_ADD_PRODUCTS",
+                entityType: "product",
+                entityId: `batch_${generateClientUUID()}`,
+                payload: action.payload,
+              });
             }
-          } catch {
-            payload.cart = [];
+            break;
           }
+
+          case "ADD_CUSTOMER": {
+            dispatchBase(action);
+            await enqueueOutboxOperation({
+              userId: uid,
+              storeId: sid,
+              opType: "ADD_CUSTOMER",
+              entityType: "customer",
+              entityId: action.payload.id,
+              payload: action.payload,
+            });
+            break;
+          }
+
+          case "ADD_CATEGORY": {
+            dispatchBase(action);
+            await enqueueOutboxOperation({
+              userId: uid,
+              storeId: sid,
+              opType: "ADD_CATEGORY",
+              entityType: "category",
+              entityId: action.payload.id,
+              payload: action.payload,
+            });
+            break;
+          }
+
+          case "DELETE_CATEGORY": {
+            dispatchBase(action);
+            await enqueueOutboxOperation({
+              userId: uid,
+              storeId: sid,
+              opType: "DELETE_CATEGORY",
+              entityType: "category",
+              entityId: action.payload,
+              payload: { id: action.payload },
+            });
+            break;
+          }
+
+          case "ADD_BATCH": {
+            dispatchBase(action);
+            await enqueueOutboxOperation({
+              userId: uid,
+              storeId: sid,
+              opType: "ADD_BATCH",
+              entityType: "product_batch",
+              entityId: action.payload.id,
+              payload: action.payload,
+            });
+            break;
+          }
+
+          case "DELETE_BATCH": {
+            dispatchBase(action);
+            await enqueueOutboxOperation({
+              userId: uid,
+              storeId: sid,
+              opType: "DELETE_BATCH",
+              entityType: "product_batch",
+              entityId: action.payload,
+              payload: { id: action.payload },
+            });
+            break;
+          }
+
+          case "ADD_PRICE_HISTORY_ENTRY": {
+            dispatchBase(action);
+            await enqueueOutboxOperation({
+              userId: uid,
+              storeId: sid,
+              opType: "ADD_PRICE_HISTORY_ENTRY",
+              entityType: "price_history",
+              entityId: action.payload.id,
+              payload: action.payload,
+            });
+            break;
+          }
+
+          case "ADD_EXPENSE": {
+            dispatchBase(action);
+            await enqueueOutboxOperation({
+              userId: uid,
+              storeId: sid,
+              opType: "ADD_EXPENSE",
+              entityType: "expense",
+              entityId: action.payload.id,
+              payload: action.payload,
+            });
+            break;
+          }
+
+          case "UPDATE_EXPENSE": {
+            const oldExp = currentState.expenses.find(
+              (e) => e.id === action.payload.id
+            );
+            dispatchBase(action);
+            await enqueueOutboxOperation({
+              userId: uid,
+              storeId: sid,
+              opType: "UPDATE_EXPENSE",
+              entityType: "expense",
+              entityId: action.payload.id,
+              payload: action.payload,
+              expectedUpdatedAt: oldExp?.updatedAt || null,
+            });
+            break;
+          }
+
+          case "DELETE_EXPENSE": {
+            dispatchBase(action);
+            await enqueueOutboxOperation({
+              userId: uid,
+              storeId: sid,
+              opType: "DELETE_EXPENSE",
+              entityType: "expense",
+              entityId: action.payload,
+              payload: { id: action.payload },
+            });
+            break;
+          }
+
+          case "ADD_ORDER": {
+            dispatchBase(action);
+            await enqueueOutboxOperation({
+              userId: uid,
+              storeId: sid,
+              opType: "ADD_ORDER",
+              entityType: "order",
+              entityId: action.payload.id,
+              payload: action.payload,
+            });
+            break;
+          }
+
+          case "UPDATE_ORDER_STATUS": {
+            const targetOrder = currentState.orders.find(
+              (o) => o.id === action.payload.orderId
+            );
+            if (!targetOrder || targetOrder.status === "received") return;
+            dispatchBase(action);
+            await enqueueOutboxOperation({
+              id: `order_receive:${action.payload.orderId}`,
+              idempotencyKey: `order_receive:${action.payload.orderId}`,
+              userId: uid,
+              storeId: sid,
+              opType: "UPDATE_ORDER_STATUS",
+              entityType: "order",
+              entityId: action.payload.orderId,
+              payload: action.payload,
+            });
+            break;
+          }
+
+          case "DELETE_ORDER": {
+            dispatchBase(action);
+            await enqueueOutboxOperation({
+              userId: uid,
+              storeId: sid,
+              opType: "DELETE_ORDER",
+              entityType: "order",
+              entityId: action.payload,
+              payload: { id: action.payload },
+            });
+            break;
+          }
+
+          case "ADD_QUOTE": {
+            dispatchBase(action);
+            await enqueueOutboxOperation({
+              userId: uid,
+              storeId: sid,
+              opType: "ADD_QUOTE",
+              entityType: "quote",
+              entityId: action.payload.id,
+              payload: action.payload,
+            });
+            break;
+          }
+
+          case "UPDATE_QUOTE": {
+            const oldQuote = (currentState.quotes || []).find(
+              (q) => q.id === action.payload.id
+            );
+            dispatchBase(action);
+            await enqueueOutboxOperation({
+              userId: uid,
+              storeId: sid,
+              opType: "UPDATE_QUOTE",
+              entityType: "quote",
+              entityId: action.payload.id,
+              payload: action.payload,
+              expectedUpdatedAt: oldQuote?.updatedAt || null,
+            });
+            break;
+          }
+
+          case "DELETE_QUOTE": {
+            dispatchBase(action);
+            await enqueueOutboxOperation({
+              userId: uid,
+              storeId: sid,
+              opType: "DELETE_QUOTE",
+              entityType: "quote",
+              entityId: action.payload,
+              payload: { id: action.payload },
+            });
+            break;
+          }
+
+          case "ADD_INVENTORY_SESSION": {
+            dispatchBase(action);
+            await enqueueOutboxOperation({
+              id: `inv:${action.payload.id}`,
+              idempotencyKey: action.payload.id,
+              userId: uid,
+              storeId: sid,
+              opType: "ADD_INVENTORY_SESSION",
+              entityType: "inventory_session",
+              entityId: action.payload.id,
+              payload: action.payload,
+            });
+            break;
+          }
+
+          case "UPDATE_SETTINGS": {
+            const expectedUpdatedAt = currentState.settings?.updatedAt || null;
+            dispatchBase(action);
+
+            if (action.payload.name && activeStoreRef.current) {
+              setActiveStore({
+                ...activeStoreRef.current,
+                name: action.payload.name,
+              });
+            }
+
+            await enqueueOutboxOperation({
+              userId: uid,
+              storeId: sid,
+              opType: "UPDATE_SETTINGS",
+              entityType: "settings",
+              entityId: sid,
+              payload: action.payload,
+              expectedUpdatedAt,
+            });
+            break;
+          }
+
+          case "OPEN_CASH_SESSION":
+          case "CLOSE_CASH_SESSION": {
+            const isClose = action.type === "CLOSE_CASH_SESSION";
+            dispatchBase(action);
+            await enqueueOutboxOperation({
+              id: `${isClose ? "cash_close" : "cash_open"}:${action.payload.id}`,
+              idempotencyKey: `${isClose ? "cash_close" : "cash_open"}:${action.payload.id}`,
+              userId: uid,
+              storeId: sid,
+              opType: action.type,
+              entityType: "cash_session",
+              entityId: action.payload.id,
+              payload: action.payload,
+            });
+            break;
+          }
+
+          case "RECORD_DEBT_PAYMENT":
+            dispatchBase(action);
+            break;
         }
 
-        dispatchBase({ type: "LOAD_STATE", payload });
-        if (typeof window !== "undefined" && activeStore?.id) {
-          try {
-            localStorage.setItem(`boutiquepro-state-${activeStore.id}`, JSON.stringify(payload));
-                      } catch (e) {}
+        await refreshOutbox();
+
+        if (
+          networkHealthRef.current.isReachable &&
+          !sessionExpiredRef.current
+        ) {
+          void runSyncCycle({ forceAll: false, reason: "mutation" });
         }
       } catch (err) {
-        console.warn("Échec du rafraîchissement depuis Supabase (hors-ligne ou réseau): conservation du cache local.", err);
-      } finally {
-        setIsInitialized(true);
+        console.error("[StoreContext] Erreur traitement dispatch outbox:", err);
       }
-    }
-    loadData();
-  }, [activeStore?.id, role, activeStore?.role]);
-
-  // Sync to local storage for offline resilience
-  useEffect(() => {
-    if (isInitialized && activeStore?.id) {
-      try {
-        localStorage.setItem(`boutiquepro-state-${activeStore.id}`, JSON.stringify(state));
-              } catch (e) {}
-    }
-  }, [state, isInitialized, activeStore?.id]);
-
-  // Async Dispatch Wrapper
-  const dispatch = async (action: Action) => {
-    try {
-      const isAdminUser = role === 'admin' || activeStore?.role === 'admin';
-
-      if (action.type === "BATCH_ADD_PRODUCTS") {
-        if (activeStore?.id && action.payload.length > 0) {
-          // 1. Enregistrement dans products sans colonne cost
-          const records = action.payload.map((p) => ({
-            store_id: activeStore.id,
-            id: p.id,
-            name: p.name,
-            sku: p.sku,
-            category: p.category,
-            price: Number(p.price) || 0,
-            stock: Number(p.stock) || 0,
-            min_stock: Number(p.minStock) || 0,
-            image: p.image || "📦",
-          }));
-          const { error } = await supabase.from('products').upsert(records);
-          if (error) {
-            console.error("Supabase Batch Add Products Error:", error);
-            alert("Erreur lors de l'enregistrement de l'import: " + error.message);
-          } else if (isAdminUser) {
-            // 2. Coût enregistré dans product_costs UNIQUEMENT par l'admin
-            const costRecords = action.payload
-              .filter(p => p.cost !== undefined && p.cost !== null)
-              .map(p => ({
-                product_id: p.id,
-                store_id: activeStore.id,
-                cost: Number(p.cost) || 0
-              }));
-            if (costRecords.length > 0) {
-              const { error: costError } = await supabase.from('product_costs').upsert(costRecords);
-              if (costError) {
-                console.error("Supabase Batch Add Product Costs Error:", costError);
-              }
-            }
-
-            // 3. Synchronisation des unités secondaires et conditionnements dans product_units
-            const unitsToInsert: any[] = [];
-            action.payload.forEach((p) => {
-              if (Array.isArray(p.units) && p.units.length > 0) {
-                p.units.forEach((u) => {
-                  unitsToInsert.push({
-                    store_id: activeStore.id,
-                    product_id: p.id,
-                    name: u.name.trim(),
-                    multiplier: Number(u.multiplier) || 1,
-                    price: (u.price !== null && u.price !== undefined && Number(u.price) > 0) ? Number(u.price) : null,
-                    cost: (u.cost !== null && u.cost !== undefined && Number(u.cost) > 0) ? Number(u.cost) : null,
-                    barcode: u.barcode ? u.barcode.trim() : null,
-                    is_reference: Boolean(u.isReference),
-                  });
-                });
-              }
-            });
-            if (unitsToInsert.length > 0) {
-              const { error: unitsError } = await supabase.from('product_units').upsert(unitsToInsert, { onConflict: 'product_id, name' });
-              if (unitsError) {
-                console.warn("Supabase Batch Add Product Units Error:", unitsError);
-              }
-            }
-          }
-        }
-      }
-      else if (action.type === "ADD_PRODUCT") {
-        const p = action.payload;
-        // 1. Enregistrement dans products sans colonne cost
-        const { error } = await supabase.from('products').insert([{
-          store_id: activeStore.id, 
-          id: p.id,
-          name: p.name,
-          sku: p.sku,
-          category: p.category, 
-          price: Number(p.price) || 0,
-          stock: Number(p.stock) || 0, 
-          min_stock: Number(p.minStock) || 0,
-          image: p.image || "📦"
-        }]);
-        if (error) {
-          console.error("Supabase Add Product Error:", error);
-          alert("Erreur Supabase Produit: " + error.message + " (Code: " + error.code + ")");
-        } else if (isAdminUser && p.cost !== undefined && p.cost !== null) {
-          // 2. Coût enregistré dans product_costs UNIQUEMENT pour l'admin
-          const { error: costError } = await supabase.from('product_costs').upsert({
-            product_id: p.id,
-            store_id: activeStore.id,
-            cost: Number(p.cost) || 0
-          });
-          if (costError) console.error("Supabase Add Product Cost Error:", costError);
-        }
-
-        // 3. Synchronisation des unités secondaires dans product_units
-        if (isAdminUser && Array.isArray(p.units)) {
-          await supabase.from('product_units').delete().eq('product_id', p.id).eq('store_id', activeStore.id);
-          if (p.units.length > 0) {
-            const unitsToInsert = p.units.map((u: any) => ({
-              store_id: activeStore.id,
-              product_id: p.id,
-              name: u.name.trim(),
-              multiplier: Number(u.multiplier) || 1,
-              price: (u.price !== null && u.price !== undefined && u.price !== '' && Number(u.price) > 0) ? Number(u.price) : null,
-              cost: (u.cost !== null && u.cost !== undefined && u.cost !== '' && Number(u.cost) > 0) ? Number(u.cost) : null,
-              barcode: u.barcode ? u.barcode.trim() : null,
-              is_reference: false,
-            }));
-            const { error: insErr } = await supabase.from('product_units').insert(unitsToInsert);
-            if (insErr && insErr.message && insErr.message.includes('column') && insErr.message.includes('cost')) {
-              const fallback = unitsToInsert.map(({ cost, ...rest }) => rest);
-              await supabase.from('product_units').insert(fallback);
-            }
-          }
-        }
-      } 
-      else if (action.type === "DELETE_PRODUCT") {
-        const { error } = await supabase.from('products').delete().eq('id', action.payload);
-        if (error) console.error("Supabase Delete Product Error:", error);
-      }
-      else if (action.type === "UPDATE_PRODUCT") {
-        const p = action.payload;
-        // 1. Mise à jour de products sans colonne cost
-        const { error } = await supabase.from('products').update({
-          name: p.name,
-          sku: p.sku,
-          category: p.category, 
-          price: Number(p.price) || 0,
-          stock: Number(p.stock) || 0, 
-          min_stock: Number(p.minStock) || 0,
-          image: p.image || "📦"
-        }).eq('id', p.id);
-        if (error) console.error("Supabase Update Product Error:", error);
-
-        if (isAdminUser && p.cost !== undefined && p.cost !== null) {
-          // 2. Coût mis à jour dans product_costs UNIQUEMENT pour l'admin
-          const { error: costError } = await supabase.from('product_costs').upsert({
-            product_id: p.id,
-            store_id: activeStore.id,
-            cost: Number(p.cost) || 0
-          });
-          if (costError) console.error("Supabase Update Product Cost Error:", costError);
-        }
-
-        // 3. Synchronisation des unités secondaires dans product_units
-        if (isAdminUser && Array.isArray(p.units)) {
-          await supabase.from('product_units').delete().eq('product_id', p.id).eq('store_id', activeStore.id);
-          if (p.units.length > 0) {
-            const unitsToInsert = p.units.map((u: any) => ({
-              store_id: activeStore.id,
-              product_id: p.id,
-              name: u.name.trim(),
-              multiplier: Number(u.multiplier) || 1,
-              price: (u.price !== null && u.price !== undefined && u.price !== '' && Number(u.price) > 0) ? Number(u.price) : null,
-              cost: (u.cost !== null && u.cost !== undefined && u.cost !== '' && Number(u.cost) > 0) ? Number(u.cost) : null,
-              barcode: u.barcode ? u.barcode.trim() : null,
-              is_reference: false,
-            }));
-            const { error: insErr } = await supabase.from('product_units').insert(unitsToInsert);
-            if (insErr && insErr.message && insErr.message.includes('column') && insErr.message.includes('cost')) {
-              const fallback = unitsToInsert.map(({ cost, ...rest }) => rest);
-              await supabase.from('product_units').insert(fallback);
-            }
-          }
-        }
-      }
-      else if (action.type === "UPDATE_SETTINGS") {
-        const s = action.payload as any;
-        const updates: any = {};
-        if (s.name !== undefined) updates.name = s.name;
-        if (s.currency !== undefined) updates.currency = s.currency;
-        if (s.taxRate !== undefined) updates.tax_rate = s.taxRate;
-        if (s.logo !== undefined) updates.logo = s.logo;
-        if (s.city !== undefined) updates.city = s.city;
-        if (s.country !== undefined) updates.country = s.country;
-        if (s.email !== undefined) updates.email = s.email;
-        if (s.phone !== undefined) updates.phone = s.phone;
-        if (s.managerName !== undefined) updates.manager_name = s.managerName;
-        if (s.allowNegativeStock !== undefined) updates.allow_negative_stock = s.allowNegativeStock;
-        
-        // 1. Sauvegarde locale immédiate pour garantir zéro perte
-        if (typeof window !== "undefined" && activeStore?.id) {
-          try {
-            const cacheKey = `boutiquepro-state-${activeStore.id}`;
-            const existingRaw = localStorage.getItem(cacheKey);
-            const parsed = existingRaw ? JSON.parse(existingRaw) : {};
-            parsed.settings = { ...(parsed.settings || state.settings), ...s };
-            localStorage.setItem(cacheKey, JSON.stringify(parsed));
-                      } catch (storageErr) {
-            console.warn("Avertissement sauvegarde locale settings:", storageErr);
-          }
-        }
-
-        if (Object.keys(updates).length > 0 && activeStore?.id) {
-          // 2. Persistance dans la table settings avec UPSERT (crée la ligne si elle n'existe pas)
-          try {
-            const { error: upsertErr } = await supabase.from('settings').upsert({
-              store_id: activeStore.id,
-              currency: s.currency || state.settings?.currency || "FCFA",
-              tax_rate: s.taxRate !== undefined ? s.taxRate : (state.settings?.taxRate ?? 0),
-              ...updates
-            }, { onConflict: 'store_id' });
-
-            if (upsertErr) {
-              console.warn("Supabase upsert settings fallback to update:", upsertErr);
-              await supabase.from('settings').update(updates).eq('store_id', activeStore.id);
-            }
-          } catch (errSet) {
-            console.error("Erreur upsert settings:", errSet);
-          }
-
-          // 3. Mise à jour simultanée du nom de la boutique dans stores pour actualiser Sidebar/Header
-          if (updates.name) {
-            try {
-              await supabase.from('stores').update({ name: updates.name }).eq('id', activeStore.id);
-              if (typeof setActiveStore === "function") {
-                setActiveStore({ ...activeStore, name: updates.name });
-              }
-            } catch (errStore) {
-              console.warn("Erreur synchronisation stores.name:", errStore);
-            }
-          }
-        }
-      }
-      else if (action.type === "COMPLETE_SALE") {
-        const s = action.payload;
-
-        // 0. Mise à jour instantanée de l'interface (panier vidé & ticket prêt en < 10 ms même sur réseau instable)
-        dispatchBase(action);
-
-        // Sauvegarder l'acompte initial de la vente à crédit dans le registre local des remboursements
-        if (s.paymentMethod === "credit" && s.payments && s.payments.length > 0 && typeof window !== "undefined" && activeStore?.id) {
-          try {
-            const storeKey = `boutiquepro_debt_payments_${activeStore.id}`;
-            const existingStored: DebtPayment[] = JSON.parse(localStorage.getItem(storeKey) || "[]");
-            const newPayments = s.payments.filter((p) => !existingStored.some((e) => e.id === p.id));
-            if (newPayments.length > 0) {
-              localStorage.setItem(storeKey, JSON.stringify([...newPayments, ...existingStored]));
-            }
-          } catch (e) {
-            console.warn("Erreur stockage acompte initial:", e);
-          }
-        }
-
-        if (!activeStore?.id) return;
-
-        // 1. Sauvegarde préventive immédiate (Write-Ahead Log) dans IndexedDB + localStorage avant tout appel réseau
-        await saveOfflineSale(activeStore.id, s);
-
-        if (typeof window !== "undefined" && !navigator.onLine) {
-          const cnt = await getOfflineSalesCount(activeStore.id);
-          setPendingSyncCount(cnt);
-          console.info("Vente enregistrée en file d'attente hors-ligne (mode sans connexion):", s.id);
-          return;
-        }
-
-        let syncedNow = false;
-        try {
-          // 2. Tentative en ligne via RPC atomique avec timeout court (6s) anti-blocage
-          const { error: saleError } = await withNetworkTimeout(
-            supabase.rpc("create_sale", {
-              p_store_id: activeStore.id,
-              p_sale_id: s.id,
-              p_subtotal: s.subtotal,
-              p_tax: s.tax,
-              p_discount: s.discount,
-              p_total: s.total,
-              p_payment_method: s.paymentMethod,
-              p_customer_name: s.customerName || null,
-              p_created_at: s.createdAt,
-              p_items: s.items,
-              p_customer_phone: s.customerPhone || null,
-              p_amount_paid: s.amountPaid ?? (s.paymentMethod === "credit" ? 0 : s.total),
-              p_remaining_amount: s.remainingAmount ?? (s.paymentMethod === "credit" ? s.total : 0),
-              p_payment_status: s.paymentStatus || (s.paymentMethod === "credit" ? "unpaid" : "paid"),
-              p_due_date: s.dueDate || null,
-            }),
-            6000
-          );
-
-          const isDuplicate = Boolean(
-            saleError &&
-              (saleError.code === "23505" ||
-                saleError.message?.toLowerCase().includes("duplicate key") ||
-                saleError.message?.toLowerCase().includes("sales_pkey"))
-          );
-
-          if (!saleError || isDuplicate) {
-            syncedNow = true;
-            await removeOfflineSale(s.id);
-            const cnt = await getOfflineSalesCount(activeStore.id);
-            setPendingSyncCount(cnt);
-
-            if (s.paymentMethod === "credit") {
-              try {
-                await withNetworkTimeout(
-                  supabase
-                    .from("sales")
-                    .update({
-                      customer_phone: s.customerPhone || null,
-                      amount_paid: s.amountPaid ?? 0,
-                      remaining_amount: s.remainingAmount ?? s.total,
-                      payment_status: s.paymentStatus || "unpaid",
-                      due_date: s.dueDate || null,
-                    })
-                    .eq("id", s.id)
-                    .eq("store_id", activeStore.id),
-                  4000
-                );
-              } catch (upErr) {
-                console.warn("Erreur mise à jour métadonnées crédit vente:", upErr);
-              }
-            }
-          } else if (isSubscriptionExpiredError(saleError)) {
-            await removeOfflineSale(s.id);
-            const cnt = await getOfflineSalesCount(activeStore.id);
-            setPendingSyncCount(cnt);
-            alert("Abonnement expiré : impossible d'enregistrer la vente. Veuillez renouveler votre formule Moneriz.");
-            return;
-          } else if (isNetworkLikeError(saleError)) {
-            console.warn("Réseau instable, vente conservée en sécurité dans la file hors-ligne:", saleError);
-            const cnt = await getOfflineSalesCount(activeStore.id);
-            setPendingSyncCount(cnt);
-          } else {
-            console.error("Erreur serveur SQL create_sale:", saleError);
-            await updateOfflineSale({
-              id: s.id,
-              storeId: activeStore.id,
-              sale: s,
-              createdAt: s.createdAt,
-              retryCount: 1,
-              lastError: saleError.message || "Erreur base de données",
-              status: "pending",
-            });
-            const cnt = await getOfflineSalesCount(activeStore.id);
-            setPendingSyncCount(cnt);
-          }
-        } catch (netErr: any) {
-          if (isSubscriptionExpiredError(netErr)) {
-            await removeOfflineSale(s.id);
-            alert("Abonnement expiré : impossible d'enregistrer la vente.");
-            return;
-          }
-          console.warn("Timeout / coupure réseau, vente conservée en file d'attente hors-ligne:", netErr);
-          const cnt = await getOfflineSalesCount(activeStore.id);
-          setPendingSyncCount(cnt);
-        }
-
-        // Mettre à jour en continu les totaux dans Supabase si synchronisé et session active
-        if (syncedNow && typeof window !== "undefined" && navigator.onLine && state.activeCashSession?.id) {
-          try {
-            const isCash = s.paymentMethod === "cash";
-            const isMM = s.paymentMethod === "mobile_money";
-            const isCard = s.paymentMethod === "card";
-            const isCredit = s.paymentMethod === "credit";
-            const downPayment = isCredit ? (s.amountPaid || 0) : 0;
-            const cashEntry = isCredit ? downPayment : (isCash ? s.total : 0);
-            const effectiveAmount = isCredit ? downPayment : s.total;
-
-            const newCash = state.activeCashSession.totalCashSales + cashEntry;
-            const newMM = state.activeCashSession.totalMobileMoneySales + (isMM ? s.total : 0);
-            const newCard = state.activeCashSession.totalCardSales + (isCard ? s.total : 0);
-            const newCount = state.activeCashSession.totalSalesCount + 1;
-            const newTotal = state.activeCashSession.totalSalesAmount + effectiveAmount;
-            const newExpected = state.activeCashSession.openingAmount + newCash;
-
-            await withNetworkTimeout(
-              supabase
-                .from("cash_sessions")
-                .update({
-                  total_cash_sales: newCash,
-                  total_mobile_money_sales: newMM,
-                  total_card_sales: newCard,
-                  total_sales_count: newCount,
-                  total_sales_amount: newTotal,
-                  expected_amount: newExpected,
-                })
-                .eq("id", state.activeCashSession.id),
-              4000
-            );
-          } catch (e) {
-            console.warn("Notice mise à jour session caisse:", e);
-          }
-        }
-
-        return;
-      }
-      else if (action.type === "ADD_CUSTOMER") {
-        const c = action.payload;
-        const { error } = await supabase.from('customers').insert([{ store_id: activeStore.id, 
-          id: c.id, name: c.name, phone: c.phone, email: c.email,
-          total_purchases: c.totalPurchases, last_visit: c.lastVisit
-        }]);
-        if (error) console.error("Supabase Add Customer Error:", error);
-      }
-      else if (action.type === "ADD_ORDER") {
-        const o = action.payload;
-        const { error } = await supabase.from('orders').insert([{ store_id: activeStore.id, 
-          id: o.id, supplier_name: o.supplierName, total_cost: o.totalCost,
-          status: o.status, created_at: o.createdAt, expected_at: o.expectedAt
-        }]);
-        if (!error && o.items && o.items.length > 0) {
-          const items = o.items.map((i: any) => ({
-            id: 'oi' + Math.random().toString(36).substring(7),
-            order_id: o.id,
-            product_id: i.productId,
-            product_name: i.productName,
-            quantity: i.quantity,
-            cost_price: i.costPrice,
-            total: i.total,
-            unit_name: i.unitName || 'Unité',
-            unit_multiplier: Number(i.unitMultiplier) || 1,
-            quantity_reference: (i.quantityReference !== undefined && i.quantityReference !== null && Number(i.quantityReference) > 0)
-              ? Number(i.quantityReference)
-              : (Number(i.quantity) * (Number(i.unitMultiplier) || 1)),
-            batch_number: i.batchNumber || null,
-            expiry_date: i.expiryDate || null
-          }));
-          await supabase.from('order_items').insert(items);
-        }
-      }
-      else if (action.type === "UPDATE_ORDER_STATUS") {
-        // VERROU IDEMPOTENT ANTI-DOUBLE RÉCEPTION : ne mettre à jour que si status = 'pending'
-        const { data: updatedRows, error } = await supabase
-          .from('orders')
-          .update({ status: 'received' })
-          .eq('id', action.payload.orderId)
-          .eq('status', 'pending')
-          .select('id');
-
-        if (!error && updatedRows && updatedRows.length > 0) {
-           const order = state.orders.find((o: any) => o.id === action.payload.orderId);
-           if (order) {
-              for (const item of order.items) {
-                const prod = state.products.find((p: any) => p.id === item.productId);
-                if (prod) {
-                   const mult = Number(item.unitMultiplier) || 1;
-                   const refQty = (item.quantityReference !== undefined && item.quantityReference !== null && Number(item.quantityReference) > 0)
-                     ? Number(item.quantityReference)
-                     : (Number(item.quantity) * mult);
-                   const newRefCost = mult > 0 ? (Number(item.costPrice) / mult) : Number(item.costPrice);
-
-                   await supabase.from('products').update({ stock: prod.stock + refQty }).eq('id', prod.id);
-                   if (item.batchNumber && item.expiryDate && activeStore?.id) {
-                     try {
-                       const batchId = 'batch_' + Date.now().toString(36) + '_' + Math.random().toString(36).substring(2, 6);
-                       await supabase.from('product_batches').insert([{
-                         id: batchId,
-                         store_id: activeStore.id,
-                         product_id: item.productId,
-                         batch_number: item.batchNumber,
-                         expiry_date: item.expiryDate,
-                         initial_quantity: refQty,
-                         current_quantity: refQty,
-                         order_id: order.id
-                       }]);
-                     } catch (errB) {
-                       console.warn("Erreur insertion lot dans product_batches:", errB);
-                     }
-                   }
-                   if (isAdminUser && newRefCost > 0 && activeStore?.id) {
-                     await supabase.from('product_costs').upsert({
-                       product_id: prod.id,
-                       store_id: activeStore.id,
-                       cost: Number(newRefCost.toFixed(4)),
-                       updated_at: new Date().toISOString()
-                     });
-                   }
-                }
-              }
-           }
-        }
-      }
-      else if (action.type === "ADD_BATCH") {
-        const b = action.payload;
-        if (activeStore?.id) {
-          try {
-            await supabase.from('product_batches').insert([{
-              id: b.id,
-              store_id: activeStore.id,
-              product_id: b.productId,
-              batch_number: b.batchNumber,
-              expiry_date: b.expiryDate,
-              initial_quantity: b.initialQuantity,
-              current_quantity: b.currentQuantity,
-              order_id: b.orderId || null,
-              created_at: b.createdAt
-            }]);
-          } catch (eB) {
-            console.warn("Erreur Supabase ADD_BATCH:", eB);
-          }
-        }
-      }
-      else if (action.type === "DELETE_BATCH") {
-        const batchId = action.payload;
-        if (activeStore?.id) {
-          try {
-            await supabase.from('product_batches').delete().eq('id', batchId).eq('store_id', activeStore.id);
-          } catch (eB) {
-            console.warn("Erreur Supabase DELETE_BATCH:", eB);
-          }
-        }
-      }
-      else if (action.type === "ADD_PRICE_HISTORY_ENTRY") {
-        const h = action.payload;
-        if (activeStore?.id) {
-          try {
-            await supabase.from('product_price_history').insert([{
-              id: h.id,
-              store_id: activeStore.id,
-              product_id: h.productId,
-              price_type: h.priceType,
-              unit_name: h.unitName || null,
-              old_price: h.oldPrice,
-              new_price: h.newPrice,
-              change_reason: h.changeReason || null,
-              user_id: user?.id || null,
-              user_name: user?.user_metadata?.full_name || user?.email || "Admin",
-              created_at: h.createdAt || new Date().toISOString()
-            }]);
-          } catch (errH) {
-            console.warn("Supabase add price history notice:", errH);
-          }
-        }
-      }
-      else if (action.type === "ADD_QUOTE") {
-        const q = action.payload;
-        if (activeStore?.id) {
-          try {
-            await supabase.from('quotes').insert([{
-              id: q.id,
-              store_id: activeStore.id,
-              user_id: user?.id || null,
-              quote_number: q.quoteNumber,
-              customer_name: q.customerName,
-              customer_phone: q.customerPhone || null,
-              customer_address: q.customerAddress || null,
-              subtotal: q.subtotal,
-              tax: q.tax,
-              discount: q.discount,
-              total: q.total,
-              status: q.status,
-              validity_date: q.validityDate || null,
-              notes: q.notes || null,
-              created_at: q.createdAt
-            }]);
-            if (q.items && q.items.length > 0) {
-              const itemsToInsert = q.items.map((it) => ({
-                id: it.id,
-                quote_id: q.id,
-                store_id: activeStore.id,
-                product_id: it.productId,
-                product_name: it.productName,
-                quantity: it.quantity,
-                unit_price: it.unitPrice,
-                total: it.total,
-                unit_name: it.unitName || "Unité",
-                unit_multiplier: it.unitMultiplier || 1
-              }));
-              await supabase.from('quote_items').insert(itemsToInsert);
-            }
-          } catch (errQ) {
-            console.warn("Supabase add quote notice:", errQ);
-          }
-        }
-      }
-      else if (action.type === "UPDATE_QUOTE") {
-        const q = action.payload;
-        if (activeStore?.id) {
-          try {
-            await supabase.from('quotes').update({
-              quote_number: q.quoteNumber,
-              customer_name: q.customerName,
-              customer_phone: q.customerPhone || null,
-              customer_address: q.customerAddress || null,
-              subtotal: q.subtotal,
-              tax: q.tax,
-              discount: q.discount,
-              total: q.total,
-              status: q.status,
-              validity_date: q.validityDate || null,
-              notes: q.notes || null,
-              updated_at: new Date().toISOString()
-            }).eq('id', q.id).eq('store_id', activeStore.id);
-
-            await supabase.from('quote_items').delete().eq('quote_id', q.id);
-            if (q.items && q.items.length > 0) {
-              const itemsToInsert = q.items.map((it) => ({
-                id: it.id,
-                quote_id: q.id,
-                store_id: activeStore.id,
-                product_id: it.productId,
-                product_name: it.productName,
-                quantity: it.quantity,
-                unit_price: it.unitPrice,
-                total: it.total,
-                unit_name: it.unitName || "Unité",
-                unit_multiplier: it.unitMultiplier || 1
-              }));
-              await supabase.from('quote_items').insert(itemsToInsert);
-            }
-          } catch (errQ) {
-            console.warn("Supabase update quote notice:", errQ);
-          }
-        }
-      }
-      else if (action.type === "DELETE_QUOTE") {
-        const quoteId = action.payload;
-        if (activeStore?.id) {
-          try {
-            await supabase.from('quotes').delete().eq('id', quoteId).eq('store_id', activeStore.id);
-          } catch (errQ) {
-            console.warn("Supabase delete quote notice:", errQ);
-          }
-        }
-      }
-      else if (action.type === "CONVERT_QUOTE_TO_SALE") {
-        const { quoteId, sale } = action.payload;
-        if (activeStore?.id) {
-          try {
-            // Tenter d'utiliser convert_quote_to_sale si disponible
-            const { error: convErr } = await supabase.rpc('convert_quote_to_sale', {
-              p_quote_id: quoteId,
-              p_sale_id: sale.id,
-              p_payment_method: sale.paymentMethod || "cash",
-              p_amount_paid: sale.amountPaid || sale.total
-            });
-            if (convErr) {
-              // Fallback manuel : mise à jour du statut du devis
-              await supabase.from('quotes').update({
-                status: "converted",
-                sale_id: sale.id,
-                updated_at: new Date().toISOString()
-              }).eq('id', quoteId);
-            }
-          } catch (errConv) {
-            console.warn("Supabase convert quote notice:", errConv);
-          }
-        }
-      }
-      else if (action.type === "ADD_EXPENSE") {
-        const e = action.payload;
-        const { error } = await supabase.from('expenses').insert([{ store_id: activeStore.id, 
-           id: e.id, date: e.date, category: e.category, description: e.description, amount: e.amount
-        }]);
-        if (error) console.error("Supabase Add Expense Error:", error);
-      }
-      else if (action.type === "UPDATE_EXPENSE") {
-        const e = action.payload;
-        const { error } = await supabase.from('expenses').update({
-           date: e.date, category: e.category, description: e.description, amount: e.amount
-        }).eq('id', e.id);
-        if (error) console.error("Supabase Update Expense Error:", error);
-      }
-      else if (action.type === "DELETE_EXPENSE") {
-        const { error } = await supabase.from('expenses').delete().eq('id', action.payload);
-        if (error) console.error("Supabase Delete Expense Error:", error);
-      }
-      else if (action.type === "ADD_INVENTORY_SESSION") {
-        const s = action.payload;
-        const { error } = await supabase.from('inventory_sessions').insert([{ store_id: activeStore.id, 
-           id: s.id, date: s.date, total_variance_value: s.totalVarianceValue, notes: s.notes
-        }]);
-        if (!error && s.items && s.items.length > 0) {
-           const items = s.items.map((i: any) => ({
-              id: 'iv' + Math.random().toString(36).substring(7),
-              session_id: s.id, product_id: i.productId, product_name: i.productName,
-              expected_stock: i.expectedStock, actual_stock: i.actualStock, 
-              variance: i.variance, cost_price: i.costPrice
-           }));
-           await supabase.from('inventory_items').insert(items);
-           // Update stock
-           for (const item of s.items) {
-               await supabase.from('products').update({ stock: item.actualStock }).eq('id', item.productId);
-           }
-        }
-      }
-      
-      // Update local state immediately for fast UI
-      dispatchBase(action);
-
-    } catch (err) {
-      console.error("Action error:", err);
-      dispatchBase(action); // fallback update
-    }
-  };
-
-  // Computed values
-  const formatPrice = (amount: number) => {
-    const validAmount = Number.isFinite(Number(amount)) ? Number(amount) : 0;
-    return new Intl.NumberFormat("fr-FR").format(validAmount) + " " + (state.settings?.currency || "FCFA");
-  };
-
-  const lowStockProducts = (state.products || []).filter((p) => p && p.stock <= p.minStock);
-
-  const uniqueSales = useMemo(() => {
-    const map = new Map<string, Sale>();
-    (state.sales || []).forEach((s) => {
-      if (s && s.id && !map.has(s.id)) map.set(s.id, s);
-    });
-    return Array.from(map.values());
-  }, [state.sales]);
-
-  const totalRevenue = uniqueSales.reduce((sum, s) => sum + (s?.total || 0), 0);
-
-  const today = new Date().toISOString().split("T")[0];
-  const todaySales = uniqueSales.filter((s) => s?.createdAt && s.createdAt.startsWith(today));
-  const todayRevenue = todaySales.reduce((sum, s) => sum + (s?.total || 0), 0);
-  const totalOrders = uniqueSales.length;
-  const todayOrders = todaySales.length;
-  const averageBasket = totalOrders > 0 ? totalRevenue / totalOrders : 0;
-
-  const totalExpenses = state.expenses ? state.expenses.reduce((sum, e) => sum + Number(e.amount), 0) : 0;
-  
-  let totalCOGS = 0;
-  uniqueSales.forEach(sale => {
-    if (!sale) return;
-    (sale.items || []).forEach(item => {
-      if (!item) return;
-      const product = (state.products || []).find(p => p.id === item.productId);
-      // Coût d'achat unitaire figé au moment de la vente en priorité, repli sur le coût catalogue actuel si absent
-      const effectiveUnitCost = (item.cost !== undefined && item.cost !== null)
-        ? Number(item.cost)
-        : (Number(product?.cost) || 0);
-      const refQty = (item.quantityReference !== undefined && item.quantityReference !== null && Number(item.quantityReference) > 0)
-        ? Number(item.quantityReference)
-        : (Number(item.quantity) * (Number(item.unitMultiplier) || 1));
-      totalCOGS += (effectiveUnitCost * refQty);
-    });
-  });
-
-  const netProfit = totalRevenue - totalCOGS - totalExpenses;
-
-  // Dettes, Crédits & Trésorerie Encaissée
-  const creditSales = (state.sales || []).filter(
-    (s) => s && (s.paymentMethod === "credit" || (Number.isFinite(Number(s.remainingAmount)) && Number(s.remainingAmount) > 0))
+    },
+    [refreshOutbox, runSyncCycle, setActiveStore]
   );
 
-  const totalCreditSales = creditSales.reduce((sum, s) => sum + (Number.isFinite(Number(s?.total)) ? Number(s.total) : 0), 0);
+  // ── Actions Métier Spécialisées (Dettes, Caisse, Sync, Conflits, Backup) ─
 
-  const totalRecoveredAmount = creditSales.reduce((sum, s) => {
-    if (!s) return sum;
-    const total = Number.isFinite(Number(s.total)) ? Number(s.total) : 0;
-    const paid = Number.isFinite(Number(s.amountPaid))
-      ? Number(s.amountPaid)
-      : (s.paymentStatus === "paid" ? total : 0);
-    return sum + paid;
-  }, 0);
+  const recordDebtPayment = async (
+    saleId: string,
+    amount: number,
+    method: "cash" | "mobile_money" | "card" = "cash",
+    note?: string,
+    cashierName?: string
+  ): Promise<DebtPayment | null> => {
+    if (amount <= 0) return null;
+    const targetSale = stateRef.current.sales.find((s) => s.id === saleId);
+    if (!targetSale) return null;
 
-  const totalCollectedRevenue = Math.max(0, totalRevenue - totalDebtsAmount);
+    const currentPaid = targetSale.amountPaid || 0;
+    const currentRemaining = targetSale.remainingAmount ?? targetSale.total;
+    const paymentAmount = Math.min(amount, currentRemaining);
+    if (paymentAmount <= 0) return null;
 
-  const recoveryRate = (totalCreditSales > 0 && Number.isFinite(totalCreditSales) && Number.isFinite(totalRecoveredAmount))
-    ? Math.min(100, Math.max(0, Math.round((totalRecoveredAmount / totalCreditSales) * 100)))
-    : 100;
+    const newPaid = currentPaid + paymentAmount;
+    const newRemaining = Math.max(0, currentRemaining - paymentAmount);
+    const newStatus =
+      newRemaining === 0 ? ("paid" as const) : ("partial" as const);
+    const now = new Date().toISOString();
 
-  const now = new Date();
-  const overdueDebtsCount = (unpaidDebts || []).filter(
-    (s) => s && s.dueDate && new Date(s.dueDate) < now
-  ).length;
+    const resolvedCashierName =
+      cashierName ||
+      userRef.current?.user_metadata?.full_name ||
+      stateRef.current.settings?.managerName ||
+      (effectiveRoleRef.current === "admin" ? "Gérant" : "Caissier");
 
-  const collectedNetProfit = totalCollectedRevenue - totalCOGS - totalExpenses;
+    const paymentId = generateClientUUID();
+    const paymentRecord: DebtPayment = {
+      id: paymentId,
+      saleId,
+      amount: paymentAmount,
+      paymentMethod: method,
+      paidAt: now,
+      note: note || undefined,
+      cashierName: resolvedCashierName,
+    };
 
-  // ─── Concordance et Écarts de Caisse (Audit Patron) ──────────────────────────
-  const closedCashSessions = useMemo(() => {
-    return (state.cashSessions || [])
-      .filter((cs) => cs && cs.status === "closed")
-      .sort((a, b) => new Date(b.closedAt || b.openedAt).getTime() - new Date(a.closedAt || a.openedAt).getTime());
-  }, [state.cashSessions]);
-
-  const totalCashDifference = useMemo(() => {
-    return closedCashSessions.reduce((sum, cs) => sum + (Number(cs.difference) || 0), 0);
-  }, [closedCashSessions]);
-
-  const totalCashShortage = useMemo(() => {
-    return closedCashSessions
-      .filter((cs) => (Number(cs.difference) || 0) < 0)
-      .reduce((sum, cs) => sum + Math.abs(Number(cs.difference) || 0), 0);
-  }, [closedCashSessions]);
-
-  const totalCashSurplus = useMemo(() => {
-    return closedCashSessions
-      .filter((cs) => (Number(cs.difference) || 0) > 0)
-      .reduce((sum, cs) => sum + (Number(cs.difference) || 0), 0);
-  }, [closedCashSessions]);
-
-  const discrepantSessionsCount = useMemo(() => {
-    return closedCashSessions.filter((cs) => Math.abs(Number(cs.difference) || 0) > 0).length;
-  }, [closedCashSessions]);
-
-  const todayClosedSessions = useMemo(() => {
-    return closedCashSessions.filter((cs) => isSameCalendarDay(cs.closedAt || cs.openedAt));
-  }, [closedCashSessions]);
-
-  const todayCashDifference = useMemo(() => {
-    return todayClosedSessions.reduce((sum, cs) => sum + (Number(cs.difference) || 0), 0);
-  }, [todayClosedSessions]);
-
-  const todayCashShortage = useMemo(() => {
-    return todayClosedSessions
-      .filter((cs) => (Number(cs.difference) || 0) < 0)
-      .reduce((sum, cs) => sum + Math.abs(Number(cs.difference) || 0), 0);
-  }, [todayClosedSessions]);
-
-  const cashDiscrepancyRate = useMemo(() => {
-    if (closedCashSessions.length === 0) return 100;
-    const cleanSessions = closedCashSessions.filter((cs) => Math.abs(Number(cs.difference) || 0) === 0).length;
-    return Math.round((cleanSessions / closedCashSessions.length) * 100);
-  }, [closedCashSessions]);
-
-  const lastClosedCashSession = closedCashSessions.length > 0 ? closedCashSessions[0] : null;
-
-  // Trésorerie physique réelle (CA encaissé net des dettes et déduit des manquants constatés)
-  const totalPhysicalCashAndBank = Math.max(0, totalCollectedRevenue - totalCashShortage);
-
-  const categorySales: Record<string, number> = {};
-  (state.sales || []).forEach((sale) => {
-    if (!sale) return;
-    const discountRatio = sale.subtotal > 0 ? (sale.total / sale.subtotal) : 1;
-    (sale.items || []).forEach((item) => {
-      if (!item) return;
-      const product = (state.products || []).find((p) => p.id === item.productId);
-      if (product) {
-        const netItemTotal = Math.round(item.total * discountRatio);
-        categorySales[product.category] = (categorySales[product.category] || 0) + netItemTotal;
-      }
+    dispatchBase({
+      type: "RECORD_DEBT_PAYMENT",
+      payload: {
+        saleId,
+        paymentAmount,
+        newPaid,
+        newRemaining,
+        newStatus,
+        method,
+        payment: paymentRecord,
+      },
     });
-  });
 
-  const categoryNames = state.categories.map((c) => c.name);
+    const uid = userRef.current?.id;
+    const sid = activeStoreRef.current?.id;
+    if (uid && sid) {
+      await enqueueOutboxOperation({
+        id: `debt:${paymentId}`,
+        idempotencyKey: paymentId,
+        userId: uid,
+        storeId: sid,
+        opType: "RECORD_DEBT_PAYMENT",
+        entityType: "debt_payment",
+        entityId: paymentId,
+        payload: {
+          id: paymentId,
+          storeId: sid,
+          saleId,
+          paymentAmount,
+          newPaid,
+          newRemaining,
+          newStatus,
+          method,
+          note: note || undefined,
+          cashierName: resolvedCashierName,
+          createdAt: now,
+          sessionId: stateRef.current.activeCashSession?.id || null,
+        },
+        createdAt: now,
+      });
 
-  const currentSessionSales = useMemo(() => {
-    if (!state.activeCashSession) return [];
-    return getSalesForSession(state.activeCashSession, state.sales || [], state.cashSessions || []);
-  }, [state.activeCashSession, state.sales, state.cashSessions]);
+      await refreshOutbox();
+      if (
+        networkHealthRef.current.isReachable &&
+        !sessionExpiredRef.current
+      ) {
+        void runSyncCycle({ forceAll: false, reason: "debt_payment" });
+      }
+    }
 
-  const currentSessionStats = useMemo(() => {
-    return getSessionStats(state.activeCashSession, state.sales || [], state.cashSessions || []);
-  }, [state.activeCashSession, state.sales, state.cashSessions]);
+    return paymentRecord;
+  };
 
-  const openCashSession = async (openingAmount: number, cashierName?: string): Promise<CashSession> => {
+  const createDirectDebt = async (data: {
+    customerName: string;
+    customerPhone?: string;
+    description: string;
+    totalAmount: number;
+    initialDeposit?: number;
+    depositPaymentMethod?: "cash" | "mobile_money" | "card";
+    dueDate?: string;
+    notes?: string;
+  }): Promise<Sale> => {
+    const uid = userRef.current?.id;
+    const sid = activeStoreRef.current?.id;
+
+    const deposit = Math.min(
+      Math.max(0, data.initialDeposit || 0),
+      data.totalAmount
+    );
+    const remaining = Math.max(0, data.totalAmount - deposit);
+    const status = remaining === 0 ? "paid" : deposit > 0 ? "partial" : "unpaid";
+    const saleId = generateClientUUID();
+    const now = new Date().toISOString();
+
+    const initialPayment: DebtPayment[] =
+      deposit > 0
+        ? [
+            {
+              id: `init-${saleId}`,
+              saleId,
+              amount: deposit,
+              paymentMethod: data.depositPaymentMethod || "cash",
+              paidAt: now,
+              note: "Acompte initial versé à la création",
+              cashierName:
+                userRef.current?.user_metadata?.full_name ||
+                userRef.current?.email?.split("@")[0] ||
+                "Caissier",
+            },
+          ]
+        : [];
+
+    const sale: Sale = {
+      id: saleId,
+      items: [
+        {
+          productId: "custom-credit",
+          productName: data.description.trim() || "Créance / Vente à crédit",
+          quantity: 1,
+          unitPrice: data.totalAmount,
+          total: data.totalAmount,
+        },
+      ],
+      subtotal: data.totalAmount,
+      tax: 0,
+      discount: 0,
+      total: data.totalAmount,
+      paymentMethod: "credit",
+      amountPaid: deposit,
+      remainingAmount: remaining,
+      paymentStatus: status,
+      customerName: data.customerName.trim(),
+      customerPhone: data.customerPhone?.trim() || undefined,
+      dueDate: data.dueDate || undefined,
+      notes: data.notes?.trim() || undefined,
+      createdAt: now,
+      userId: uid,
+      storeId: sid,
+      sessionId: stateRef.current.activeCashSession?.id || null,
+      payments: initialPayment,
+    };
+
+    // Enregistrer le nouveau client en outbox avant la vente si besoin
+    if (data.customerName.trim()) {
+      const existing = (stateRef.current.customers || []).find(
+        (c) => c.name.toLowerCase() === data.customerName.trim().toLowerCase()
+      );
+      if (!existing) {
+        const newCust: Customer = {
+          id: generateClientUUID(),
+          name: data.customerName.trim(),
+          phone: data.customerPhone?.trim() || "",
+          totalPurchases: data.totalAmount,
+          lastVisit: now,
+        };
+        dispatchBase({ type: "ADD_CUSTOMER", payload: newCust });
+        if (uid && sid) {
+          await enqueueOutboxOperation({
+            userId: uid,
+            storeId: sid,
+            opType: "ADD_CUSTOMER",
+            entityType: "customer",
+            entityId: newCust.id,
+            payload: newCust,
+            createdAt: now,
+          });
+        }
+      }
+    }
+
+    dispatchBase({ type: "COMPLETE_SALE", payload: sale });
+
+    if (uid && sid) {
+      await enqueueOutboxOperation({
+        id: `sale:${sale.id}`,
+        idempotencyKey: sale.id,
+        userId: uid,
+        storeId: sid,
+        opType: "COMPLETE_SALE",
+        entityType: "sale",
+        entityId: sale.id,
+        payload: sale,
+        createdAt: now,
+      });
+
+      await refreshOutbox();
+      if (
+        networkHealthRef.current.isReachable &&
+        !sessionExpiredRef.current
+      ) {
+        void runSyncCycle({ forceAll: false, reason: "create_debt" });
+      }
+    }
+
+    return sale;
+  };
+
+  const openCashSession = async (
+    openingAmount: number,
+    cashierName?: string
+  ): Promise<CashSession> => {
     const openedAt = new Date().toISOString();
+    const uid = userRef.current?.id || "";
+    const sid = activeStoreRef.current?.id || "";
+    const sessionId = generateClientUUID();
 
-    // Le shift de caisse démarre TOUJOURS avec un vrai UUID valide pour Postgres et compteurs à 0
-    const sessionId = generateUUID();
     const session: CashSession = {
       id: sessionId,
-      storeId: activeStore?.id || "",
-      userId: user?.id || "",
+      storeId: sid,
+      userId: uid,
       cashierName:
         cashierName &&
         !cashierName.includes("@") &&
-        cashierName !== user?.email?.split("@")[0]
+        cashierName !== userRef.current?.email?.split("@")[0]
           ? cashierName
-          : user?.user_metadata?.full_name ||
-            state.settings?.managerName ||
-            (role === "admin" ? "Gérant" : "Caissier"),
-      openingAmount: openingAmount,
+          : userRef.current?.user_metadata?.full_name ||
+            stateRef.current.settings?.managerName ||
+            (effectiveRoleRef.current === "admin" ? "Gérant" : "Caissier"),
+      openingAmount,
       expectedAmount: openingAmount,
       totalCashSales: 0,
       totalMobileMoneySales: 0,
@@ -3580,87 +3191,45 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       status: "open",
     };
 
-    // 1. Sauvegarde locale instantanée & mise à jour immédiate de l'écran (zéro blocage réseau)
-    if (activeStore?.id) {
-      try {
-        const storeKey = `boutiquepro_cash_sessions_${activeStore.id}`;
-        const existing: CashSession[] = JSON.parse(localStorage.getItem(storeKey) || "[]");
-        const closedOrphans = existing.map((s) =>
-          s.status === "open" ? { ...s, status: "closed" as const, closedAt: openedAt } : s
-        );
-        const updated = [session, ...closedOrphans.filter((s) => s.id !== session.id)];
-        localStorage.setItem(storeKey, JSON.stringify(updated));
-      } catch (e) {
-        console.warn("Notice stockage local ouverture caisse:", e);
-      }
-    }
-
     dispatchBase({ type: "OPEN_CASH_SESSION", payload: session });
 
-    // 2. Synchronisation Supabase avec timeout court (5s) et repli file hors-ligne
-    if (activeStore?.id) {
-      if (typeof window !== "undefined" && !navigator.onLine) {
-        savePendingCashSession(activeStore.id, session);
-        const cnt = await getOfflineSalesCount(activeStore.id);
-        setPendingSyncCount(cnt);
-      } else {
-        try {
-          let orphanQuery = supabase
-            .from("cash_sessions")
-            .update({ status: "closed", closed_at: openedAt })
-            .eq("store_id", activeStore.id)
-            .eq("status", "open");
-          if (user?.id && role !== "admin") {
-            orphanQuery = orphanQuery.eq("user_id", user.id);
-          }
-          await withNetworkTimeout(orphanQuery, 4000).catch(() => {});
+    if (uid && sid) {
+      await enqueueOutboxOperation({
+        id: `cash_open:${session.id}`,
+        idempotencyKey: `cash_open:${session.id}`,
+        userId: uid,
+        storeId: sid,
+        opType: "OPEN_CASH_SESSION",
+        entityType: "cash_session",
+        entityId: session.id,
+        payload: session,
+        createdAt: openedAt,
+      });
 
-          const { error } = await withNetworkTimeout(
-            supabase.from("cash_sessions").upsert(
-              [
-                {
-                  id: session.id,
-                  store_id: activeStore.id,
-                  user_id: user?.id || null,
-                  cashier_name: session.cashierName,
-                  opening_amount: session.openingAmount,
-                  expected_amount: session.expectedAmount,
-                  total_cash_sales: 0,
-                  total_mobile_money_sales: 0,
-                  total_card_sales: 0,
-                  total_sales_count: 0,
-                  total_sales_amount: 0,
-                  status: "open",
-                  opened_at: session.openedAt,
-                },
-              ],
-              { onConflict: "id" }
-            ),
-            5000
-          );
-          if (error) {
-            savePendingCashSession(activeStore.id, session);
-            const cnt = await getOfflineSalesCount(activeStore.id);
-            setPendingSyncCount(cnt);
-          }
-        } catch (e) {
-          console.warn("Ouverture caisse mise en file hors-ligne (réseau instable):", e);
-          savePendingCashSession(activeStore.id, session);
-          const cnt = await getOfflineSalesCount(activeStore.id);
-          setPendingSyncCount(cnt);
-        }
+      await refreshOutbox();
+      if (
+        networkHealthRef.current.isReachable &&
+        !sessionExpiredRef.current
+      ) {
+        void runSyncCycle({ forceAll: false, reason: "open_cash" });
       }
     }
 
     return session;
   };
 
-  const closeCashSession = async (closingAmount: number, notes?: string): Promise<CashSession | null> => {
-    if (!state.activeCashSession) return null;
-    const cur = state.activeCashSession;
+  const closeCashSession = async (
+    closingAmount: number,
+    notes?: string
+  ): Promise<CashSession | null> => {
+    const cur = stateRef.current.activeCashSession;
+    if (!cur) return null;
 
-    // Recalculer dynamiquement depuis getSessionStats pour garantir l'exactitude absolue
-    const stats = getSessionStats(cur, state.sales, state.cashSessions);
+    const stats = getSessionStats(
+      cur,
+      stateRef.current.sales,
+      stateRef.current.cashSessions
+    );
     const expected = stats.expectedCashInDrawer;
     const diff = closingAmount - expected;
     const closedAt = new Date().toISOString();
@@ -3680,134 +3249,613 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       notes: notes || undefined,
     };
 
-    // 1. Sauvegarde locale instantanée & fermeture immédiate de l'écran (zéro blocage)
-    if (activeStore?.id) {
-      try {
-        const storeKey = `boutiquepro_cash_sessions_${activeStore.id}`;
-        const existing: CashSession[] = JSON.parse(localStorage.getItem(storeKey) || "[]");
-        const updated = existing.map((s) => (s.id === cur.id ? closedSession : s));
-        if (!updated.some((s) => s.id === cur.id)) {
-          updated.unshift(closedSession);
-        }
-        localStorage.setItem(storeKey, JSON.stringify(updated));
-      } catch (e) {
-        console.warn("Notice stockage local clôture caisse:", e);
-      }
-    }
-
     dispatchBase({ type: "CLOSE_CASH_SESSION", payload: closedSession });
 
-    // 2. Synchronisation Supabase par upsert avec timeout court (5s) et repli file hors-ligne
-    if (activeStore?.id) {
-      if (typeof window !== "undefined" && !navigator.onLine) {
-        savePendingCashSession(activeStore.id, closedSession);
-        const cnt = await getOfflineSalesCount(activeStore.id);
-        setPendingSyncCount(cnt);
-      } else {
-        try {
-          const { error } = await withNetworkTimeout(
-            supabase.from("cash_sessions").upsert(
-              [
-                {
-                  id: closedSession.id,
-                  store_id: activeStore.id,
-                  user_id: closedSession.userId || user?.id || null,
-                  cashier_name: closedSession.cashierName,
-                  opening_amount: closedSession.openingAmount,
-                  closing_amount: closingAmount,
-                  expected_amount: expected,
-                  difference: diff,
-                  total_cash_sales: stats.cash,
-                  total_mobile_money_sales: stats.mm,
-                  total_card_sales: stats.card,
-                  total_sales_count: stats.count,
-                  total_sales_amount: stats.total,
-                  status: "closed",
-                  opened_at: closedSession.openedAt,
-                  closed_at: closedAt,
-                  notes: notes || null,
-                },
-              ],
-              { onConflict: "id" }
-            ),
-            5000
-          );
-          if (error) {
-            savePendingCashSession(activeStore.id, closedSession);
-            const cnt = await getOfflineSalesCount(activeStore.id);
-            setPendingSyncCount(cnt);
-          } else {
-            removePendingCashSession(closedSession.id);
-          }
-        } catch (e) {
-          console.warn("Clôture caisse mise en file hors-ligne (réseau instable):", e);
-          savePendingCashSession(activeStore.id, closedSession);
-          const cnt = await getOfflineSalesCount(activeStore.id);
-          setPendingSyncCount(cnt);
-        }
+    const uid = userRef.current?.id;
+    const sid = activeStoreRef.current?.id;
+    if (uid && sid) {
+      await enqueueOutboxOperation({
+        id: `cash_close:${closedSession.id}`,
+        idempotencyKey: `cash_close:${closedSession.id}`,
+        userId: uid,
+        storeId: sid,
+        opType: "CLOSE_CASH_SESSION",
+        entityType: "cash_session",
+        entityId: closedSession.id,
+        payload: closedSession,
+        createdAt: closedAt,
+      });
+
+      await refreshOutbox();
+      if (
+        networkHealthRef.current.isReachable &&
+        !sessionExpiredRef.current
+      ) {
+        void runSyncCycle({ forceAll: false, reason: "close_cash" });
       }
     }
 
     return closedSession;
   };
 
+  // ── Commandes manuelles Sync / Retry / Résolution Conflits / Backup ──────
+  const triggerManualSync = useCallback(
+    async (opts?: { forcePull?: boolean }): Promise<SyncRunResult> => {
+      return runSyncCycle({
+        forceAll: true,
+        forcePull: opts?.forcePull ?? true,
+        reason: "manual",
+      });
+    },
+    [runSyncCycle]
+  );
+
+  const syncOfflineSales = useCallback(async (): Promise<{
+    success: number;
+    failed: number;
+  }> => {
+    const res = await runSyncCycle({
+      forceAll: true,
+      forcePull: false,
+      reason: "manual",
+    });
+    return {
+      success: res.succeeded,
+      failed: res.failed + res.conflicts,
+    };
+  }, [runSyncCycle]);
+
+  /**
+   * Purge sécurisée : supprime uniquement les entrées `done` ou déjà traitées,
+   * sans JAMAIS effacer des ventes/paiements encore `pending`, `conflict` ou `auth_paused`.
+   */
+  const clearOfflineSalesQueue = useCallback(async (): Promise<void> => {
+    const uid = userRef.current?.id;
+    const sid = activeStoreRef.current?.id;
+    if (!uid || !sid) return;
+    await clearOutboxForScope(makeScopeKey(uid, sid), {
+      mode: "scope",
+      includeUnsynced: false,
+      statuses: ["done"],
+    });
+    await refreshOutbox();
+  }, [refreshOutbox]);
+
+  const retryOutboxOperation = useCallback(
+    async (itemId: string): Promise<void> => {
+      await retryOutboxItem(itemId);
+      await refreshOutbox();
+      if (
+        networkHealthRef.current.isReachable &&
+        !sessionExpiredRef.current
+      ) {
+        await runSyncCycle({ forceAll: true, reason: "retry_single" });
+      }
+    },
+    [refreshOutbox, runSyncCycle]
+  );
+
+  const dismissOutboxOperation = useCallback(
+    async (itemId: string): Promise<void> => {
+      await removeOutboxItem(itemId);
+      await refreshOutbox();
+    },
+    [refreshOutbox]
+  );
+
+  const retryFailedSale = useCallback(
+    async (saleId: string): Promise<{ success: number; failed: number }> => {
+      const candidates = outboxItems.filter(
+        (it) => it.entityId === saleId || it.id === `sale:${saleId}`
+      );
+      for (const c of candidates) {
+        await retryOutboxItem(c.id);
+      }
+      await refreshOutbox();
+      const res = await runSyncCycle({ forceAll: true, reason: "retry_sale" });
+      return {
+        success: res.succeeded,
+        failed: res.failed + res.conflicts,
+      };
+    },
+    [outboxItems, refreshOutbox, runSyncCycle]
+  );
+
+  const resolveConflict = useCallback(
+    async (
+      itemId: string,
+      decision: "keep_server" | "force_local" | "dismiss"
+    ): Promise<{ success: boolean; error?: string }> => {
+      const uid = userRef.current?.id;
+      const sid = activeStoreRef.current?.id;
+      if (!uid || !sid) {
+        return { success: false, error: "Aucune boutique active." };
+      }
+      const res = await resolveOutboxConflict({
+        itemId,
+        decision,
+        userId: uid,
+        storeId: sid,
+        role: effectiveRoleRef.current || "cashier",
+      });
+      if (res.success && decision === "keep_server") {
+        // Recharger le dernier état serveur pour refléter immédiatement la décision
+        await runSyncCycle({
+          forceAll: false,
+          forcePull: true,
+          reason: "conflict_keep_server",
+        });
+      } else {
+        await refreshOutbox();
+      }
+      return res;
+    },
+    [refreshOutbox, runSyncCycle]
+  );
+
+  const exportOfflineBackup = useCallback(async () => {
+    const uid = userRef.current?.id;
+    const sid = activeStoreRef.current?.id;
+    if (!uid || !sid) return null;
+    await persistSnapshotNow(stateRef.current);
+    return exportStoreOfflineBackup(uid, sid);
+  }, [persistSnapshotNow]);
+
+  const importOfflineBackup = useCallback(
+    async (rawJson: string): Promise<BackupImportResult> => {
+      const uid = userRef.current?.id;
+      const sid = activeStoreRef.current?.id;
+      if (!uid || !sid) {
+        return {
+          success: false,
+          importedOutboxCount: 0,
+          skippedDuplicateCount: 0,
+          restoredSnapshot: false,
+          restoredCursorsCount: 0,
+          error: "Aucune boutique active.",
+        };
+      }
+      const res = await importStoreOfflineBackup(rawJson, uid, sid);
+      if (res.success) {
+        const snap = await getStoreSnapshot(uid, sid);
+        if (snap?.state) {
+          dispatchBase({
+            type: "LOAD_STATE",
+            payload: {
+              ...snap.state,
+              cart: stateRef.current.cart || [],
+            },
+          });
+        }
+        await refreshOutbox();
+      }
+      return res;
+    },
+    [refreshOutbox]
+  );
+
+  // ── Valeurs dérivées pour compatibilité complète UI ──────────────────────
+  const pendingSyncCount =
+    outboxCounts.pending +
+    outboxCounts.syncing +
+    outboxCounts.authPaused +
+    outboxCounts.conflict;
+
+  const conflictItems = useMemo(
+    () => outboxItems.filter((it) => it.status === "conflict"),
+    [outboxItems]
+  );
+
+  const failedOfflineSales: OfflineSaleItem[] = useMemo(() => {
+    return outboxItems
+      .filter(
+        (it) =>
+          (it.opType === "COMPLETE_SALE" ||
+            it.opType === "CONVERT_QUOTE_TO_SALE") &&
+          (it.status === "failed" || it.status === "conflict")
+      )
+      .map((it) => {
+        const saleObj =
+          it.opType === "CONVERT_QUOTE_TO_SALE"
+            ? (it.payload as { sale: Sale })?.sale
+            : (it.payload as Sale);
+        return {
+          id: saleObj?.id || it.entityId,
+          storeId: it.storeId,
+          sale: saleObj,
+          createdAt: it.createdAt,
+          retryCount: it.retryCount,
+          lastError: it.lastError || it.conflictData?.message,
+          status: "failed" as const,
+          lastAttemptAt: it.lastAttemptAt,
+        };
+      })
+      .filter((x) => Boolean(x.sale));
+  }, [outboxItems]);
+
+  const unpaidDebts = useMemo(() => {
+    return (state.sales || []).filter((s) => {
+      if (!s || s.paymentMethod !== "credit") return false;
+      const total = Number.isFinite(Number(s.total)) ? Number(s.total) : 0;
+      const paid = Number.isFinite(Number(s.amountPaid))
+        ? Number(s.amountPaid)
+        : 0;
+      const calculatedRem = Math.max(0, total - paid);
+      const rem =
+        s.remainingAmount !== undefined &&
+        s.remainingAmount !== null &&
+        s.remainingAmount > 0
+          ? Number(s.remainingAmount)
+          : calculatedRem;
+      const isPaid = (s.paymentStatus === "paid" && paid >= total) || rem <= 0;
+      return !isPaid && rem > 0;
+    });
+  }, [state.sales]);
+
+  const totalDebtsAmount = useMemo(() => {
+    return (unpaidDebts || []).reduce((sum, s) => {
+      if (!s) return sum;
+      const total = Number.isFinite(Number(s.total)) ? Number(s.total) : 0;
+      const paid = Number.isFinite(Number(s.amountPaid))
+        ? Number(s.amountPaid)
+        : 0;
+      const calculatedRem = Math.max(0, total - paid);
+      const rem =
+        s.remainingAmount !== undefined &&
+        s.remainingAmount !== null &&
+        s.remainingAmount > 0
+          ? Number(s.remainingAmount)
+          : calculatedRem;
+      return sum + rem;
+    }, 0);
+  }, [unpaidDebts]);
+
+  const formatPrice = useCallback(
+    (amount: number) => {
+      const validAmount = Number.isFinite(Number(amount)) ? Number(amount) : 0;
+      return (
+        new Intl.NumberFormat("fr-FR").format(validAmount) +
+        " " +
+        (state.settings?.currency || "FCFA")
+      );
+    },
+    [state.settings?.currency]
+  );
+
+  const lowStockProducts = useMemo(
+    () => (state.products || []).filter((p) => p && p.stock <= p.minStock),
+    [state.products]
+  );
+
+  const uniqueSales = useMemo(() => {
+    const map = new Map<string, Sale>();
+    (state.sales || []).forEach((s) => {
+      if (s && s.id && !map.has(s.id)) map.set(s.id, s);
+    });
+    return Array.from(map.values());
+  }, [state.sales]);
+
+  const totalRevenue = useMemo(
+    () => uniqueSales.reduce((sum, s) => sum + (s?.total || 0), 0),
+    [uniqueSales]
+  );
+
+  const today = new Date().toISOString().split("T")[0];
+  const todaySales = useMemo(
+    () =>
+      uniqueSales.filter((s) => s?.createdAt && s.createdAt.startsWith(today)),
+    [uniqueSales, today]
+  );
+  const todayRevenue = useMemo(
+    () => todaySales.reduce((sum, s) => sum + (s?.total || 0), 0),
+    [todaySales]
+  );
+  const totalOrders = uniqueSales.length;
+  const todayOrders = todaySales.length;
+  const averageBasket = totalOrders > 0 ? totalRevenue / totalOrders : 0;
+
+  const totalExpenses = useMemo(
+    () =>
+      state.expenses
+        ? state.expenses.reduce((sum, e) => sum + Number(e.amount), 0)
+        : 0,
+    [state.expenses]
+  );
+
+  const totalCOGS = useMemo(() => {
+    let sum = 0;
+    uniqueSales.forEach((sale) => {
+      if (!sale) return;
+      (sale.items || []).forEach((item) => {
+        if (!item) return;
+        const product = (state.products || []).find(
+          (p) => p.id === item.productId
+        );
+        const effectiveUnitCost =
+          item.cost !== undefined && item.cost !== null
+            ? Number(item.cost)
+            : Number(product?.cost) || 0;
+        const refQty =
+          item.quantityReference !== undefined &&
+          item.quantityReference !== null &&
+          Number(item.quantityReference) > 0
+            ? Number(item.quantityReference)
+            : Number(item.quantity) * (Number(item.unitMultiplier) || 1);
+        sum += effectiveUnitCost * refQty;
+      });
+    });
+    return sum;
+  }, [uniqueSales, state.products]);
+
+  const netProfit = totalRevenue - totalCOGS - totalExpenses;
+
+  const creditSales = useMemo(
+    () =>
+      (state.sales || []).filter(
+        (s) =>
+          s &&
+          (s.paymentMethod === "credit" ||
+            (Number.isFinite(Number(s.remainingAmount)) &&
+              Number(s.remainingAmount) > 0))
+      ),
+    [state.sales]
+  );
+
+  const totalCreditSales = useMemo(
+    () =>
+      creditSales.reduce(
+        (sum, s) => sum + (Number.isFinite(Number(s?.total)) ? Number(s.total) : 0),
+        0
+      ),
+    [creditSales]
+  );
+
+  const totalRecoveredAmount = useMemo(
+    () =>
+      creditSales.reduce((sum, s) => {
+        if (!s) return sum;
+        const total = Number.isFinite(Number(s.total)) ? Number(s.total) : 0;
+        const paid = Number.isFinite(Number(s.amountPaid))
+          ? Number(s.amountPaid)
+          : s.paymentStatus === "paid"
+            ? total
+            : 0;
+        return sum + paid;
+      }, 0),
+    [creditSales]
+  );
+
+  const totalCollectedRevenue = Math.max(0, totalRevenue - totalDebtsAmount);
+
+  const recoveryRate =
+    totalCreditSales > 0 &&
+    Number.isFinite(totalCreditSales) &&
+    Number.isFinite(totalRecoveredAmount)
+      ? Math.min(
+          100,
+          Math.max(
+            0,
+            Math.round((totalRecoveredAmount / totalCreditSales) * 100)
+          )
+        )
+      : 100;
+
+  const overdueDebtsCount = useMemo(() => {
+    const now = new Date();
+    return (unpaidDebts || []).filter(
+      (s) => s && s.dueDate && new Date(s.dueDate) < now
+    ).length;
+  }, [unpaidDebts]);
+
+  const collectedNetProfit = totalCollectedRevenue - totalCOGS - totalExpenses;
+
+  const closedCashSessions = useMemo(() => {
+    return (state.cashSessions || [])
+      .filter((cs) => cs && cs.status === "closed")
+      .sort(
+        (a, b) =>
+          new Date(b.closedAt || b.openedAt).getTime() -
+          new Date(a.closedAt || a.openedAt).getTime()
+      );
+  }, [state.cashSessions]);
+
+  const totalCashDifference = useMemo(
+    () =>
+      closedCashSessions.reduce(
+        (sum, cs) => sum + (Number(cs.difference) || 0),
+        0
+      ),
+    [closedCashSessions]
+  );
+
+  const totalCashShortage = useMemo(
+    () =>
+      closedCashSessions
+        .filter((cs) => (Number(cs.difference) || 0) < 0)
+        .reduce(
+          (sum, cs) => sum + Math.abs(Number(cs.difference) || 0),
+          0
+        ),
+    [closedCashSessions]
+  );
+
+  const totalCashSurplus = useMemo(
+    () =>
+      closedCashSessions
+        .filter((cs) => (Number(cs.difference) || 0) > 0)
+        .reduce((sum, cs) => sum + (Number(cs.difference) || 0), 0),
+    [closedCashSessions]
+  );
+
+  const discrepantSessionsCount = useMemo(
+    () =>
+      closedCashSessions.filter(
+        (cs) => Math.abs(Number(cs.difference) || 0) > 0
+      ).length,
+    [closedCashSessions]
+  );
+
+  const todayClosedSessions = useMemo(
+    () =>
+      closedCashSessions.filter((cs) =>
+        isSameCalendarDay(cs.closedAt || cs.openedAt)
+      ),
+    [closedCashSessions]
+  );
+
+  const todayCashDifference = useMemo(
+    () =>
+      todayClosedSessions.reduce(
+        (sum, cs) => sum + (Number(cs.difference) || 0),
+        0
+      ),
+    [todayClosedSessions]
+  );
+
+  const todayCashShortage = useMemo(
+    () =>
+      todayClosedSessions
+        .filter((cs) => (Number(cs.difference) || 0) < 0)
+        .reduce(
+          (sum, cs) => sum + Math.abs(Number(cs.difference) || 0),
+          0
+        ),
+    [todayClosedSessions]
+  );
+
+  const cashDiscrepancyRate = useMemo(() => {
+    if (closedCashSessions.length === 0) return 100;
+    const cleanSessions = closedCashSessions.filter(
+      (cs) => Math.abs(Number(cs.difference) || 0) === 0
+    ).length;
+    return Math.round((cleanSessions / closedCashSessions.length) * 100);
+  }, [closedCashSessions]);
+
+  const lastClosedCashSession =
+    closedCashSessions.length > 0 ? closedCashSessions[0] : null;
+
+  const totalPhysicalCashAndBank = Math.max(
+    0,
+    totalCollectedRevenue - totalCashShortage
+  );
+
+  const categorySales = useMemo(() => {
+    const map: Record<string, number> = {};
+    (state.sales || []).forEach((sale) => {
+      if (!sale) return;
+      const discountRatio = sale.subtotal > 0 ? sale.total / sale.subtotal : 1;
+      (sale.items || []).forEach((item) => {
+        if (!item) return;
+        const product = (state.products || []).find(
+          (p) => p.id === item.productId
+        );
+        if (product) {
+          const netItemTotal = Math.round(item.total * discountRatio);
+          map[product.category] = (map[product.category] || 0) + netItemTotal;
+        }
+      });
+    });
+    return map;
+  }, [state.sales, state.products]);
+
+  const categoryNames = useMemo(
+    () => state.categories.map((c) => c.name),
+    [state.categories]
+  );
+
+  const currentSessionSales = useMemo(() => {
+    if (!state.activeCashSession) return [];
+    return getSalesForSession(
+      state.activeCashSession,
+      state.sales || [],
+      state.cashSessions || []
+    );
+  }, [state.activeCashSession, state.sales, state.cashSessions]);
+
+  const currentSessionStats = useMemo(() => {
+    return getSessionStats(
+      state.activeCashSession,
+      state.sales || [],
+      state.cashSessions || []
+    );
+  }, [state.activeCashSession, state.sales, state.cashSessions]);
+
   return (
-    <StoreContext.Provider value={{ 
-      sales: state.sales,
-      products: state.products,
-      customers: state.customers,
-      expenses: state.expenses,
-      orders: state.orders,
-      quotes: state.quotes || [],
-      state, 
-      dispatch, 
-      formatPrice, 
-      lowStockProducts, 
-      totalRevenue, 
-      todayRevenue, 
-      totalOrders, 
-      todayOrders, 
-      averageBasket, 
-      categorySales, 
-      categoryNames, 
-      totalExpenses, 
-      netProfit,
-      activeCashSession: state.activeCashSession,
-      cashSessions: state.cashSessions,
-      currentSessionSales,
-      currentSessionStats,
-      openCashSession,
-      closeCashSession,
-      isOnline,
-      pendingSyncCount,
-      isSyncing,
-      syncOfflineSales,
-      clearOfflineSalesQueue,
-      failedOfflineSales,
-      retryFailedSale,
-      refreshFailedOfflineSales,
-      isRealtimeActive,
-      unpaidDebts,
-      totalDebtsAmount,
-      totalCreditSales,
-      totalRecoveredAmount,
-      totalCollectedRevenue,
-      recoveryRate,
-      overdueDebtsCount,
-      collectedNetProfit,
-      closedCashSessions,
-      totalCashDifference,
-      totalCashShortage,
-      totalCashSurplus,
-      todayCashDifference,
-      todayCashShortage,
-      cashDiscrepancyRate,
-      totalPhysicalCashAndBank,
-      discrepantSessionsCount,
-      lastClosedCashSession,
-      recordDebtPayment,
-      createDirectDebt
-    }}>
+    <StoreContext.Provider
+      value={{
+        sales: state.sales,
+        products: state.products,
+        customers: state.customers,
+        expenses: state.expenses,
+        orders: state.orders,
+        quotes: state.quotes || [],
+        state,
+        dispatch,
+        formatPrice,
+        lowStockProducts,
+        totalRevenue,
+        todayRevenue,
+        totalOrders,
+        todayOrders,
+        averageBasket,
+        categorySales,
+        categoryNames,
+        totalExpenses,
+        netProfit,
+        activeCashSession: state.activeCashSession,
+        cashSessions: state.cashSessions,
+        currentSessionSales,
+        currentSessionStats,
+        openCashSession,
+        closeCashSession,
+        isOnline,
+        isInitialized,
+        networkStatus: networkHealth.status,
+        networkHealth,
+        pendingSyncCount,
+        isSyncing,
+        lastSyncedAt,
+        syncError,
+        outboxCounts,
+        outboxItems,
+        conflictItems,
+        syncLogs,
+        storageDiagnostics,
+        syncOfflineSales,
+        clearOfflineSalesQueue,
+        failedOfflineSales,
+        retryFailedSale,
+        refreshFailedOfflineSales,
+        triggerManualSync,
+        retryOutboxOperation,
+        dismissOutboxOperation,
+        resolveConflict,
+        refreshOutbox,
+        exportOfflineBackup,
+        importOfflineBackup,
+        isRealtimeActive,
+        unpaidDebts,
+        totalDebtsAmount,
+        totalCreditSales,
+        totalRecoveredAmount,
+        totalCollectedRevenue,
+        recoveryRate,
+        overdueDebtsCount,
+        collectedNetProfit,
+        closedCashSessions,
+        totalCashDifference,
+        totalCashShortage,
+        totalCashSurplus,
+        todayCashDifference,
+        todayCashShortage,
+        cashDiscrepancyRate,
+        totalPhysicalCashAndBank,
+        discrepantSessionsCount,
+        lastClosedCashSession,
+        recordDebtPayment,
+        createDirectDebt,
+      }}
+    >
       {children}
     </StoreContext.Provider>
   );

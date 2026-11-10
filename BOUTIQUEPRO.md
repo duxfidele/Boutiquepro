@@ -21,7 +21,8 @@ Elle permet à de multiples commerçants de gérer leurs boutiques, leurs stocks
 - **Domaine officiel :** `https://maboutiquepro.app` (associé à Vercel & Supabase Auth).
 - **Passerelle de Paiement SaaS :** Moneriz (Spécification v1 Liveframe & Webhooks sécurisés HMAC-SHA256).
 - **Import / Export Tableurs :** Bibliothèque `xlsx` durcie (validation des types MIME et extensions, limite stricte de 5 Mo, plafond de 5 000 lignes anti-DoS) pour l'import de catalogue et l'export d'inventaire/analytique.
-- **PWA :** `@ducanh2912/next-pwa` (Mise en cache locale, mode installable sur écran d'accueil smartphone/tablette).
+- **Architecture Hors-Ligne (Offline-First) :** Base locale IndexedDB `BoutiquePro_Offline` v2 (`src/lib/offlineDb.ts`), Journal Write-Ahead (`outbox`) ordonné et idempotent, sonde réseau active (`ping_health`), moteur de synchronisation *push-before-pull* (`src/lib/syncEngine.ts`), RPC PostgreSQL atomiques avec verrouillage optimiste (`updated_at`), Centre de Synchronisation UI (`SyncCenterModal`) et suite de tests automatisés 12 scénarios (`npm test`).
+- **PWA :** `@ducanh2912/next-pwa` (Mode installable sur écran d'accueil, page secours `/~offline`, règles Workbox `NetworkOnly` sur Supabase/Auth/API et `NetworkFirst` sur les pages, cycle de vie contrôlé sans rechargement brutal via `PwaLifecycleManager.tsx`).
 - **Impression & Documents :** Impression thermique directe (80mm/58mm via CSS `@media print`), factures et quittances PDF (`jspdf`, `html2canvas`, `jspdf-autotable`).
 - **Messagerie & Relances :** Intégration WhatsApp Business / Web avec indicatif international Togo (+228 / 00228) et formatage automatique des téléphones à 8 chiffres.
 - **Sécurité Réseau & Headers :** HSTS (Strict-Transport-Security 2 ans), `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, `Referrer-Policy: strict-origin-when-cross-origin`.
@@ -35,22 +36,25 @@ L'application fonctionne selon le modèle **SaaS Multi-Tenant**. Chaque commerç
 Les données sont strictement cloisonnées grâce aux **Row Level Security (RLS)** de PostgreSQL et à un partitionnement d'état local par boutique :
 - Chaque requête vérifie que l'utilisateur connecté appartient bien à l'équipe de la boutique (`store_id`) avant de renvoyer la moindre donnée.
 - Un caissier ou un propriétaire d'une boutique A ne peut **jamais** lire ni manipuler les données d'une boutique B.
-- Les états locaux de cache et les sessions d'inventaire sont isolés par boutique (`boutiquepro-state-[storeId]`, `boutiquepro-cart-[storeId]`).
+- Les états locaux et snapshots hors-ligne sont cloisonnés doublement par utilisateur et par boutique (`userId:storeId` dans IndexedDB `BoutiquePro_Offline` pour les snapshots, curseurs, outbox et logs ; `bp_cart_${userId}_${storeId}` pour le panier POS ; `bp_active_store_${userId}` et `bp_cached_stores_${userId}` dans `AuthContext`, sans aucun fallback global `"default"` ni fuite de coûts/dépenses pour le rôle caissier).
 
 ### Tables clés (cloisonnées par `store_id`) :
-- `stores` : Boutiques créées (`id`, `name`, `owner_id`, `created_at`).
+- `stores` : Boutiques créées (`id`, `name`, `owner_id`, `business_sector`, `enabled_modules`, `created_at`).
 - `store_members` : Liaison entre les utilisateurs (`user_id`), la boutique (`store_id`) et leur rôle (`role` : admin / cashier).
 - `profiles` : Profils publics (nom complet, email, téléphone, rôle par défaut).
-- `products` & `categories` : Catalogue des articles (nom, SKU/code-barres, prix de vente, stock, stock minimum, image/emoji).
-- `product_costs` : Table sanctuarisée réservée aux administrateurs (coûts d'achat `cost`, RLS étanche, inaccessible aux caissiers).
-- `sales` & `sale_items` : Historique des ventes comptant et à crédit (`payment_method`, `payment_status`, `amount_paid`, `remaining_amount`, `due_date`).
-- `debt_payments` : Historique des remboursements des créances (`sale_id`, `amount`, `payment_method`, `paid_at`, `cashier_name`).
+- `products` & `categories` : Catalogue des articles (nom, SKU/code-barres, prix de vente, stock, stock minimum, image/emoji, `updated_at`).
+- `product_units` & `product_batches` : Unités multi-conditionnements (gros / détail, multiplicateurs, ventes fractionnaires) et traçabilité FEFO des lots avec dates de péremption.
+- `product_costs` & `sale_item_costs` : Tables sanctuarisées réservées aux administrateurs (coûts d'achat `cost` et coûts figés sur les lignes vendues, RLS étanche, inaccessibles aux caissiers).
+- `product_price_history` : Historique d'évolution des prix de vente et coûts d'achat.
+- `sales` & `sale_items` : Historique des ventes comptant et à crédit (`payment_method`, `payment_status`, `amount_paid`, `remaining_amount`, `due_date`, `session_id`, `updated_at`).
+- `sale_debt_payments` : Historique persistant et idempotent des versements et recouvrements de créances (`sale_id`, `amount`, `payment_method`, `paid_at`, `cashier_name`, `session_id`).
+- `quotes` & `quote_items` : Devis et factures proforma convertibles atomiquement en ventes (`convert_quote_to_sale`).
 - `customers` : Base clients (nom, téléphone, total des achats, solde débiteur).
 - `cash_sessions` : Sessions et clôtures de caisse (fonds de caisse initial, ventes encaissées, écarts réels, rapports X & Z).
 - `expenses` : Charges opérationnelles (loyer, salaires, factures).
-- `orders` & `order_items` : Commandes et réapprovisionnements fournisseurs.
-- `inventory_sessions` & `inventory_items` : Sessions d'inventaire physique filtrées par boutique et régularisation des écarts.
-- `settings` : Paramètres personnalisés de chaque boutique (nom, logo, devise, TVA, ville, pays, téléphone, email).
+- `orders` & `order_items` : Commandes et réapprovisionnements fournisseurs avec réception atomique (`receive_order_atomic`).
+- `inventory_sessions` & `inventory_items` : Sessions d'inventaire physique filtrées par boutique et régularisation atomique des écarts (`apply_inventory_session_atomic`).
+- `settings` : Paramètres personnalisés de chaque boutique (nom, logo, devise, TVA, ville, pays, téléphone, email, `allow_negative_stock`).
 - `subscription_orders` & `moneriz_events` : Traçabilité des abonnements SaaS et événements de paiement Moneriz.
 - `email_outbox` : File d'attente d'envoi d'emails transactionnels (`recipient`, `subject`, `html`, `status`: pending/sent/failed, `attempts`, `error_message`, `created_at`, `processed_at`).
 - `audit_logs` : Journal d'audit inviolable des actions administrateur critiques (`store_id`, `actor_id`, `actor_email`, `action`, `resource_type`, `resource_id`, `details`, `created_at`). Révocation absolue des droits d'altération et de suppression (`REVOKE UPDATE, DELETE`).
@@ -124,11 +128,28 @@ Les données sont strictement cloisonnées grâce aux **Row Level Security (RLS)
 - **Dédoublonnage comptable infaillible (`getInitialCreditDeposit`) :** Séparation nette entre l'acompte d'origine et les recouvrements ultérieurs pour éliminer tout double comptage.
 - **Rapports X & Z certifiés :** Point d'étape provisoire (X) et clôture journalière définitive (Z) avec comptage physique des coupures, calcul automatique de l'écart (conforme, déficit, excédent) et impression thermique ou PDF.
 
-### 5. Mode Hors-Ligne (Offline Queue) & Supabase Realtime
-- Sauvegarde instantanée des ventes en cache local en cas de rupture de connexion internet.
-- Aucune interruption de caisse lors des coupures réseau.
-- Resynchronisation automatique dès le rétablissement de la connexion.
-- Canaux WebSockets Supabase Realtime pour la mise à jour immédiate des stocks sur l'ensemble des terminaux connectés.
+### 5. Architecture Offline-First Complète & Supabase Realtime (Lots 1 à 5)
+- **Couche PostgreSQL & Idempotence (`migration_offline_first_hardening.sql` — Lot 1 déployé) :**
+  - Colonnes `updated_at`, triggers automatiques (`fn_touch_updated_at`) et index composites `(store_id, updated_at DESC)` sur toutes les tables métier.
+  - Table persistante `sale_debt_payments` soumise à RLS et aux contrôles d'abonnement.
+  - **9 RPC atomiques, idempotentes et dotées de verrouillage optimiste (OCC) :** `ping_health`, `create_sale`, `record_debt_payment`, `convert_quote_to_sale`, `receive_order_atomic`, `apply_inventory_session_atomic`, `upsert_quote_atomic`, `upsert_product_atomic`, `upsert_store_settings_atomic`.
+- **Stockage IndexedDB & Journal Write-Ahead (`offlineDb.ts` & `offlineQueue.ts` — Lot 2) :**
+  - Base locale `BoutiquePro_Offline` v2 regroupant `snapshots`, `outbox` (WAL), `sync_cursors`, `sync_logs` et `pending_sales` (compatibilité descendante avec migration non destructive depuis `localStorage`).
+  - File d'attente `outbox` ordonnée de manière déterministe par `priority` puis `sequence` monotone, dédupliquée par `idempotencyKey`, avec gestion de dépendances parent-enfant (ex: session de caisse/client/produit créés hors-ligne avant une vente ou un règlement).
+  - Isolation des snapshots par `userId:storeId`, filtrage RBAC caissier avant toute persistance locale (`sanitizeSnapshotStateForRole`), journalisation de sync, export/import de sauvegarde JSON signée `fnv64` et synchronisation inter-onglets via `BroadcastChannel` (`boutiquepro-offline-sync`, sans écho en double dans l'onglet émetteur).
+- **Surveillance Réseau, Sync Engine & Contextes Réactifs (`networkMonitor.ts`, `syncEngine.ts`, `AuthContext.tsx`, `StoreContext.tsx` — Lot 3) :**
+  - Sonde serveur active (`probeServerHealth` via `ping_health`, timeout 3,5 s) distinguant `online`, `degraded` (> 2,2 s), `offline` (y compris portails captifs Wi-Fi / erreurs de parsing HTML) et expiration JWT (`session_expired` sans déconnexion destructrice ni perte des opérations en file).
+  - Moteur **Push-Before-Pull** avec verrou inter-onglets (`navigator.locks` + fallback bail `localStorage`), backoff exponentiel avec jitter, pull incrémental via `sync_cursors`, **Pending Outbox Shield** (empêchant l'écrasement des créations/stocks/règlements locaux en attente par un pull/realtime intermédiaire) et classification des conflits (`conflictData`).
+  - Démarrage propre sans flash de données de démo dans `StoreContext`, réducteurs multi-unités + déduction FEFO des lots corrigés sur `COMPLETE_SALE` et `CONVERT_QUOTE_TO_SALE`, et déconnexion sécurisée préservant l'outbox locale en attente.
+- **PWA Offline, UI de Synchronisation & Hygiène IDs (Lot 4) :**
+  - **Durcissement Service Worker (`next.config.mjs` & `/~offline`) :** `skipWaiting: false`, `reloadOnOnline: false`, exclusions strictes `NetworkOnly` sur `*.supabase.co`, `/api/*`, `challenges.cloudflare.com` et `accounts.google.com`, `NetworkFirst` (3 s) pour les pages, en-têtes `no-store` sur `/sw.js` et page secours dédiée `/~offline`.
+  - **Cycle de vie PWA contrôlé (`PwaLifecycleManager.tsx`) :** préchargement discret des routes critiques selon le rôle (`admin`/`cashier`) et notification douce « Mise à jour prête -> Actualiser » évitant toute coupure durant une vente.
+  - **Centre de Synchronisation & Reconnexion (`SyncCenterModal.tsx`, `NetworkStatusPill`, `SessionExpiredBanner.tsx`) :** suivi en temps réel de l'état réseau, des opérations en attente, résolution interactive des conflits (*Conserver serveur* / *Écraser par ma version*), réessai des erreurs en quarantaine, historique et ré-authentification JWT in-app sans perte de panier ni d'outbox.
+  - **Sauvegarde locale & diagnostics (`/settings`) :** jauge de quota navigateur (alerte automatique à ≥ 80 %), export JSON signé et restauration avec vérification d'intégrité `fnv64` et contrôle d'appartenance à la boutique.
+  - **Identifiants RFC 4122 & UI non bloquante :** généralisation de `generateClientUUID()` sur POS, produits, import Excel, devis, commandes, inventaire et dépenses ; remplacement des `alert()` bloquants sur POS, dettes, devis et commandes par des bandeaux en ligne.
+- **Validation Automatisée & Stress-Tests (Lot 5) :**
+  - Suite automatisée exécutable via `npm test` (`scripts/run-tests.mjs` + `tsconfig.test.json`) compilant et exécutant les modules TypeScript réels sous `node --test` avec simulateur complet IndexedDB/Web Locks/BroadcastChannel/Supabase (`tests/helpers/mockBrowserEnv.ts`) pour valider les **12 scénarios critiques** (`tests/01-*` à `tests/04-*`).
+- **Temps réel WebSockets :** Canaux Supabase Realtime filtrés par `store_id` maintenant les stocks, ventes et sessions synchronisés entre postes dès que la connexion est active.
 
 ### 6. Chargement Instantané de la Page d'Accueil & Sécurisation des Routes Privées
 - **Suppression du blocage au démarrage :** Écran d'attente retiré sur `/`. La page d'accueil publique s'affiche en 0 ms.
@@ -164,10 +185,11 @@ Les données sont strictement cloisonnées grâce aux **Row Level Security (RLS)
   - Synchronisation synchrone et immédiate dans `localStorage` des clés `activeStoreId` et `activeStoreObj` lors de la sélection d'une boutique dans `Sidebar.tsx` et `AuthContext.tsx`.
   - Résolution du décalage d'affichage : le nom réel de la boutique sélectionnée s'affiche dynamiquement au niveau du logo de la barre latérale sur ordinateur comme sur mobile (au lieu d'un intitulé générique fixe).
 - **Élimination des fuites de données inter-boutiques :**
-  - Suppression complète du fallback vers le cache global non cloisonné `boutiquepro-state`.
-  - Partitionnement strict de l'état par boutique : `boutiquepro-state-[storeId]`.
+  - Suppression complète du fallback vers le cache global `boutiquepro-state` ou un store `"default"`.
+  - Partitionnement strict des snapshots hors-ligne dans IndexedDB par clé `userId:storeId` (avec assainissement RBAC automatique pour les caissiers).
+  - Partitionnement par utilisateur dans `AuthContext` (`bp_active_store_${userId}`, `bp_cached_stores_${userId}`) et purge sélective des snapshots à la déconnexion tout en préservant la file `outbox` en attente.
   - Filtrage explicite de la table `inventory_sessions` par `store_id` (`.eq('store_id', activeStore.id)`) pour une étanchéité absolue de l'inventaire physique.
-  - Cloisonnement individuel du panier de caisse par boutique (`boutiquepro-cart-[storeId]`).
+  - Cloisonnement individuel du panier de caisse par utilisateur et boutique (`bp_cart_${userId}_${storeId}`).
 
 ### 11. Identité Opérateur sur les Factures, Reçus et Documents Commerciaux
 - **Nom officiel garanti :**
@@ -330,8 +352,26 @@ Un audit complet et rigoureux a été exécuté sur l'ensemble de l'application 
 | `src/app/products/page.tsx` | Gestion du catalogue, filtres, stock bas, bouton « Importer Excel » et export |
 | `src/components/products/ProductExcelImportModal.tsx` | Modal d'importation Excel/CSV durcie (5 Mo, 5 000 lignes max, extensions validées) |
 | `src/components/layout/Sidebar.tsx` | Barre latérale avec sélecteur multi-boutiques synchrone et affichage dynamique du logo |
-| `src/context/AuthContext.tsx` | Authentification Supabase, sessions, profils et gestion du rôle multi-tenancy |
-| `src/context/StoreContext.tsx` | État réactif par boutique (`boutiquepro-state-[id]`), calculs anti-NaN et requêtes RLS |
+| `src/context/AuthContext.tsx` | Authentification Supabase, cache de session hors-ligne (`authStatus` / `session_expired`), isolation `userId` des boutiques et gestion RBAC |
+| `src/context/StoreContext.tsx` | État réactif Offline-First cloisonné par `userId:storeId`, journalisation WAL avant dispatch, réducteurs FEFO/multi-unités et API sync/conflits/backup |
+| `next.config.mjs` | Configuration Next.js, en-têtes HTTP de sécurité, cache `/sw.js` (`no-store`) et règles PWA Workbox (`NetworkOnly` / `NetworkFirst` / `/~offline`) |
+| `package.json` | Dépendances et scripts npm (`dev`, `build`, `start`, `lint`, `test`) |
+| `src/lib/offlineDb.ts` | Base IndexedDB `BoutiquePro_Offline` v2 (`snapshots`, `outbox`, `sync_cursors`, `sync_logs`), RBAC snapshots, export/import JSON `fnv64` et `BroadcastChannel` |
+| `src/lib/offlineQueue.ts` | Adaptateur file d'attente hors-ligne compatible avec le WAL IndexedDB et gestionnaire de timeout réseau (`withNetworkTimeout`) |
+| `src/lib/networkMonitor.ts` | Surveillance réseau active via `ping_health`, détection des faux en-ligne / portails captifs et des erreurs JWT expirées |
+| `src/lib/syncEngine.ts` | Moteur Push-Before-Pull avec backoff exponentiel, verrou inter-onglets, pull incrémental par curseurs et bouclier *Pending Outbox Shield* |
+| `src/components/offline/SyncCenterModal.tsx` | Centre de synchronisation UI (pill réseau, file outbox, résolution manuelle des conflits OCC, relances et diagnostic stockage) |
+| `src/components/offline/SessionExpiredBanner.tsx` | Bannière non bloquante de ré-authentification JWT préservant l'outbox locale et le panier POS |
+| `src/components/pwa/PwaLifecycleManager.tsx` | Gestion douce des mises à jour Service Worker (`SKIP_WAITING` contrôlé) et préchargement des routes hors-ligne par rôle |
+| `src/app/~offline/page.tsx` | Page de secours hors-ligne PWA dédiée avec accès direct au POS |
+| `migration_offline_first_hardening.sql` | Migration SQL Supabase (Lot 1) : triggers `updated_at`, `sale_debt_payments`, index incrémentaux et 9 RPC atomiques/idempotentes (OCC) |
+| `tsconfig.test.json` | Configuration de compilation TypeScript dédiée à l'exécution de la suite de tests Node.js |
+| `scripts/run-tests.mjs` | Lanceur `npm test` compilant les modules réels + tests et exécutant `node --test` |
+| `tests/helpers/mockBrowserEnv.ts` | Harnais simulateur IndexedDB v1/v2, quotas, Web Locks, `BroadcastChannel` et RPC/tables Supabase |
+| `tests/01-pos-offline-sync.test.ts` | Scénarios 1 à 3 : vente POS offline, FEFO, migration v1->v2, coupure réseau, Push-Before-Pull, idempotence `23505` et Outbox Shield |
+| `tests/02-conflicts-auth-errors.test.ts` | Scénarios 4 à 6 : expiration JWT `auth_paused`, conflits OCC `VERSION_MISMATCH` (`keep_server` / `force_local`) et quarantaine erreurs |
+| `tests/03-isolation-rbac-quota-backup.test.ts` | Scénarios 8 à 10 : isolation multi-tenant `userId:storeId`, RBAC caissier, quota IndexedDB et sauvegarde JSON signée `fnv64` |
+| `tests/04-concurrency-causal-pwa.test.ts` | Scénarios 7, 11 et 12 : verrous multi-onglets, anti-double-clic, coalescence, UUIDv4, ordre causal strict et configuration PWA |
 | `src/app/reset-password/page.tsx` | Page de réinitialisation sécurisée du mot de passe |
 | `src/app/debts/page.tsx` | Carnet de crédits, historique des versements, quittances PDF et relances WhatsApp Togo |
 | `src/components/pos/CashRegisterSessionModal.tsx` | Gestion des ouvertures et clôtures de caisse (Rapports X et Z) |

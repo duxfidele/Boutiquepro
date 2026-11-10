@@ -147,6 +147,8 @@ export default function DebtsPage() {
   const receiptRef = useRef<HTMLDivElement>(null);
   const [isDownloadingReceipt, setIsDownloadingReceipt] = useState(false);
   const [paymentSuccess, setPaymentSuccess] = useState<string | null>(null);
+  const [paymentError, setPaymentError] = useState<string | null>(null);
+  const [receiptError, setReceiptError] = useState<string | null>(null);
 
   const [whatsappModalData, setWhatsappModalData] = useState<{
     isOpen: boolean;
@@ -308,6 +310,7 @@ export default function DebtsPage() {
     setPaymentMethod("cash");
     setPaymentNote("");
     setPaymentSuccess(null);
+    setPaymentError(null);
   };
 
   // Submit recovery payment
@@ -319,6 +322,7 @@ export default function DebtsPage() {
     const currentRem = getDebtRemaining(selectedDebt);
     if (isNaN(amt) || amt <= 0) return;
 
+    setPaymentError(null);
     setIsSubmittingPayment(true);
     try {
       const effectiveAmount = Math.min(amt, currentRem);
@@ -336,6 +340,7 @@ export default function DebtsPage() {
 
       if (paymentRecord) {
         setTimeout(() => {
+          setReceiptError(null);
           setSelectedReceipt({
             debt: {
               ...selectedDebt,
@@ -358,7 +363,7 @@ export default function DebtsPage() {
       }
     } catch (err) {
       console.error(err);
-      alert("Erreur lors de l'enregistrement du versement.");
+      setPaymentError("Erreur lors de l'enregistrement du versement.");
     } finally {
       setIsSubmittingPayment(false);
     }
@@ -425,6 +430,7 @@ export default function DebtsPage() {
 
   const handleDownloadReceipt = async () => {
     if (!receiptRef.current || !selectedReceipt || isDownloadingReceipt) return;
+    setReceiptError(null);
     setIsDownloadingReceipt(true);
     try {
       await exportElementToPdf(receiptRef.current, {
@@ -434,7 +440,7 @@ export default function DebtsPage() {
       });
     } catch (err) {
       console.error("Erreur téléchargement reçu dette:", err);
-      alert("Erreur lors de la génération du PDF. Vous pouvez utiliser le bouton Imprimer.");
+      setReceiptError("Erreur lors de la génération du PDF. Vous pouvez utiliser le bouton Imprimer.");
     } finally {
       setIsDownloadingReceipt(false);
     }
@@ -1294,6 +1300,13 @@ export default function DebtsPage() {
                       />
                     </div>
 
+                    {paymentError && (
+                      <div className="flex items-center gap-2 rounded-xl border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-xs font-medium text-rose-600 dark:text-rose-400">
+                        <AlertCircle className="w-4 h-4 shrink-0" />
+                        <span>{paymentError}</span>
+                      </div>
+                    )}
+
                     <div className="flex gap-3 pt-2">
                       <button
                         type="button"
@@ -1456,6 +1469,12 @@ export default function DebtsPage() {
 
             {/* Actions: Download, Print and WhatsApp */}
             <div className="space-y-2 pt-1">
+              {receiptError && (
+                <div className="flex items-center gap-2 rounded-xl border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-[11px] font-medium text-rose-600 dark:text-rose-400">
+                  <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                  <span>{receiptError}</span>
+                </div>
+              )}
               <button
                 type="button"
                 disabled={isDownloadingReceipt}

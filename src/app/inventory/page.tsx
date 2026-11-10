@@ -4,6 +4,7 @@ import React, { useState, useMemo } from "react";
 import { useAuth } from "@/context/AuthContext";
 import SubscriptionModal from "@/components/subscription/SubscriptionModal";
 import { useStore, InventorySession, InventoryItem } from "@/context/StoreContext";
+import { generateClientUUID } from "@/lib/offlineQueue";
 import { ClipboardList, Plus, Search, Check, FileText, Printer, ArrowLeft, ArrowRight, Save, Trash2, Calendar, X } from "lucide-react";
 import { ProductAvatar } from "@/components/ui/ProductAvatar";
 
@@ -76,7 +77,7 @@ export default function InventoryPage() {
     });
 
     const session: InventorySession = {
-      id: "inv_" + Date.now(),
+      id: generateClientUUID(),
       date: new Date().toISOString(),
       items,
       totalVarianceValue,

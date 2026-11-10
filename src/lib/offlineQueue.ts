@@ -1,4 +1,23 @@
 import type { Sale, CashSession } from "@/context/StoreContext";
+import {
+  clearOutboxForScope,
+  generateClientUUID,
+  getDefaultPriorityForOp,
+  getOutboxItem,
+  getOutboxItems,
+  isIndexedDBSupported,
+  LEGACY_LS_KEYS,
+  makeScopeKey,
+  migrateLegacyOfflineStorage,
+  openOfflineDB,
+  removeOutboxItem,
+  retryOutboxItem,
+  STORE_PENDING_SALES_V1,
+  upsertOutboxItem,
+  type OutboxItem,
+} from "@/lib/offlineDb";
+
+export { generateClientUUID };
 
 export interface OfflineSaleItem {
   id: string; // sale.id
@@ -32,12 +51,21 @@ export interface PendingCashSessionItem {
   createdAt: string;
 }
 
-const DB_NAME = "BoutiquePro_Offline";
-const DB_VERSION = 1;
-const STORE_NAME = "pending_sales";
-const LOCAL_STORAGE_FALLBACK_KEY = "boutiquepro_offline_sales";
-const PENDING_DEBT_PAYMENTS_KEY = "boutiquepro_pending_debt_payments";
-const PENDING_CASH_SESSIONS_KEY = "boutiquepro_pending_cash_sessions";
+const LOCAL_STORAGE_FALLBACK_KEY = LEGACY_LS_KEYS.OFFLINE_SALES;
+const PENDING_DEBT_PAYMENTS_KEY = LEGACY_LS_KEYS.PENDING_DEBT_PAYMENTS;
+const PENDING_CASH_SESSIONS_KEY = LEGACY_LS_KEYS.PENDING_CASH_SESSIONS;
+
+let legacyMigrationPromise: Promise<void> | null = null;
+
+async function ensureLegacyMigrated(): Promise<void> {
+  if (!isIndexedDBSupported()) return;
+  if (!legacyMigrationPromise) {
+    legacyMigrationPromise = migrateLegacyOfflineStorage()
+      .then(() => undefined)
+      .catch(() => undefined);
+  }
+  await legacyMigrationPromise;
+}
 
 /**
  * Exécute une promesse ou un builder Supabase avec un délai maximum strict
@@ -78,11 +106,23 @@ export function withNetworkTimeout<T>(
  * Détecte de façon exhaustive toutes les erreurs liées à une coupure ou instabilité réseau
  * sur Chrome, Android, Safari iOS ("Load failed") et Edge.
  */
-export function isNetworkLikeError(err: any): boolean {
+export function isNetworkLikeError(err: unknown): boolean {
   if (typeof navigator !== "undefined" && !navigator.onLine) return true;
   if (!err) return false;
+  const e = err as {
+    name?: string;
+    status?: number;
+    code?: string | number;
+    message?: string;
+    details?: string;
+    hint?: string;
+  };
+  if (e?.name === "AbortError") return true;
+  if (e?.status === 0 || e?.status === 502 || e?.status === 503 || e?.status === 504) {
+    return true;
+  }
   const msg = String(
-    err?.message || err?.details || err?.hint || err || ""
+    e?.message || e?.details || e?.hint || err || ""
   ).toLowerCase();
   return (
     msg.includes("network_timeout") ||
@@ -96,81 +136,133 @@ export function isNetworkLikeError(err: any): boolean {
     msg.includes("network") ||
     msg.includes("abort") ||
     msg.includes("offline") ||
+    msg.includes("err_internet_disconnected") ||
+    msg.includes("err_network_changed") ||
+    msg.includes("econnreset") ||
+    msg.includes("etimedout") ||
     msg.includes("502") ||
     msg.includes("503") ||
     msg.includes("504")
   );
 }
 
-function isIndexedDBAvailable(): boolean {
-  return typeof window !== "undefined" && "indexedDB" in window;
-}
+// ─── Miroirs LocalStorage (crash-resistant synchrone) ────────────────────────
 
-function openDB(): Promise<IDBDatabase> {
-  return new Promise((resolve, reject) => {
-    if (!isIndexedDBAvailable()) {
-      reject(new Error("IndexedDB non disponible"));
-      return;
-    }
-    const request = indexedDB.open(DB_NAME, DB_VERSION);
-    request.onupgradeneeded = (event) => {
-      const db = (event.target as IDBOpenDBRequest).result;
-      if (!db.objectStoreNames.contains(STORE_NAME)) {
-        const store = db.createObjectStore(STORE_NAME, { keyPath: "id" });
-        store.createIndex("storeId", "storeId", { unique: false });
-        store.createIndex("createdAt", "createdAt", { unique: false });
-      }
-    };
-    request.onsuccess = () => resolve(request.result);
-    request.onerror = () => reject(request.error);
-  });
-}
-
-// Fallback & miroir LocalStorage pour résilience totale
 function getLocalStorageQueue(): OfflineSaleItem[] {
   if (typeof window === "undefined") return [];
   try {
-    const raw = localStorage.getItem(LOCAL_STORAGE_FALLBACK_KEY);
-    return raw ? JSON.parse(raw) : [];
+    const raw = window.localStorage.getItem(LOCAL_STORAGE_FALLBACK_KEY);
+    return raw ? (JSON.parse(raw) as OfflineSaleItem[]) : [];
   } catch {
     return [];
   }
 }
 
-function saveLocalStorageQueue(items: OfflineSaleItem[]) {
+function saveLocalStorageQueue(items: OfflineSaleItem[]): void {
   if (typeof window === "undefined") return;
   try {
-    localStorage.setItem(LOCAL_STORAGE_FALLBACK_KEY, JSON.stringify(items));
+    window.localStorage.setItem(
+      LOCAL_STORAGE_FALLBACK_KEY,
+      JSON.stringify(items)
+    );
   } catch (e) {
     console.error("Quota localStorage dépassé:", e);
   }
 }
 
-export async function saveOfflineSale(storeId: string, sale: Sale): Promise<void> {
+async function removeFromV1PendingSales(saleId?: string): Promise<void> {
+  if (!isIndexedDBSupported()) return;
+  try {
+    const db = await openOfflineDB();
+    if (!db.objectStoreNames.contains(STORE_PENDING_SALES_V1)) return;
+    await new Promise<void>((resolve, reject) => {
+      const tx = db.transaction(STORE_PENDING_SALES_V1, "readwrite");
+      const store = tx.objectStore(STORE_PENDING_SALES_V1);
+      const req = saleId ? store.delete(saleId) : store.clear();
+      req.onsuccess = () => resolve();
+      req.onerror = () => reject(req.error);
+    });
+  } catch {
+    // Best-effort cleanup
+  }
+}
+
+function outboxSaleToLegacyItem(out: OutboxItem): OfflineSaleItem {
+  return {
+    id: out.entityId,
+    storeId: out.storeId,
+    sale: out.payload as Sale,
+    createdAt: out.createdAt,
+    retryCount: out.retryCount || 0,
+    lastError: out.lastError,
+    status:
+      out.status === "failed" || out.status === "conflict"
+        ? "failed"
+        : "pending",
+    lastAttemptAt: out.lastAttemptAt,
+  };
+}
+
+function legacySaleToOutboxItem(
+  item: OfflineSaleItem,
+  existing?: OutboxItem | null
+): OutboxItem<Sale> {
+  const userId =
+    existing?.userId || item.sale?.userId || "__legacy__";
+  const nowIso = new Date().toISOString();
+  const createdAt = existing?.createdAt || item.createdAt || nowIso;
+
+  return {
+    id: `sale:${item.id}`,
+    idempotencyKey: existing?.idempotencyKey || item.id,
+    scopeKey: makeScopeKey(userId, item.storeId),
+    userId,
+    storeId: item.storeId,
+    opType: "COMPLETE_SALE",
+    entityType: "sale",
+    entityId: item.id,
+    payload: item.sale,
+    expectedUpdatedAt: existing?.expectedUpdatedAt ?? null,
+    priority:
+      existing?.priority ?? getDefaultPriorityForOp("COMPLETE_SALE"),
+    sequence: existing?.sequence ?? Date.now() * 1000,
+    status: item.status === "failed" ? "failed" : "pending",
+    retryCount: item.retryCount || 0,
+    nextRetryAt: existing?.nextRetryAt || createdAt,
+    lastAttemptAt: item.lastAttemptAt,
+    lastError: item.lastError,
+    errorCode: existing?.errorCode,
+    conflictData: existing?.conflictData,
+    createdAt,
+    updatedAt: nowIso,
+  };
+}
+
+// ─── Ventes hors-ligne (Compatibilité v1 -> Outbox v2) ──────────────────────
+
+export async function saveOfflineSale(
+  storeId: string,
+  sale: Sale
+): Promise<void> {
   const item: OfflineSaleItem = {
     id: sale.id,
     storeId,
     sale,
-    createdAt: new Date().toISOString(),
+    createdAt: sale.createdAt || new Date().toISOString(),
     retryCount: 0,
     status: "pending",
   };
 
-  // Toujours sauvegarder dans le miroir localStorage immédiatement (synchrone, résistant à la fermeture d'onglet)
+  // Miroir localStorage synchrone immédiat (résistant aux fermetures brutales)
   const lsList = getLocalStorageQueue();
   saveLocalStorageQueue([item, ...lsList.filter((i) => i.id !== item.id)]);
 
-  if (!isIndexedDBAvailable()) return;
+  if (!isIndexedDBSupported()) return;
 
   try {
-    const db = await openDB();
-    await new Promise<void>((resolve, reject) => {
-      const tx = db.transaction(STORE_NAME, "readwrite");
-      const store = tx.objectStore(STORE_NAME);
-      const req = store.put(item);
-      req.onsuccess = () => resolve();
-      req.onerror = () => reject(req.error);
-    });
+    await ensureLegacyMigrated();
+    const existing = await getOutboxItem(`sale:${item.id}`);
+    await upsertOutboxItem(legacySaleToOutboxItem(item, existing));
   } catch {
     // Déjà protégé dans localStorage
   }
@@ -180,52 +272,54 @@ export async function updateOfflineSale(item: OfflineSaleItem): Promise<void> {
   const lsList = getLocalStorageQueue();
   saveLocalStorageQueue([item, ...lsList.filter((i) => i.id !== item.id)]);
 
-  if (!isIndexedDBAvailable()) return;
+  if (!isIndexedDBSupported()) return;
 
   try {
-    const db = await openDB();
-    await new Promise<void>((resolve, reject) => {
-      const tx = db.transaction(STORE_NAME, "readwrite");
-      const store = tx.objectStore(STORE_NAME);
-      const req = store.put(item);
-      req.onsuccess = () => resolve();
-      req.onerror = () => reject(req.error);
-    });
+    await ensureLegacyMigrated();
+    const existing = await getOutboxItem(`sale:${item.id}`);
+    await upsertOutboxItem(legacySaleToOutboxItem(item, existing));
   } catch {
     // Déjà mis à jour dans localStorage
   }
 }
 
-export async function getOfflineSales(storeId?: string): Promise<OfflineSaleItem[]> {
+export async function getOfflineSales(
+  storeId?: string
+): Promise<OfflineSaleItem[]> {
   const lsAll = getLocalStorageQueue();
 
-  if (!isIndexedDBAvailable()) {
-    return storeId ? lsAll.filter((i) => i.storeId === storeId) : lsAll;
+  if (!isIndexedDBSupported()) {
+    const filtered = storeId
+      ? lsAll.filter((i) => i.storeId === storeId)
+      : lsAll;
+    return [...filtered].sort(
+      (a, b) =>
+        new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+    );
   }
 
   try {
-    const db = await openDB();
-    const idbResults = await new Promise<OfflineSaleItem[]>((resolve, reject) => {
-      const tx = db.transaction(STORE_NAME, "readonly");
-      const store = tx.objectStore(STORE_NAME);
-      const req = store.getAll();
-      req.onsuccess = () => resolve(req.result || []);
-      req.onerror = () => reject(req.error);
+    await ensureLegacyMigrated();
+    const outboxSales = await getOutboxItems({
+      storeId,
+      opType: "COMPLETE_SALE",
+      statuses: ["pending", "syncing", "failed", "conflict", "auth_paused"],
     });
 
-    // Fusion sans perte entre IndexedDB et le miroir localStorage
     const mergedMap = new Map<string, OfflineSaleItem>();
-    lsAll.forEach((item) => {
-      if (item?.id) mergedMap.set(item.id, item);
-    });
-    idbResults.forEach((item) => {
-      if (item?.id) mergedMap.set(item.id, item);
-    });
+    for (const lsItem of lsAll) {
+      if (lsItem?.id && (!storeId || lsItem.storeId === storeId)) {
+        mergedMap.set(lsItem.id, lsItem);
+      }
+    }
+    for (const obItem of outboxSales) {
+      mergedMap.set(obItem.entityId, outboxSaleToLegacyItem(obItem));
+    }
 
-    const combined = Array.from(mergedMap.values()).sort(
-      (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+    return Array.from(mergedMap.values()).sort(
+      (a, b) =>
+        new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
     );
-    return storeId ? combined.filter((i) => i.storeId === storeId) : combined;
   } catch {
     return storeId ? lsAll.filter((i) => i.storeId === storeId) : lsAll;
   }
@@ -235,17 +329,13 @@ export async function removeOfflineSale(saleId: string): Promise<void> {
   const lsList = getLocalStorageQueue();
   saveLocalStorageQueue(lsList.filter((i) => i.id !== saleId));
 
-  if (!isIndexedDBAvailable()) return;
+  if (!isIndexedDBSupported()) return;
 
   try {
-    const db = await openDB();
-    await new Promise<void>((resolve, reject) => {
-      const tx = db.transaction(STORE_NAME, "readwrite");
-      const store = tx.objectStore(STORE_NAME);
-      const req = store.delete(saleId);
-      req.onsuccess = () => resolve();
-      req.onerror = () => reject(req.error);
-    });
+    await Promise.all([
+      removeOutboxItem(`sale:${saleId}`),
+      removeFromV1PendingSales(saleId),
+    ]);
   } catch {
     // Supprimé de localStorage
   }
@@ -253,10 +343,12 @@ export async function removeOfflineSale(saleId: string): Promise<void> {
 
 // ─── File d'attente des remboursements de dettes hors-ligne ──────────────────
 
-export function getPendingDebtPayments(storeId?: string): PendingDebtPaymentItem[] {
+export function getPendingDebtPayments(
+  storeId?: string
+): PendingDebtPaymentItem[] {
   if (typeof window === "undefined") return [];
   try {
-    const raw = localStorage.getItem(PENDING_DEBT_PAYMENTS_KEY);
+    const raw = window.localStorage.getItem(PENDING_DEBT_PAYMENTS_KEY);
     const list: PendingDebtPaymentItem[] = raw ? JSON.parse(raw) : [];
     return storeId ? list.filter((i) => i.storeId === storeId) : list;
   } catch {
@@ -269,29 +361,63 @@ export function savePendingDebtPayment(item: PendingDebtPaymentItem): void {
   try {
     const existing = getPendingDebtPayments();
     const updated = [...existing.filter((i) => i.id !== item.id), item];
-    localStorage.setItem(PENDING_DEBT_PAYMENTS_KEY, JSON.stringify(updated));
+    window.localStorage.setItem(
+      PENDING_DEBT_PAYMENTS_KEY,
+      JSON.stringify(updated)
+    );
   } catch (e) {
     console.warn("Erreur stockage file dette hors-ligne:", e);
+  }
+
+  if (isIndexedDBSupported()) {
+    const nowIso = new Date().toISOString();
+    const createdAt = item.createdAt || nowIso;
+    void upsertOutboxItem<PendingDebtPaymentItem>({
+      id: `debt:${item.id}`,
+      idempotencyKey: item.id,
+      scopeKey: makeScopeKey("__legacy__", item.storeId),
+      userId: "__legacy__",
+      storeId: item.storeId,
+      opType: "RECORD_DEBT_PAYMENT",
+      entityType: "debt_payment",
+      entityId: item.id,
+      payload: item,
+      expectedUpdatedAt: null,
+      priority: getDefaultPriorityForOp("RECORD_DEBT_PAYMENT"),
+      sequence: Date.now() * 1000,
+      status: "pending",
+      retryCount: 0,
+      nextRetryAt: createdAt,
+      createdAt,
+      updatedAt: nowIso,
+    }).catch(() => {});
   }
 }
 
 export function removePendingDebtPayment(id: string): void {
-  if (typeof window === "undefined") return;
-  try {
-    const existing = getPendingDebtPayments();
-    localStorage.setItem(
-      PENDING_DEBT_PAYMENTS_KEY,
-      JSON.stringify(existing.filter((i) => i.id !== id))
-    );
-  } catch {}
+  if (typeof window !== "undefined") {
+    try {
+      const existing = getPendingDebtPayments();
+      window.localStorage.setItem(
+        PENDING_DEBT_PAYMENTS_KEY,
+        JSON.stringify(existing.filter((i) => i.id !== id))
+      );
+    } catch {}
+  }
+
+  if (isIndexedDBSupported()) {
+    void removeOutboxItem(`debt:${id}`).catch(() => {});
+  }
 }
 
 // ─── File d'attente des ouvertures / clôtures de caisse hors-ligne ───────────
 
-export function getPendingCashSessions(storeId?: string): PendingCashSessionItem[] {
+export function getPendingCashSessions(
+  storeId?: string
+): PendingCashSessionItem[] {
   if (typeof window === "undefined") return [];
   try {
-    const raw = localStorage.getItem(PENDING_CASH_SESSIONS_KEY);
+    const raw = window.localStorage.getItem(PENDING_CASH_SESSIONS_KEY);
     const list: PendingCashSessionItem[] = raw ? JSON.parse(raw) : [];
     return storeId ? list.filter((i) => i.storeId === storeId) : list;
   } catch {
@@ -299,42 +425,129 @@ export function getPendingCashSessions(storeId?: string): PendingCashSessionItem
   }
 }
 
-export function savePendingCashSession(storeId: string, session: CashSession): void {
-  if (typeof window === "undefined") return;
-  try {
-    const existing = getPendingCashSessions();
-    const item: PendingCashSessionItem = {
-      id: session.id,
+export function savePendingCashSession(
+  storeId: string,
+  session: CashSession
+): void {
+  const nowIso = new Date().toISOString();
+
+  if (typeof window !== "undefined") {
+    try {
+      const existing = getPendingCashSessions();
+      const item: PendingCashSessionItem = {
+        id: session.id,
+        storeId,
+        session,
+        createdAt: nowIso,
+      };
+      const updated = [...existing.filter((i) => i.id !== session.id), item];
+      window.localStorage.setItem(
+        PENDING_CASH_SESSIONS_KEY,
+        JSON.stringify(updated)
+      );
+    } catch (e) {
+      console.warn("Erreur stockage file session caisse hors-ligne:", e);
+    }
+  }
+
+  if (isIndexedDBSupported()) {
+    const isClosed = session.status === "closed";
+    const opType = isClosed ? "CLOSE_CASH_SESSION" : "OPEN_CASH_SESSION";
+    const outboxId = `${isClosed ? "cash_close" : "cash_open"}:${session.id}`;
+    const userId = session.userId || "__legacy__";
+    const createdAt =
+      (isClosed ? session.closedAt : session.openedAt) || nowIso;
+
+    void upsertOutboxItem<CashSession>({
+      id: outboxId,
+      idempotencyKey: outboxId,
+      scopeKey: makeScopeKey(userId, storeId),
+      userId,
       storeId,
-      session,
-      createdAt: new Date().toISOString(),
-    };
-    const updated = [...existing.filter((i) => i.id !== session.id), item];
-    localStorage.setItem(PENDING_CASH_SESSIONS_KEY, JSON.stringify(updated));
-  } catch (e) {
-    console.warn("Erreur stockage file session caisse hors-ligne:", e);
+      opType,
+      entityType: "cash_session",
+      entityId: session.id,
+      payload: session,
+      expectedUpdatedAt: null,
+      priority: getDefaultPriorityForOp(opType),
+      sequence: Date.now() * 1000,
+      status: "pending",
+      retryCount: 0,
+      nextRetryAt: createdAt,
+      createdAt,
+      updatedAt: nowIso,
+    }).catch(() => {});
   }
 }
 
 export function removePendingCashSession(sessionId: string): void {
-  if (typeof window === "undefined") return;
-  try {
-    const existing = getPendingCashSessions();
-    localStorage.setItem(
-      PENDING_CASH_SESSIONS_KEY,
-      JSON.stringify(existing.filter((i) => i.id !== sessionId))
-    );
-  } catch {}
+  if (typeof window !== "undefined") {
+    try {
+      const existing = getPendingCashSessions();
+      window.localStorage.setItem(
+        PENDING_CASH_SESSIONS_KEY,
+        JSON.stringify(existing.filter((i) => i.id !== sessionId))
+      );
+    } catch {}
+  }
+
+  if (isIndexedDBSupported()) {
+    void Promise.all([
+      removeOutboxItem(`cash_open:${sessionId}`),
+      removeOutboxItem(`cash_close:${sessionId}`),
+    ]).catch(() => {});
+  }
 }
 
-// ─── Compteur global et utilitaires ──────────────────────────────────────────
+// ─── Compteur global et utilitaires (sans double comptage) ──────────────────
 
 export async function getOfflineSalesCount(storeId?: string): Promise<number> {
-  const sales = await getOfflineSales(storeId);
-  const actionableSales = sales.filter((i) => i.status !== "failed");
+  const actionableIds = new Set<string>();
+  const excludedFailedSaleIds = new Set<string>();
+
+  if (isIndexedDBSupported()) {
+    try {
+      await ensureLegacyMigrated();
+      const allOutbox = await getOutboxItems({ storeId });
+      for (const item of allOutbox) {
+        if (item.opType === "COMPLETE_SALE" && item.status === "failed") {
+          excludedFailedSaleIds.add(item.entityId);
+          continue;
+        }
+        if (
+          item.status === "pending" ||
+          item.status === "syncing" ||
+          item.status === "auth_paused"
+        ) {
+          actionableIds.add(item.id);
+        }
+      }
+    } catch {
+      // Fallback localStorage ci-dessous
+    }
+  }
+
+  // Compléter uniquement avec les entrées localStorage non déjà recensées dans outbox
+  const lsSales = getLocalStorageQueue().filter(
+    (s) => !storeId || s.storeId === storeId
+  );
+  for (const s of lsSales) {
+    if (s.status === "failed" || excludedFailedSaleIds.has(s.id)) continue;
+    actionableIds.add(`sale:${s.id}`);
+  }
+
   const debtPayments = getPendingDebtPayments(storeId);
+  for (const d of debtPayments) {
+    actionableIds.add(`debt:${d.id}`);
+  }
+
   const cashSessions = getPendingCashSessions(storeId);
-  return actionableSales.length + debtPayments.length + cashSessions.length;
+  for (const c of cashSessions) {
+    const outboxId = `${c.session?.status === "closed" ? "cash_close" : "cash_open"}:${c.id}`;
+    actionableIds.add(outboxId);
+  }
+
+  return actionableIds.size;
 }
 
 export async function clearOfflineQueue(storeId?: string): Promise<void> {
@@ -342,8 +555,8 @@ export async function clearOfflineQueue(storeId?: string): Promise<void> {
     saveLocalStorageQueue([]);
     if (typeof window !== "undefined") {
       try {
-        localStorage.removeItem(PENDING_DEBT_PAYMENTS_KEY);
-        localStorage.removeItem(PENDING_CASH_SESSIONS_KEY);
+        window.localStorage.removeItem(PENDING_DEBT_PAYMENTS_KEY);
+        window.localStorage.removeItem(PENDING_CASH_SESSIONS_KEY);
       } catch {}
     }
   } else {
@@ -351,30 +564,52 @@ export async function clearOfflineQueue(storeId?: string): Promise<void> {
     saveLocalStorageQueue(lsList);
     if (typeof window !== "undefined") {
       try {
-        const remDebts = getPendingDebtPayments().filter((i) => i.storeId !== storeId);
-        localStorage.setItem(PENDING_DEBT_PAYMENTS_KEY, JSON.stringify(remDebts));
-        const remSessions = getPendingCashSessions().filter((i) => i.storeId !== storeId);
-        localStorage.setItem(PENDING_CASH_SESSIONS_KEY, JSON.stringify(remSessions));
+        const remDebts = getPendingDebtPayments().filter(
+          (i) => i.storeId !== storeId
+        );
+        window.localStorage.setItem(
+          PENDING_DEBT_PAYMENTS_KEY,
+          JSON.stringify(remDebts)
+        );
+        const remSessions = getPendingCashSessions().filter(
+          (i) => i.storeId !== storeId
+        );
+        window.localStorage.setItem(
+          PENDING_CASH_SESSIONS_KEY,
+          JSON.stringify(remSessions)
+        );
       } catch {}
     }
   }
 
-  if (!isIndexedDBAvailable()) return;
+  if (!isIndexedDBSupported()) return;
 
   try {
-    const db = await openDB();
     if (!storeId) {
-      await new Promise<void>((resolve, reject) => {
-        const tx = db.transaction(STORE_NAME, "readwrite");
-        const store = tx.objectStore(STORE_NAME);
-        const req = store.clear();
-        req.onsuccess = () => resolve();
-        req.onerror = () => reject(req.error);
-      });
+      const allOutbox = await getOutboxItems();
+      const allIds = allOutbox.map((i) => i.id);
+      if (allIds.length > 0) {
+        await Promise.all(allIds.map((id) => removeOutboxItem(id)));
+      }
+      await removeFromV1PendingSales();
     } else {
-      const items = await getOfflineSales(storeId);
-      for (const item of items) {
-        await removeOfflineSale(item.id);
+      await clearOutboxForScope(storeId, {
+        mode: "store",
+        includeUnsynced: true,
+      });
+      const db = await openOfflineDB();
+      if (db.objectStoreNames.contains(STORE_PENDING_SALES_V1)) {
+        const v1Items = await new Promise<OfflineSaleItem[]>((resolve) => {
+          const tx = db.transaction(STORE_PENDING_SALES_V1, "readonly");
+          const req = tx.objectStore(STORE_PENDING_SALES_V1).getAll();
+          req.onsuccess = () => resolve(req.result || []);
+          req.onerror = () => resolve([]);
+        });
+        for (const v1 of v1Items) {
+          if (v1.storeId === storeId) {
+            await removeFromV1PendingSales(v1.id);
+          }
+        }
       }
     }
   } catch {
@@ -382,20 +617,29 @@ export async function clearOfflineQueue(storeId?: string): Promise<void> {
   }
 }
 
-export async function getFailedOfflineSales(storeId?: string): Promise<OfflineSaleItem[]> {
+export async function getFailedOfflineSales(
+  storeId?: string
+): Promise<OfflineSaleItem[]> {
   const all = await getOfflineSales(storeId);
   return all.filter((i) => i.status === "failed");
 }
 
 export async function retryOfflineSale(saleId: string): Promise<void> {
-  const all = await getOfflineSales();
-  const item = all.find((i) => i.id === saleId);
-  if (item) {
-    await updateOfflineSale({
-      ...item,
-      retryCount: 0,
-      status: "pending",
-      lastError: undefined,
-    });
+  const lsList = getLocalStorageQueue();
+  const lsItem = lsList.find((i) => i.id === saleId);
+  if (lsItem) {
+    saveLocalStorageQueue([
+      {
+        ...lsItem,
+        retryCount: 0,
+        status: "pending",
+        lastError: undefined,
+      },
+      ...lsList.filter((i) => i.id !== saleId),
+    ]);
+  }
+
+  if (isIndexedDBSupported()) {
+    await retryOutboxItem(`sale:${saleId}`);
   }
 }
