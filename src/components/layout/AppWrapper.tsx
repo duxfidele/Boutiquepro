@@ -46,7 +46,7 @@ export default function AppWrapper({ children }: { children: React.ReactNode }) 
       router.replace("/");
       return;
     }
-    if (role === "cashier") {
+    if (role === "cashier" && !isSuperAdmin) {
       const allowedPaths = ["/", "/pos", "/debts", "/products", "/customers", "/support", "/profile"];
       if (!allowedPaths.includes(pathname)) {
         router.replace("/pos");
@@ -95,7 +95,7 @@ export default function AppWrapper({ children }: { children: React.ReactNode }) 
   if (user) {
     // A. Si l'abonnement ou la période d'essai de 14 jours est EXPIRÉ(E)
     if (subscription?.isExpired && !isSuperAdmin) {
-      if (role === "cashier") {
+      if (role === "cashier" && !isSuperAdmin) {
         // Pour le caissier : écran de verrouillage informatif
         return (
           <ErrorBoundary>

@@ -77,6 +77,16 @@ BEGIN
         WHERE owner_id = v_super_admin_id 
            OR id IN (SELECT store_id FROM public.store_members WHERE user_id = v_super_admin_id);
 
+        -- Promotion explicite au rôle ADMIN PLEIN sur toutes les boutiques associées
+        UPDATE public.store_members
+        SET role = 'admin'
+        WHERE user_id = v_super_admin_id;
+
+        -- Mise à jour du rôle principal dans profiles
+        UPDATE public.profiles
+        SET role = 'admin'
+        WHERE id = v_super_admin_id;
+
         GET DIAGNOSTICS v_count = ROW_COUNT;
         RAISE NOTICE 'Super Admin profidele91@gmail.com configuré avec succès (% boutique(s) rattachée(s)).', v_count;
     ELSE
@@ -141,3 +151,4 @@ END;
 $$;
 
 GRANT EXECUTE ON FUNCTION public.is_store_subscription_active(UUID) TO authenticated, anon;
+

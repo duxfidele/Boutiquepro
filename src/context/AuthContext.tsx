@@ -357,6 +357,11 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   );
 
   const [role, setRole] = useState<"admin" | "cashier" | null>(() => {
+    if (
+      initialTokenCache?.user?.email?.toLowerCase() === "profidele91@gmail.com"
+    ) {
+      return "admin";
+    }
     const uid = initialTokenCache?.user?.id;
     const st = uid ? readUserScopedStore(uid) : null;
     return st?.role || null;
@@ -398,22 +403,37 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
   const handleSetActiveStore = useCallback((store: any) => {
     if (store && store.id === "default") return;
-    setActiveStoreState(store);
+    const isSuper =
+      activeUserRef.current?.email?.toLowerCase() === "profidele91@gmail.com";
+    const adjustedStore =
+      isSuper && store ? { ...store, role: "admin" } : store;
+    setActiveStoreState(adjustedStore);
+    if (isSuper) {
+      setRole("admin");
+    } else if (adjustedStore?.role) {
+      setRole(adjustedStore.role);
+    }
     const uid = activeUserRef.current?.id;
-    if (store && uid && typeof window !== "undefined") {
+    if (adjustedStore && uid && typeof window !== "undefined") {
       try {
         window.localStorage.setItem(LAST_AUTH_UID_KEY, uid);
-        window.localStorage.setItem(scopedStoreIdKey(uid), store.id);
+        window.localStorage.setItem(scopedStoreIdKey(uid), adjustedStore.id);
         window.localStorage.setItem(
           scopedStoreObjKey(uid),
-          JSON.stringify(store)
+          JSON.stringify(adjustedStore)
         );
-        window.localStorage.setItem("activeStoreId", store.id);
-        window.localStorage.setItem("activeStoreObj", JSON.stringify(store));
-        if (store.enabled_modules && Array.isArray(store.enabled_modules)) {
+        window.localStorage.setItem("activeStoreId", adjustedStore.id);
+        window.localStorage.setItem(
+          "activeStoreObj",
+          JSON.stringify(adjustedStore)
+        );
+        if (
+          adjustedStore.enabled_modules &&
+          Array.isArray(adjustedStore.enabled_modules)
+        ) {
           window.localStorage.setItem(
-            `store_modules_${store.id}`,
-            JSON.stringify(store.enabled_modules)
+            `store_modules_${adjustedStore.id}`,
+            JSON.stringify(adjustedStore.enabled_modules)
           );
         }
       } catch {}
@@ -620,16 +640,28 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
             })
             .filter((d: any) => d.id && d.id !== "default");
 
-          // CONTRÔLE D'ÉTANCHÉITÉ DU PORTAIL DE CONNEXION
-          const isCashierAccount =
-            Boolean(
-              currentUserEmail?.endsWith("@caisse.maboutique.app")
-            ) ||
-            (typeof window !== "undefined" &&
-              window.sessionStorage.getItem("auth_portal_mode") === "cashier");
+          // Pour le Super Administrateur, toutes les boutiques sont gérées avec le rôle ADMIN PLEIN
+          if (isSuperAdminEmail) {
+            valid.forEach((d: any) => {
+              d.role = "admin";
+            });
+          }
 
-          const cashierStores = valid.filter((d: any) => d.role === "cashier");
-          const adminStores = isCashierAccount
+          // CONTRÔLE D'ÉTANCHÉITÉ DU PORTAIL DE CONNEXION
+          const isCashierAccount = isSuperAdminEmail
+            ? false
+            : Boolean(
+                currentUserEmail?.endsWith("@caisse.maboutique.app")
+              ) ||
+              (typeof window !== "undefined" &&
+                window.sessionStorage.getItem("auth_portal_mode") === "cashier");
+
+          const cashierStores = isSuperAdminEmail
+            ? []
+            : valid.filter((d: any) => d.role === "cashier");
+          const adminStores = isSuperAdminEmail
+            ? valid
+            : isCashierAccount
             ? []
             : valid.filter((d: any) => d.role === "admin");
 
@@ -681,7 +713,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
                 window.localStorage.getItem("activeStoreId")
               : null;
 
-          if (cashierStores.length > 0) {
+          if (cashierStores.length > 0 && !isSuperAdminEmail) {
             const selected =
               cashierStores.find((s: any) => s.id === savedStoreId) ||
               cashierStores[0];
@@ -740,7 +772,9 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
   useEffect(() => {
     if (activeStore && activeStore.id !== "default") {
-      setRole(activeStore.role);
+      const isSuper =
+        activeUserRef.current?.email?.toLowerCase() === "profidele91@gmail.com";
+      setRole(isSuper ? "admin" : (activeStore.role || "admin"));
       const sub = computeSubscription(
         activeStore,
         undefined,
@@ -821,16 +855,24 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         } catch {}
       }
 
+      const isSuper =
+        tokenInfo.user?.email?.toLowerCase() === "profidele91@gmail.com";
       const cachedStore = readUserScopedStore(uid);
       if (cachedStore?.id) {
+        if (isSuper) {
+          cachedStore.role = "admin";
+        }
         setActiveStoreState(cachedStore);
-        setRole(cachedStore.role || "admin");
+        setRole(isSuper ? "admin" : (cachedStore.role || "admin"));
         setSubscription(
           computeSubscription(cachedStore, undefined, tokenInfo.user?.email)
         );
       }
 
-      const cachedList = readUserScopedStores(uid);
+      let cachedList = readUserScopedStores(uid);
+      if (isSuper && cachedList.length > 0) {
+        cachedList = cachedList.map((s) => ({ ...s, role: "admin" }));
+      }
       if (cachedList.length > 0) {
         setStores(cachedList);
       }
@@ -1005,6 +1047,9 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const isSuperAdmin = Boolean(
     user?.email && user.email.toLowerCase() === "profidele91@gmail.com"
   );
+  const effectiveRole: "admin" | "cashier" | null = isSuperAdmin
+    ? "admin"
+    : role;
   const currentLimits = isSuperAdmin
     ? { ...TIER_LIMITS.BUSINESS, maxStores: 9999, maxCashiers: 9999 }
     : (subscription?.limits || defaultLimits);
@@ -1052,7 +1097,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     newModules: ModuleKey[],
     newSector?: StoreSector | null
   ): Promise<{ success: boolean; error?: string }> => {
-    if (!activeStore?.id || role !== "admin") {
+    if (!activeStore?.id || (role !== "admin" && !isSuperAdmin)) {
       return {
         success: false,
         error: "Action réservée à l'administrateur de la boutique",
@@ -1136,7 +1181,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     <AuthContext.Provider
       value={{
         user,
-        role,
+        role: effectiveRole,
         stores,
         activeStore,
         setActiveStore: handleSetActiveStore,

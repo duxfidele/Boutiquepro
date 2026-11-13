@@ -308,11 +308,11 @@ export default function SuperAdminSaasPage() {
   return (
     <div className="min-h-screen bg-background pb-16">
       {/* Top Banner Fondateur */}
-      <div className="border-b border-border/60 bg-gradient-to-r from-purple-950/40 via-background to-background backdrop-blur-md sticky top-0 z-20">
+      <div className="border-b border-border/80 bg-card/90 backdrop-blur-md sticky top-0 z-20 shadow-xs">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-purple-500/20 text-purple-400 border border-purple-500/30 flex items-center justify-center shrink-0 shadow-xs">
+              <div className="w-10 h-10 rounded-xl bg-purple-600 text-white flex items-center justify-center shrink-0 shadow-md shadow-purple-600/30">
                 <ShieldCheck className="w-6 h-6" />
               </div>
               <div>
@@ -320,7 +320,7 @@ export default function SuperAdminSaasPage() {
                   <h1 className="text-xl font-black text-foreground tracking-tight">
                     Console Super Admin SaaS
                   </h1>
-                  <span className="px-2 py-0.5 rounded-full bg-purple-500/20 text-purple-300 border border-purple-500/30 text-[10px] font-black uppercase tracking-wider">
+                  <span className="px-2.5 py-0.5 rounded-full bg-purple-100 text-purple-900 border border-purple-300 dark:bg-purple-950/60 dark:text-purple-200 dark:border-purple-700 text-[10px] font-black uppercase tracking-wider">
                     Fondateur
                   </span>
                 </div>
@@ -472,13 +472,19 @@ export default function SuperAdminSaasPage() {
             onClick={() => setActiveTab("stores")}
             className={`pb-3 px-4 text-sm font-bold border-b-2 transition-all flex items-center gap-2 ${
               activeTab === "stores"
-                ? "border-purple-500 text-purple-400"
+                ? "border-purple-600 text-purple-700 dark:text-purple-300"
                 : "border-transparent text-muted-foreground hover:text-foreground"
             }`}
           >
             <Store className="w-4 h-4" />
             <span>Boutiques & Abonnements</span>
-            <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-secondary text-foreground font-semibold">
+            <span
+              className={`px-1.5 py-0.2 rounded-full text-[10px] font-bold ${
+                activeTab === "stores"
+                  ? "bg-purple-100 text-purple-900 dark:bg-purple-950 dark:text-purple-200"
+                  : "bg-secondary text-foreground"
+              }`}
+            >
               {filteredStores.length}
             </span>
           </button>
@@ -487,13 +493,19 @@ export default function SuperAdminSaasPage() {
             onClick={() => setActiveTab("users")}
             className={`pb-3 px-4 text-sm font-bold border-b-2 transition-all flex items-center gap-2 ${
               activeTab === "users"
-                ? "border-purple-500 text-purple-400"
+                ? "border-purple-600 text-purple-700 dark:text-purple-300"
                 : "border-transparent text-muted-foreground hover:text-foreground"
             }`}
           >
             <Users className="w-4 h-4" />
             <span>Comptes Utilisateurs</span>
-            <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-secondary text-foreground font-semibold">
+            <span
+              className={`px-1.5 py-0.2 rounded-full text-[10px] font-bold ${
+                activeTab === "users"
+                  ? "bg-purple-100 text-purple-900 dark:bg-purple-950 dark:text-purple-200"
+                  : "bg-secondary text-foreground"
+              }`}
+            >
               {filteredUsers.length}
             </span>
           </button>
@@ -502,7 +514,7 @@ export default function SuperAdminSaasPage() {
             onClick={() => setActiveTab("payments")}
             className={`pb-3 px-4 text-sm font-bold border-b-2 transition-all flex items-center gap-2 ${
               activeTab === "payments"
-                ? "border-purple-500 text-purple-400"
+                ? "border-purple-600 text-purple-700 dark:text-purple-300"
                 : "border-transparent text-muted-foreground hover:text-foreground"
             }`}
           >
@@ -598,7 +610,7 @@ export default function SuperAdminSaasPage() {
                             <div className="font-bold text-foreground text-sm flex items-center gap-2">
                               <span>{st.name}</span>
                               {st.isFounder && (
-                                <span className="text-[9px] px-1.5 py-0.2 rounded-full bg-purple-500/20 text-purple-300 border border-purple-500/30 uppercase font-black">
+                                <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-purple-100 text-purple-900 border border-purple-300 dark:bg-purple-950/60 dark:text-purple-200 dark:border-purple-700 uppercase font-black">
                                   Fondateur
                                 </span>
                               )}
@@ -630,8 +642,8 @@ export default function SuperAdminSaasPage() {
 
                           <td className="py-3.5 px-4">
                             {st.isFounder ? (
-                              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-purple-500/20 text-purple-300 font-bold text-[11px]">
-                                <Sparkles className="w-3 h-3 text-purple-400" />
+                              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-purple-100 text-purple-900 border border-purple-300 dark:bg-purple-950/60 dark:text-purple-200 dark:border-purple-700 font-bold text-[11px]">
+                                <Sparkles className="w-3 h-3 text-purple-600 dark:text-purple-400" />
                                 Illimité
                               </span>
                             ) : st.subscriptionStatus === "active" ? (
@@ -697,7 +709,7 @@ export default function SuperAdminSaasPage() {
                                 );
                                 setModalDuration(1);
                               }}
-                              className="px-3 py-1.5 rounded-xl bg-purple-500/15 hover:bg-purple-500/25 text-purple-300 border border-purple-500/30 text-xs font-bold transition-all shadow-xs"
+                              className="px-3.5 py-1.5 rounded-xl bg-purple-600 hover:bg-purple-700 text-white text-xs font-bold transition-all shadow-xs hover:shadow-md active:scale-95"
                             >
                               Gérer l&apos;abonnement
                             </button>
@@ -794,7 +806,7 @@ export default function SuperAdminSaasPage() {
                             <div className="flex items-center gap-2">
                               <span>{u.fullName}</span>
                               {u.isFounder && (
-                                <span className="text-[9px] px-1.5 py-0.2 rounded-full bg-purple-500/20 text-purple-300 border border-purple-500/30 uppercase font-black">
+                                <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-purple-100 text-purple-900 border border-purple-300 dark:bg-purple-950/60 dark:text-purple-200 dark:border-purple-700 uppercase font-black">
                                   Fondateur
                                 </span>
                               )}
@@ -964,7 +976,7 @@ export default function SuperAdminSaasPage() {
                   <h3 className="text-lg font-black text-foreground">
                     Ajuster l&apos;Abonnement
                   </h3>
-                  <span className="px-2 py-0.5 rounded-full bg-purple-500/20 text-purple-300 text-[10px] font-black uppercase">
+                  <span className="px-2 py-0.5 rounded-full bg-purple-100 text-purple-900 border border-purple-300 dark:bg-purple-950/60 dark:text-purple-200 dark:border-purple-700 text-[10px] font-black uppercase">
                     Super Admin
                   </span>
                 </div>
@@ -1103,3 +1115,4 @@ export default function SuperAdminSaasPage() {
     </div>
   );
 }
+
