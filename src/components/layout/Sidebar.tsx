@@ -279,49 +279,6 @@ export default function Sidebar({ isOpen, onClose }: { isOpen?: boolean; onClose
           </div>
         </nav>
 
-        {/* Lien Super Admin Console SaaS (Réservé au Fondateur profidele91@gmail.com) */}
-        {isSuperAdmin && (
-          <div className="px-3 pb-2">
-            <Link
-              href="/admin/saas"
-              prefetch={true}
-              onClick={() => {
-                if (onClose) onClose();
-              }}
-              className={`group relative flex flex-row items-center justify-start gap-2.5 rounded-xl px-3 py-2.5 text-xs font-bold transition-all border shadow-xs ${
-                pathname === "/admin/saas"
-                  ? "bg-purple-600 text-white border-purple-700 shadow-md shadow-purple-600/30"
-                  : "bg-purple-100 hover:bg-purple-200 text-purple-950 border-purple-300 dark:bg-purple-950/60 dark:hover:bg-purple-900/60 dark:text-purple-100 dark:border-purple-700"
-              }`}
-              title="Console SaaS (Super Admin)"
-            >
-              <ShieldCheck
-                className={`h-4 w-4 shrink-0 ${
-                  pathname === "/admin/saas"
-                    ? "text-white"
-                    : "text-purple-700 dark:text-purple-300"
-                }`}
-              />
-              {!collapsed && (
-                <div className="flex items-center justify-between w-full min-w-0">
-                  <span className="truncate font-black tracking-wide">
-                    Console SaaS
-                  </span>
-                  <span
-                    className={`text-[9px] px-1.5 py-0.5 rounded-full font-black uppercase tracking-wider ${
-                      pathname === "/admin/saas"
-                        ? "bg-white text-purple-900"
-                        : "bg-purple-600 text-white shadow-xs"
-                    }`}
-                  >
-                    Super Admin
-                  </span>
-                </div>
-              )}
-            </Link>
-          </div>
-        )}
-
         {/* Lien Communauté WhatsApp épinglé hors du scroll (toujours visible) */}
         <div className="px-3 pb-2 pt-1">
           <a
@@ -342,12 +299,11 @@ export default function Sidebar({ isOpen, onClose }: { isOpen?: boolean; onClose
         </div>
 
         {/* Store display / selector */}
-        {!collapsed && (
+        {!collapsed && ((role === "admin" && stores && stores.length > 1) || role !== "admin") && (
           <div className="block border-t border-border/50 p-3 animate-fade-in space-y-2">
             {role === "admin" ? (
-              /* ADMIN : Sélecteur de ses boutiques */
-              <div className="flex items-center gap-2 rounded-xl bg-secondary/50 px-3 py-2.5">
-                <Store className="h-4 w-4 text-primary shrink-0" />
+              /* ADMIN : Sélecteur de ses boutiques si plusieurs boutiques */
+              <div className="flex items-center gap-2 rounded-xl bg-secondary/50 px-3 py-2">
                 <div className="flex-1 min-w-0">
                   <select
                     value={activeStore?.id || ""}
@@ -379,9 +335,6 @@ export default function Sidebar({ isOpen, onClose }: { isOpen?: boolean; onClose
                       );
                     })}
                   </select>
-                  <p className="text-[10px] text-muted-foreground truncate">
-                    <span className="text-primary font-medium">{cashierName ? `Caisse: ${cashierName}` : "Gérant"}</span>
-                  </p>
                 </div>
                 {stores && stores.length > 1 && activeStore && (
                   <button
@@ -638,6 +591,49 @@ export default function Sidebar({ isOpen, onClose }: { isOpen?: boolean; onClose
 
         {/* Bottom actions */}
         <div className="flex flex-col border-t border-border/50 p-3 gap-2">
+          {/* Lien Super Admin Console SaaS (Positionné juste au-dessus du profil) */}
+          {isSuperAdmin && (
+            <Link
+              href="/admin/saas"
+              prefetch={true}
+              onClick={() => {
+                if (onClose) onClose();
+              }}
+              className={`group relative flex flex-row items-center ${
+                collapsed ? "justify-center px-2 py-2.5" : "justify-start gap-2.5 px-3 py-2.5"
+              } rounded-xl text-xs font-bold transition-all border shadow-xs min-h-[44px] ${
+                pathname === "/admin/saas"
+                  ? "bg-purple-600 text-white border-purple-700 shadow-md shadow-purple-600/30"
+                  : "bg-purple-100 hover:bg-purple-200 text-purple-950 border-purple-300 dark:bg-purple-950/60 dark:hover:bg-purple-900/60 dark:text-purple-100 dark:border-purple-700"
+              }`}
+              title="Console SaaS (Super Admin)"
+            >
+              <ShieldCheck
+                className={`h-4 w-4 shrink-0 ${
+                  pathname === "/admin/saas"
+                    ? "text-white"
+                    : "text-purple-700 dark:text-purple-300"
+                }`}
+              />
+              {!collapsed && (
+                <div className="flex items-center justify-between w-full min-w-0">
+                  <span className="truncate font-black tracking-wide">
+                    Console SaaS
+                  </span>
+                  <span
+                    className={`text-[9px] px-1.5 py-0.5 rounded-full font-black uppercase tracking-wider ${
+                      pathname === "/admin/saas"
+                        ? "bg-white text-purple-900"
+                        : "bg-purple-600 text-white shadow-xs"
+                    }`}
+                  >
+                    Super Admin
+                  </span>
+                </div>
+              )}
+            </Link>
+          )}
+
           <Link
             href="/profile"
             prefetch={true}
