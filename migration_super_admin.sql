@@ -9,6 +9,7 @@ LANGUAGE plpgsql
 SECURITY DEFINER
 STABLE
 SET search_path = public, pg_temp
+
 AS $$
 DECLARE
     v_email TEXT;
