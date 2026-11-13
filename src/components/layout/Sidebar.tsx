@@ -78,6 +78,7 @@ export default function Sidebar({ isOpen, onClose }: { isOpen?: boolean; onClose
     canManageTeam,
     hasMultiStore,
     getModuleStatus,
+    isSuperAdmin,
   } = useAuth();
   const [cashierName, setCashierName] = useState<string | null>(null);
 
@@ -278,6 +279,35 @@ export default function Sidebar({ isOpen, onClose }: { isOpen?: boolean; onClose
           </div>
         </nav>
 
+        {/* Lien Super Admin Console SaaS (Réservé au Fondateur profidele91@gmail.com) */}
+        {isSuperAdmin && (
+          <div className="px-3 pb-2">
+            <Link
+              href="/admin/saas"
+              prefetch={true}
+              onClick={() => {
+                if (onClose) onClose();
+              }}
+              className={`group relative flex flex-row items-center justify-start gap-2.5 rounded-xl px-3 py-2.5 text-xs font-bold transition-all border ${
+                pathname === "/admin/saas"
+                  ? "bg-purple-600/20 text-purple-300 border-purple-500/50 shadow-xs"
+                  : "bg-purple-950/30 text-purple-300 hover:bg-purple-900/40 border-purple-500/30"
+              }`}
+              title="Console SaaS (Super Admin)"
+            >
+              <ShieldCheck className="h-4 w-4 shrink-0 text-purple-400" />
+              {!collapsed && (
+                <div className="flex items-center justify-between w-full min-w-0">
+                  <span className="truncate">Console SaaS</span>
+                  <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-purple-600 text-white font-black uppercase tracking-wider">
+                    Super Admin
+                  </span>
+                </div>
+              )}
+            </Link>
+          </div>
+        )}
+
         {/* Lien Communauté WhatsApp épinglé hors du scroll (toujours visible) */}
         <div className="px-3 pb-2 pt-1">
           <a
@@ -426,107 +456,167 @@ export default function Sidebar({ isOpen, onClose }: { isOpen?: boolean; onClose
           <div className="px-3 pb-2 animate-fade-in">
             {!collapsed ? (
               <div
-                className={`group relative p-3 rounded-2xl border transition-all duration-200 overflow-hidden shadow-xs hover:shadow-md ${subscription.isTrial
+                className={`group relative p-3 rounded-2xl border transition-all duration-200 overflow-hidden shadow-xs hover:shadow-md ${
+                  isSuperAdmin
+                    ? "bg-purple-950/20 border-purple-500/30 text-purple-200"
+                    : subscription.isTrial
                     ? subscription.daysRemaining <= 3
                       ? "bg-amber-500/10 border-amber-500/30 hover:border-amber-500/60 text-amber-900 dark:text-amber-200"
                       : "bg-emerald-500/10 border-emerald-500/25 hover:border-emerald-500/50 text-foreground"
                     : "bg-primary/5 border-primary/20 hover:border-primary/40 text-foreground"
-                  }`}
+                }`}
               >
                 {/* En-tête du widget */}
                 <div className="flex items-center justify-between gap-1 mb-1.5">
                   <div className="flex items-center gap-1.5 min-w-0">
-                    {subscription.isTrial ? (
+                    {isSuperAdmin ? (
+                      <ShieldCheck className="w-3.5 h-3.5 text-purple-400 shrink-0" />
+                    ) : subscription.isTrial ? (
                       <Sparkles className="w-3.5 h-3.5 text-amber-500 shrink-0 animate-pulse" />
                     ) : (
                       <ShieldCheck className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
                     )}
                     <span className="text-[11px] font-black uppercase tracking-wider truncate text-foreground">
-                      {subscription.isTrial ? "Essai 14j (PRO)" : `Formule ${tier}`}
+                      {isSuperAdmin
+                        ? "Fondateur SaaS"
+                        : subscription.isTrial
+                        ? "Essai 14j (PRO)"
+                        : `Formule ${tier}`}
                     </span>
                   </div>
 
                   <span
-                    className={`px-1.5 py-0.5 rounded-md text-[9px] font-black uppercase shrink-0 ${subscription.isTrial
+                    className={`px-1.5 py-0.5 rounded-md text-[9px] font-black uppercase shrink-0 ${
+                      isSuperAdmin
+                        ? "bg-purple-600 text-white"
+                        : subscription.isTrial
                         ? subscription.daysRemaining <= 3
                           ? "bg-amber-500 text-white"
                           : "bg-emerald-600 text-white"
                         : "bg-primary/20 text-primary"
-                      }`}
+                    }`}
                   >
-                    {subscription.isTrial ? `J-${subscription.daysRemaining}` : "Actif"}
+                    {isSuperAdmin
+                      ? "Illimité"
+                      : subscription.isTrial
+                      ? `J-${subscription.daysRemaining}`
+                      : "Actif"}
                   </span>
                 </div>
 
-                {/* Barre de progression & Décompte dynamique sans décalage */}
-                <div className="space-y-1.5 mb-2">
-                  <div className="w-full bg-black/10 dark:bg-white/10 h-1.5 rounded-full overflow-hidden">
-                    <div
-                      className={`h-full rounded-full transition-all duration-500 ${subscription.daysRemaining <= 3 ? "bg-amber-500" : "bg-gradient-to-r from-emerald-500 to-teal-500"}`}
-                      style={{
-                        width: `${Math.max(
-                          6,
-                          Math.min(
-                            100,
-                            subscription.isTrial
-                              ? ((14 - Math.min(14, subscription.daysRemaining)) / 14) * 100
-                              : ((Math.max(1, (subscription.daysRemaining > 30 ? 365 : 30) - subscription.daysRemaining)) / (subscription.daysRemaining > 30 ? 365 : 30)) * 100
-                          )
-                        )}%`,
+                {isSuperAdmin ? (
+                  <div className="pt-1 pb-0.5">
+                    <p className="text-[11px] font-medium text-purple-300">
+                      Accès SaaS permanent & illimité
+                    </p>
+                  </div>
+                ) : (
+                  <>
+                    {/* Barre de progression & Décompte dynamique sans décalage */}
+                    <div className="space-y-1.5 mb-2">
+                      <div className="w-full bg-black/10 dark:bg-white/10 h-1.5 rounded-full overflow-hidden">
+                        <div
+                          className={`h-full rounded-full transition-all duration-500 ${
+                            subscription.daysRemaining <= 3
+                              ? "bg-amber-500"
+                              : "bg-gradient-to-r from-emerald-500 to-teal-500"
+                          }`}
+                          style={{
+                            width: `${Math.max(
+                              6,
+                              Math.min(
+                                100,
+                                subscription.isTrial
+                                  ? ((14 -
+                                      Math.min(
+                                        14,
+                                        subscription.daysRemaining
+                                      )) /
+                                      14) *
+                                      100
+                                  : ((Math.max(
+                                      1,
+                                      (subscription.daysRemaining > 30
+                                        ? 365
+                                        : 30) - subscription.daysRemaining
+                                    )) /
+                                      (subscription.daysRemaining > 30
+                                        ? 365
+                                        : 30)) *
+                                      100
+                              )
+                            )}%`,
+                          }}
+                        />
+                      </div>
+                      <div className="flex justify-between items-center text-[10px] font-semibold text-muted-foreground">
+                        <span className="text-foreground font-bold">
+                          {subscription.daysRemaining <= 0
+                            ? "Expiré"
+                            : `${subscription.daysRemaining} jour${
+                                subscription.daysRemaining > 1 ? "s" : ""
+                              } restant${
+                                subscription.daysRemaining > 1 ? "s" : ""
+                              }`}
+                        </span>
+                        <span className="text-[9px] uppercase font-bold text-muted-foreground">
+                          {subscription.isTrial ? "Essai PRO" : `Plan ${tier}`}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* BOUTON ULTRA-VISIBLE S'ABONNER / RENOUVELER */}
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setSubModalDefaultPlan(
+                          subscription.isTrial ? "PRO" : tier
+                        );
+                        setSubModalOpen(true);
                       }}
-                    />
-                  </div>
-                  <div className="flex justify-between items-center text-[10px] font-semibold text-muted-foreground">
-                    <span className="text-foreground font-bold">
-                      {subscription.daysRemaining <= 0
-                        ? "Expiré"
-                        : `${subscription.daysRemaining} jour${subscription.daysRemaining > 1 ? "s" : ""} restant${subscription.daysRemaining > 1 ? "s" : ""}`}
-                    </span>
-                    <span className="text-[9px] uppercase font-bold text-muted-foreground">
-                      {subscription.isTrial ? "Essai PRO" : `Plan ${tier}`}
-                    </span>
-                  </div>
-                </div>
-
-                {/* BOUTON ULTRA-VISIBLE S'ABONNER / RENOUVELER */}
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setSubModalDefaultPlan(subscription.isTrial ? "PRO" : tier);
-                    setSubModalOpen(true);
-                  }}
-                  className="relative group/btn overflow-hidden w-full flex items-center justify-center gap-2 py-2 px-3 rounded-xl bg-gradient-to-r from-emerald-600 via-teal-600 to-indigo-600 hover:from-emerald-500 hover:to-indigo-500 text-white text-xs font-black shadow-md shadow-emerald-600/25 hover:shadow-lg hover:shadow-emerald-500/35 hover:scale-[1.02] active:scale-[0.98] transition-all duration-300 border border-white/20 cursor-pointer animate-glow-emerald"
-                >
-                  {/* Effet reflet Shimmer */}
-                  <span className="absolute inset-0 w-1/2 h-full bg-white/25 skew-x-12 -translate-x-full animate-btn-shimmer group-hover/btn:translate-x-[300%] transition-transform duration-1000 ease-out" />
-
-                  <Sparkles className="w-3.5 h-3.5 text-yellow-300 animate-pulse shrink-0" />
-                  <span className="tracking-wide">
-                    {subscription.isTrial ? "S'abonner" : "Renouveler / Changer"}
-                  </span>
-                  <ArrowRight className="w-3.5 h-3.5 shrink-0 group-hover/btn:translate-x-1 transition-transform" />
-                </button>
+                      className="relative group/btn overflow-hidden w-full flex items-center justify-center gap-2 py-2 px-3 rounded-xl bg-gradient-to-r from-emerald-600 via-teal-600 to-indigo-600 hover:from-emerald-500 hover:to-indigo-500 text-white text-xs font-black shadow-md shadow-emerald-600/25 hover:shadow-lg hover:shadow-emerald-500/35 hover:scale-[1.02] active:scale-[0.98] transition-all duration-300 border border-white/20 cursor-pointer animate-glow-emerald"
+                    >
+                      <span className="absolute inset-0 w-1/2 h-full bg-white/25 skew-x-12 -translate-x-full animate-btn-shimmer group-hover/btn:translate-x-[300%] transition-transform duration-1000 ease-out" />
+                      <Sparkles className="w-3.5 h-3.5 text-yellow-300 animate-pulse shrink-0" />
+                      <span className="tracking-wide">
+                        {subscription.isTrial
+                          ? "S'abonner"
+                          : "Renouveler / Changer"}
+                      </span>
+                      <ArrowRight className="w-3.5 h-3.5 shrink-0 group-hover/btn:translate-x-1 transition-transform" />
+                    </button>
+                  </>
+                )}
               </div>
             ) : (
               /* Vue repliée (icône seule animée) */
               <button
                 type="button"
                 onClick={() => {
+                  if (isSuperAdmin) return;
                   setSubModalDefaultPlan(subscription.isTrial ? "PRO" : tier);
                   setSubModalOpen(true);
                 }}
                 title={
-                  subscription.isTrial
+                  isSuperAdmin
+                    ? "Super Admin • Accès SaaS Illimité"
+                    : subscription.isTrial
                     ? `Essai gratuit : ${subscription.daysRemaining} jours restants • Cliquez pour vous abonner`
                     : `Formule ${tier}`
                 }
                 className="w-full relative flex items-center justify-center p-2 rounded-xl bg-secondary/60 hover:bg-secondary text-primary transition-colors"
               >
-                <Sparkles className="w-4 h-4 text-amber-500 animate-pulse" />
-                <span className="absolute -top-1 -right-1 px-1 rounded-full bg-emerald-600 text-[8px] font-black text-white">
-                  {subscription.daysRemaining}j
-                </span>
+                {isSuperAdmin ? (
+                  <ShieldCheck className="w-4 h-4 text-purple-400" />
+                ) : (
+                  <>
+                    <Sparkles className="w-4 h-4 text-amber-500 animate-pulse" />
+                    <span className="absolute -top-1 -right-1 px-1 rounded-full bg-emerald-600 text-[8px] font-black text-white">
+                      {subscription.daysRemaining}j
+                    </span>
+                  </>
+                )}
               </button>
             )}
           </div>

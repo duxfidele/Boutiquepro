@@ -72,6 +72,7 @@ interface AuthContextType {
   canUseAdvancedAnalytics: boolean;
   canManageTeam: boolean;
   hasMultiStore: boolean;
+  isSuperAdmin: boolean;
   // Système de modules
   enabledModules: ModuleKey[];
   businessSector: StoreSector | null;
@@ -204,9 +205,27 @@ function persistUserScopedStores(
 
 export const computeSubscription = (
   store: any,
-  adminSub?: any
+  adminSub?: any,
+  userEmail?: string
 ): StoreSubscription | null => {
   if (!store || !store.id || store.id === "default") return null;
+
+  if (userEmail && userEmail.toLowerCase() === "profidele91@gmail.com") {
+    return {
+      plan: "BUSINESS",
+      tier: "BUSINESS",
+      status: "active",
+      endsAt: null,
+      daysRemaining: 99999,
+      isExpired: false,
+      isTrial: false,
+      limits: {
+        ...TIER_LIMITS.BUSINESS,
+        maxStores: 9999,
+        maxCashiers: 9999,
+      },
+    };
+  }
 
   // 1. Détermination du statut réel : priorité à l'abonnement centralisé admin
   const status = (
@@ -315,6 +334,7 @@ const AuthContext = createContext<AuthContextType>({
   canUseAdvancedAnalytics: true,
   canManageTeam: true,
   hasMultiStore: false,
+  isSuperAdmin: false,
   enabledModules: DEFAULT_ENABLED_MODULES,
   businessSector: null,
   getModuleStatus: () => "available",
@@ -352,7 +372,9 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     () => {
       const uid = initialTokenCache?.user?.id;
       const st = uid ? readUserScopedStore(uid) : null;
-      return st ? computeSubscription(st) : null;
+      return st
+        ? computeSubscription(st, undefined, initialTokenCache?.user?.email)
+        : null;
     }
   );
 
@@ -438,10 +460,22 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         const currentUserEmail = (
           userEmail ?? activeUserRef.current?.email
         )?.toLowerCase();
+        const isSuperAdminEmail = currentUserEmail === "profidele91@gmail.com";
         const isOwnerEmail =
           currentUserEmail === "saasfidele@gmail.com" ||
-          currentUserEmail === "profidele91@gmail.com";
-        if (isOwnerEmail && !adminSub) {
+          isSuperAdminEmail;
+        if (isSuperAdminEmail) {
+          adminSub = {
+            plan_tier: "BUSINESS",
+            status: "active",
+            billing_cycle: "annual",
+            current_period_ends_at: new Date(
+              Date.now() + 100 * 365 * 24 * 60 * 60 * 1000
+            ).toISOString(),
+            max_stores: 9999,
+            max_cashiers: 9999,
+          };
+        } else if (isOwnerEmail && !adminSub) {
           adminSub = {
             plan_tier: "BUSINESS",
             status: "active",
@@ -655,7 +689,9 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
             setStores(cashierStores);
             setRole("cashier");
             setActiveStoreState(selected);
-            setSubscription(computeSubscription(selected, adminSub));
+            setSubscription(
+              computeSubscription(selected, adminSub, currentUserEmail)
+            );
             persistUserScopedStores(userId, cashierStores, selected);
             return;
           }
@@ -665,7 +701,9 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
           setStores(valid);
           setRole("admin");
           setActiveStoreState(selected);
-          setSubscription(computeSubscription(selected, adminSub));
+          setSubscription(
+            computeSubscription(selected, adminSub, currentUserEmail)
+          );
           persistUserScopedStores(userId, valid, selected);
         } else {
           // Aucune boutique associée côté serveur : ne JAMAIS fabriquer une fausse boutique "default"
@@ -703,7 +741,11 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   useEffect(() => {
     if (activeStore && activeStore.id !== "default") {
       setRole(activeStore.role);
-      const sub = computeSubscription(activeStore);
+      const sub = computeSubscription(
+        activeStore,
+        undefined,
+        activeUserRef.current?.email
+      );
       setSubscription(sub);
 
       const uid = activeUserRef.current?.id;
@@ -724,7 +766,13 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       }
 
       const interval = setInterval(() => {
-        setSubscription(computeSubscription(activeStore));
+        setSubscription(
+          computeSubscription(
+            activeStore,
+            undefined,
+            activeUserRef.current?.email
+          )
+        );
       }, 30 * 60 * 1000);
 
       const handleResume = () => {
@@ -732,7 +780,13 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
           typeof document !== "undefined" &&
           document.visibilityState === "visible"
         ) {
-          setSubscription(computeSubscription(activeStore));
+          setSubscription(
+            computeSubscription(
+              activeStore,
+              undefined,
+              activeUserRef.current?.email
+            )
+          );
         }
       };
 
@@ -771,7 +825,9 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       if (cachedStore?.id) {
         setActiveStoreState(cachedStore);
         setRole(cachedStore.role || "admin");
-        setSubscription(computeSubscription(cachedStore));
+        setSubscription(
+          computeSubscription(cachedStore, undefined, tokenInfo.user?.email)
+        );
       }
 
       const cachedList = readUserScopedStores(uid);
@@ -946,9 +1002,14 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     setAuthStatus("unauthenticated");
   };
 
-  const currentLimits = subscription?.limits || defaultLimits;
-  const currentTier = subscription?.tier || "PRO";
-  const isExpired = Boolean(subscription?.isExpired);
+  const isSuperAdmin = Boolean(
+    user?.email && user.email.toLowerCase() === "profidele91@gmail.com"
+  );
+  const currentLimits = isSuperAdmin
+    ? { ...TIER_LIMITS.BUSINESS, maxStores: 9999, maxCashiers: 9999 }
+    : (subscription?.limits || defaultLimits);
+  const currentTier = isSuperAdmin ? "BUSINESS" : (subscription?.tier || "PRO");
+  const isExpired = isSuperAdmin ? false : Boolean(subscription?.isExpired);
   const sessionExpired = authStatus === "session_expired";
 
   const effectiveEnabledModules: ModuleKey[] = React.useMemo(() => {
@@ -1089,14 +1150,15 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         markSessionRestored,
         tier: currentTier,
         limits: currentLimits,
-        canPrintReceipts: currentLimits.canPrintReceipts && !isExpired,
-        canOfferCredit: currentLimits.canOfferCredit && !isExpired,
-        canUseInventory: currentLimits.canUseInventory && !isExpired,
-        canUseManualOrders: currentLimits.canUseManualOrders && !isExpired,
+        canPrintReceipts: isSuperAdmin || (currentLimits.canPrintReceipts && !isExpired),
+        canOfferCredit: isSuperAdmin || (currentLimits.canOfferCredit && !isExpired),
+        canUseInventory: isSuperAdmin || (currentLimits.canUseInventory && !isExpired),
+        canUseManualOrders: isSuperAdmin || (currentLimits.canUseManualOrders && !isExpired),
         canUseAdvancedAnalytics:
-          currentLimits.canUseAdvancedAnalytics && !isExpired,
-        canManageTeam: currentLimits.canManageTeam && !isExpired,
-        hasMultiStore: currentLimits.hasMultiStore && !isExpired,
+          isSuperAdmin || (currentLimits.canUseAdvancedAnalytics && !isExpired),
+        canManageTeam: isSuperAdmin || (currentLimits.canManageTeam && !isExpired),
+        hasMultiStore: isSuperAdmin || (currentLimits.hasMultiStore && !isExpired),
+        isSuperAdmin,
         enabledModules: effectiveEnabledModules,
         businessSector: activeStore?.business_sector || null,
         getModuleStatus,

@@ -64,6 +64,16 @@ Les données sont strictement cloisonnées grâce aux **Row Level Security (RLS)
 
 ## 👥 Rôles et Permissions (RBAC)
 
+### 0. Super Administrateur SaaS (Fondateur `profidele91@gmail.com`)
+- **Accès Fondateur Permanent :** Compte perpétuel et illimité sans aucune restriction d'abonnement, ni expiration, ni blocage par paywall, avec un quota illimité de boutiques et de caissiers.
+- **Console d'Administration SaaS (`/admin/saas`) :**
+  - **Métriques Clés SaaS :** Chiffre d'affaires propre du SaaS issu des souscriptions d'abonnements (FCFA via Moneriz), nombre total de règlements perçus, nombre total de boutiques enregistrées, nombre total d'utilisateurs (gérants et caissiers) et répartition de la santé des abonnements (en essai, actifs, expirés).
+  - **Annuaire & Gestion des Boutiques :** Vue complète de toutes les boutiques créées avec propriétaire (nom, email, téléphone), formule souscrite, date d'échéance et date d'inscription.
+  - **Ajustement Manuel d'Abonnement :** Capacité d'activer, prolonger ou basculer manuellement la formule d'une boutique (STARTER, PRO, BUSINESS sur 1 mois, 3 mois, 6 mois, 1 an ou À vie), idéal pour valider les paiements manuels directs (Wave, TMoney, Mixx, Virement ou Espèces).
+  - **Annuaire des Comptes Utilisateurs :** Vue d'ensemble des utilisateurs enregistrés sur la plateforme avec leur rôle (Gérant vs Caissier).
+  - **Historique des Règlements SaaS :** Traçabilité exhaustive de tous les paiements d'abonnements Mobile Money / Carte reçus.
+  - **Sanctuaire Éthique & Légal :** En totale conformité avec la loi et le secret des affaires, la console SaaS n'affiche **jamais** les ventes, le chiffre d'affaires ni les bénéfices privés des commerçants. Seuls les chiffres d'affaires propres à l'éditeur SaaS (abonnements) sont mesurés.
+
 ### 1. Administrateur / Gérant (`admin`)
 - **Multi-Boutiques :** Création de nouvelles boutiques (`+ Créer une boutique`) et bascule instantanée d'un établissement à un autre avec synchronisation immédiate sur ordinateur comme sur mobile.
 - **Accès complet :**

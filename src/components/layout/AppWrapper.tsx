@@ -22,7 +22,7 @@ export default function AppWrapper({ children }: { children: React.ReactNode }) 
   const [isSignUpMode, setIsSignUpMode] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
-  const { user, role, loading, subscription, signOut, getModuleStatus, activeStore } = useAuth();
+  const { user, role, loading, subscription, signOut, getModuleStatus, activeStore, isSuperAdmin } = useAuth();
   const [showOnboarding, setShowOnboarding] = useState(false);
 
   React.useEffect(() => {
@@ -42,6 +42,10 @@ export default function AppWrapper({ children }: { children: React.ReactNode }) 
 
   React.useEffect(() => {
     if (pathname === "/reset-password" || pathname === "/~offline") return;
+    if (pathname.startsWith("/admin/saas") && !isSuperAdmin) {
+      router.replace("/");
+      return;
+    }
     if (role === "cashier") {
       const allowedPaths = ["/", "/pos", "/debts", "/products", "/customers", "/support", "/profile"];
       if (!allowedPaths.includes(pathname)) {
@@ -90,7 +94,7 @@ export default function AppWrapper({ children }: { children: React.ReactNode }) 
   // 2. Utilisateur connecté (en ligne ou hors-ligne avec session en cache) :
   if (user) {
     // A. Si l'abonnement ou la période d'essai de 14 jours est EXPIRÉ(E)
-    if (subscription?.isExpired) {
+    if (subscription?.isExpired && !isSuperAdmin) {
       if (role === "cashier") {
         // Pour le caissier : écran de verrouillage informatif
         return (

@@ -73,7 +73,9 @@ describe("Lot 5 — Scénarios 7, 11 & 12 : Multi-Onglets, Idempotence, Causalit
 
     const pTab1 = processOutboxForScope({ userId, storeId, role: "admin", forceAll: true });
     // Laisser Tab 1 acquérir le Web Lock et entrer dans create_sale
-    await new Promise((r) => setTimeout(r, 15));
+    for (let i = 0; i < 50 && rpcCount === 0; i++) {
+      await new Promise((r) => setTimeout(r, 10));
+    }
 
     const tab2Res = await processOutboxForScope({ userId, storeId, role: "admin", forceAll: true });
     assert.equal(tab2Res.skippedLocked, true, "Tab 2 bloqué par Web Lock exclusif");
