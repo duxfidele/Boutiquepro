@@ -334,6 +334,49 @@ Un audit complet et rigoureux a été exécuté sur l'ensemble de l'application 
   - **`https://maboutiquepro.app/terms` (`src/app/terms/page.tsx`) :** Conditions Générales d'Utilisation (CGU) du SaaS.
   - Écran de consentement Google OAuth officiellement publié et validé en production.
 
+### 18. Console Super Admin SaaS & Rôle Fondateur Perpétuel (`/admin/saas`)
+- **Supervision Globale de la Plateforme pour le Fondateur (`profidele91@gmail.com`) :**
+  - Accès illimité et permanent au cockpit d'administration SaaS.
+  - **Métriques Clés SaaS en temps réel :**
+    - **Chiffre d'Affaires SaaS :** Montant cumulé des souscriptions et abonnements perçus en FCFA via la passerelle Moneriz.
+    - **Total des Règlements Moneriz :** Nombre de transactions d'abonnements validées avec succès.
+    - **Boutiques Inscrites :** Nombre total d'établissements créés sur la plateforme.
+    - **Comptes Utilisateurs Inscrits :** Répartition transparente entre le nombre d'administrateurs/gérants et de caissiers.
+    - **Santé des Abonnements :** Décompte instantané des boutiques réparties selon leur statut (*En Essai*, *Actifs*, *Expirés*).
+- **Sanctuaire Éthique & Secret Commercial :**
+  - En stricte conformité avec le secret des affaires et les normes juridiques et éthiques du SaaS, la console Super Admin n'affiche **jamais** les ventes, le chiffre d'affaires, les marges ni les bénéfices privés réalisés par les commerçants. Seules les performances financières propres à l'éditeur SaaS (ventes d'abonnements) sont mesurées.
+- **Annuaire des Boutiques & Gestion Commerciale :**
+  - Liste de toutes les boutiques avec nom, secteur d'activité, propriétaire (nom et email), formule active, date d'échéance et date de création.
+  - Recherche instantanée par nom d'établissement ou email de propriétaire et filtres rapides (*Toutes*, *Actives*, *En Essai*, *Expirées*).
+- **Ajustement Manuel d'Abonnement :**
+  - Fenêtre modale d'intervention directe permettant d'activer, prolonger ou changer manuellement la formule d'une boutique (*STARTER*, *PRO*, *BUSINESS* sur 1 mois, 3 mois, 6 mois, 1 an ou À vie).
+  - Solution indispensable pour valider immédiatement les souscriptions réglées en direct hors-ligne (Wave, TMoney, Flooz, Mixx, virement bancaire ou espèces).
+- **Annuaire des Utilisateurs :**
+  - Consultation de tous les comptes enregistrés sur la plateforme avec leur rôle réel (Gérant vs Caissier), nom complet, email et date d'inscription.
+- **Historique des Règlements SaaS :**
+  - Journal complet des transactions Moneriz reçues avec statut, montant en FCFA, référence de transaction et date.
+- **Thème Visuel Haute Lisibilité :**
+  - Palette graphique en violet contrasté (`bg-purple-100/text-purple-950` en mode clair, `dark:bg-purple-950/dark:text-purple-100` en mode sombre), éliminant tout ton sur ton et assurant une lisibilité maximale conforme aux normes WCAG.
+
+### 19. Statut Super Admin Plein Droit & Rôle Forcé Admin
+- **Élévation Inconditionnelle dans le Contexte Applicatif :**
+  - Dans `AuthContext.tsx` et `AppWrapper.tsx`, le compte fondateur `profidele91@gmail.com` est garanti de bénéficier du rôle `admin` plein droit, même si la base de données contenait un enregistrement antérieur avec `role: 'cashier'`.
+  - Déverrouillage automatique et immédiat de tous les modules de gestion du commerce actif (*Inventaire physique, Dépenses, Analytique complète, Commandes fournisseurs, Mon Équipe, Paramètres*).
+- **Migration SQL Dédiée (`migration_super_admin.sql`) :**
+  - Script SQL garantissant l'ajustement structurel en base de données pour promouvoir définitivement l'adresse du fondateur au rôle `'admin'` dans `store_members` et `profiles`.
+
+### 20. Ergonomie de la Barre Latérale (Sidebar) & Responsivité Mobile-First
+- **Nettoyage Visuel de la Zone Boutique :**
+  - Retrait complet de la petite icône boutique et de la mention textuelle redondante "Gérant", allégeant considérablement l'interface.
+  - Masquage automatique du conteneur lorsque l'administrateur n'a qu'une seule boutique (le nom de celle-ci restant fièrement mis en avant sous le logo officiel en haut de barre).
+  - Maintien d'un sélecteur épuré et fluide lorsque plusieurs boutiques sont gérées.
+- **Repositionnement du Bouton "Console SaaS" au-dessus du Profil :**
+  - Le raccourci **`Console SaaS [SUPER ADMIN]`** est désormais intégré dans le bloc d'actions inférieures (*Bottom actions*), positionné **immédiatement au-dessus de la carte de profil utilisateur**.
+- **Standards d'Accessibilité Mobile-First :**
+  - **Zone tactile ergonomique :** Hauteur minimale de 44px (`min-h-[44px]`), garantissant une sélection facile et sans fausse manipulation au pouce sur mobile et tablette.
+  - **Navigation fluide :** Fermeture automatique du tiroir latéral mobile dès qu'un clic sur la console SaaS est enregistré.
+  - **Mode replié desktop :** Centrage parfait de l'icône bouclier avec infobulle dédiée `Console SaaS (Super Admin)`.
+
 ---
 
 ## 💼 Modèles d'Exploitation Commerciale
@@ -361,9 +404,11 @@ Un audit complet et rigoureux a été exécuté sur l'ensemble de l'application 
 | `public/logo.png` | Nouveau logo officiel Maboutiquepro (« Gérez votre boutique. Gagnez plus. ») |
 | `src/app/products/page.tsx` | Gestion du catalogue, filtres, stock bas, bouton « Importer Excel » et export |
 | `src/components/products/ProductExcelImportModal.tsx` | Modal d'importation Excel/CSV durcie (5 Mo, 5 000 lignes max, extensions validées) |
-| `src/components/layout/Sidebar.tsx` | Barre latérale avec sélecteur multi-boutiques synchrone et affichage dynamique du logo |
-| `src/context/AuthContext.tsx` | Authentification Supabase, cache de session hors-ligne (`authStatus` / `session_expired`), isolation `userId` des boutiques et gestion RBAC |
+| `src/app/admin/saas/page.tsx` | Console Super Admin SaaS (KPIs abonnements Moneriz, annuaires boutiques & utilisateurs, régularisation manuelle) |
+| `src/components/layout/Sidebar.tsx` | Barre latérale avec sélecteur multi-boutiques épuré, bouton Console SaaS repositionné au-dessus du profil et ergonomie Mobile-First |
+| `src/context/AuthContext.tsx` | Authentification Supabase, élévation automatique du Super Admin en rôle `admin` inconditionnel, cache hors-ligne et isolation `userId` |
 | `src/context/StoreContext.tsx` | État réactif Offline-First cloisonné par `userId:storeId`, journalisation WAL avant dispatch, réducteurs FEFO/multi-unités et API sync/conflits/backup |
+| `src/components/layout/AppWrapper.tsx` | Routage, protection d'accès selon les rôles avec élévation Super Admin et exceptions sécurisées (`/reset-password`, `/admin/saas`) |
 | `next.config.mjs` | Configuration Next.js, en-têtes HTTP de sécurité, cache `/sw.js` (`no-store`) et règles PWA Workbox (`NetworkOnly` / `NetworkFirst` / `/~offline`) |
 | `package.json` | Dépendances et scripts npm (`dev`, `build`, `start`, `lint`, `test`) |
 | `src/lib/offlineDb.ts` | Base IndexedDB `BoutiquePro_Offline` v2 (`snapshots`, `outbox`, `sync_cursors`, `sync_logs`), RBAC snapshots, export/import JSON `fnv64` et `BroadcastChannel` |
@@ -415,5 +460,6 @@ Un audit complet et rigoureux a été exécuté sur l'ensemble de l'application 
 | `migration_audit_logs.sql` | Migration SQL Supabase pour `audit_logs` (immuable) et `daily_metrics` |
 | `saas_moneriz_integration.sql` | Migration SQL Supabase pour les commandes et événements Moneriz |
 | `saas_subscription_permanent_fix.sql` | Migration SQL universelle de synchronisation des abonnements et héritage des boutiques |
+| `migration_super_admin.sql` | Migration SQL de promotion permanente du compte fondateur `profidele91@gmail.com` en super administrateur |
 | `fix_create_sale_unit_name.sql` | Mise à jour de la RPC create_sale pour la résolution tolérante des formats gros/détail |
 | `vercel.json` | Configuration Vercel avec cron journalier compatible avec le forfait Hobby |
